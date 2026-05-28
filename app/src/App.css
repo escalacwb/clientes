@@ -913,6 +913,58 @@ h3 {
   color: #64736f;
 }
 
+.client360 {
+  display: grid;
+  gap: 16px;
+}
+
+.client360-hero {
+  display: grid;
+  gap: 16px;
+}
+
+.client360-filters {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.client360-filters label {
+  display: grid;
+  gap: 5px;
+  color: #52625d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.client360-filters input,
+.client360-filters select {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid #cfd8d3;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1b1f23;
+  padding: 9px 10px;
+}
+
+.table-head.client360-sale,
+.table-row.client360-sale {
+  grid-template-columns: 96px minmax(240px, 1.5fr) minmax(140px, 0.8fr) minmax(110px, 0.6fr) 110px;
+}
+
+.table-head.client360-service,
+.table-row.client360-service {
+  grid-template-columns: 96px minmax(240px, 1.5fr) minmax(110px, 0.6fr) minmax(140px, 0.8fr) 110px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
 .timeline-item {
   align-items: flex-start;
   gap: 9px;
@@ -1369,7 +1421,9 @@ h3 {
   .conflict-summary,
   .merge-summary,
   .campaign-summary,
-  .budget-summary {
+  .budget-summary,
+  .client360-filters,
+  .detail-grid {
     grid-template-columns: 1fr;
   }
 

@@ -444,6 +444,10 @@ function App() {
             filtro={clienteFiltro}
             onFilterChange={setClienteFiltro}
             onSelect={(cliente) => setSelectedClientId(cliente.id)}
+            onOpenFullProfile={(cliente) => {
+              setSelectedClientId(cliente.id)
+              setView('cliente360')
+            }}
             onUpdateClient={(clienteId, patch) => {
               updateClienteComercial(clienteId, patch).catch((exception) => {
                 setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o cliente.')
@@ -496,6 +500,16 @@ function App() {
               setOrcamentos((current) => [created, ...current])
               return created
             }}
+          />
+        )}
+        {canUseScopedClientViews && view === 'cliente360' && (
+          <Cliente360
+            cliente={selectedClient}
+            interacoes={scopedInteracoes}
+            orcamentos={scopedOrcamentos}
+            vendasItens={scopedVendasItens}
+            servicosItens={scopedServicosItens}
+            onBack={() => setView('clientes')}
           />
         )}
         {canUseScopedClientViews && view === 'carteira' && (
@@ -694,6 +708,7 @@ function titleFor(view: string) {
     relatorios: 'Relatorios gerenciais',
     usuarios: 'Usuarios e permissoes',
     auditoria: 'Auditoria',
+    cliente360: 'Ficha 360 do cliente',
   }
   return titles[view]
 }
@@ -887,6 +902,7 @@ function Clientes({
   filtro,
   onFilterChange,
   onSelect,
+  onOpenFullProfile,
   onUpdateClient,
   onAddInteraction,
   onAddBudget,
@@ -900,6 +916,7 @@ function Clientes({
   filtro: CarteiraFiltro
   onFilterChange: (filtro: CarteiraFiltro) => void
   onSelect: (cliente: Cliente) => void
+  onOpenFullProfile: (cliente: Cliente) => void
   onUpdateClient: (clienteId: string, patch: Partial<Cliente>) => void
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
   onAddBudget: (orcamento: OrcamentoInput) => Promise<Orcamento>
@@ -959,6 +976,7 @@ function Clientes({
         orcamentos={orcamentos}
         vendasItens={vendasItens}
         servicosItens={servicosItens}
+        onOpenFullProfile={() => onOpenFullProfile(selectedClient)}
         onUpdateClient={onUpdateClient}
         onAddInteraction={onAddInteraction}
         onAddBudget={onAddBudget}
@@ -1381,6 +1399,7 @@ function FichaCliente({
   onUpdateClient,
   onAddInteraction,
   onAddBudget,
+  onOpenFullProfile,
 }: {
   cliente: Cliente
   interacoes: Interacao[]
@@ -1390,11 +1409,12 @@ function FichaCliente({
   onUpdateClient: (clienteId: string, patch: Partial<Cliente>) => void
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
   onAddBudget: (orcamento: OrcamentoInput) => Promise<Orcamento>
+  onOpenFullProfile: () => void
 }) {
   const [showForm, setShowForm] = useState(false)
   const [showEditForm, setShowEditForm] = useState(false)
   const [showBudgetForm, setShowBudgetForm] = useState(false)
-  const [showFullProfile, setShowFullProfile] = useState(false)
+  const [showFullProfile] = useState(false)
   const [historySeller, setHistorySeller] = useState('todos')
   const [formError, setFormError] = useState('')
   const [form, setForm] = useState({
@@ -1557,7 +1577,7 @@ function FichaCliente({
         <button className="button" type="button" onClick={() => setShowBudgetForm((current) => !current)}>
           <WalletCards size={16} /> Orcamento
         </button>
-        <button className="button" type="button" onClick={() => setShowFullProfile((current) => !current)}>
+        <button className="button" type="button" onClick={onOpenFullProfile}>
           <ClipboardList size={16} /> Ficha 360
         </button>
         <button className="button" type="button" onClick={() => {
@@ -1879,6 +1899,236 @@ function origemLabel(origemBase?: Cliente['origemBase']) {
     desconhecida: 'Origem pendente',
   }
   return origemBase ? labels[origemBase] : labels.desconhecida
+}
+
+function Cliente360({
+  cliente,
+  interacoes,
+  orcamentos,
+  vendasItens,
+  servicosItens,
+  onBack,
+}: {
+  cliente: Cliente
+  interacoes: Interacao[]
+  orcamentos: Orcamento[]
+  vendasItens: VendaItem[]
+  servicosItens: ServicoItem[]
+  onBack: () => void
+}) {
+  const [sellerFilter, setSellerFilter] = useState('todos')
+  const [vehicleFilter, setVehicleFilter] = useState('todos')
+  const [kindFilter, setKindFilter] = useState<'todos' | 'vendas' | 'servicos'>('todos')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+
+  const clienteVendas = vendasItens.filter((venda) => venda.clienteId === cliente.id)
+  const clienteServicos = servicosItens.filter((servico) => servico.clienteId === cliente.id)
+  const clienteInteracoes = interacoes.filter((interacao) => interacao.clienteId === cliente.id)
+  const clienteOrcamentos = orcamentos.filter((orcamento) => orcamento.clienteId === cliente.id)
+  const sellers = Array.from(new Set([
+    ...clienteVendas.map((venda) => venda.vendedorNome).filter(Boolean),
+    ...clienteServicos.map((servico) => servico.vendedorNome).filter(Boolean),
+  ] as string[])).sort((a, b) => a.localeCompare(b))
+  const vehicles = Array.from(new Set(clienteServicos.map((servico) => servico.placa).filter(Boolean) as string[]))
+    .sort((a, b) => a.localeCompare(b))
+
+  const vendasFiltradas = clienteVendas.filter((venda) =>
+    (kindFilter === 'todos' || kindFilter === 'vendas') &&
+    (sellerFilter === 'todos' || venda.vendedorNome === sellerFilter) &&
+    inDateRange(venda.dataVenda, startDate, endDate),
+  )
+  const servicosFiltrados = clienteServicos.filter((servico) =>
+    (kindFilter === 'todos' || kindFilter === 'servicos') &&
+    (sellerFilter === 'todos' || servico.vendedorNome === sellerFilter) &&
+    (vehicleFilter === 'todos' || servico.placa === vehicleFilter) &&
+    inDateRange(servico.dataServico, startDate, endDate),
+  )
+  const totalVendas = vendasFiltradas.reduce((total, venda) => total + venda.valorTotal, 0)
+  const totalServicos = servicosFiltrados.reduce((total, servico) => total + servico.valorTotal, 0)
+  const ticketMedio = vendasFiltradas.length + servicosFiltrados.length
+    ? (totalVendas + totalServicos) / (vendasFiltradas.length + servicosFiltrados.length)
+    : 0
+
+  return (
+    <section className="client360">
+      <div className="panel wide client360-hero">
+        <button className="button" type="button" onClick={onBack}>Voltar para clientes</button>
+        <div>
+          <span className="status-pill">{origemLabel(cliente.origemBase)}</span>
+          <h2>{cliente.nome}</h2>
+          <p>{cliente.cidade}/{cliente.uf} · {cliente.tipoCliente} · {cliente.vendedorNome ?? 'Sem vendedor responsavel'}</p>
+        </div>
+        <div className="info-grid">
+          <Info label="CPF/CNPJ" value={cliente.cpfCnpj || 'Nao informado'} />
+          <Info label="Codigo ERP" value={cliente.codigoErp || 'Nao informado'} />
+          <Info label="WhatsApp" value={cliente.whatsapp || 'Nao informado'} />
+          <Info label="Email" value={cliente.email || 'Nao informado'} />
+          <Info label="Total vendas" value={money(cliente.totalComprado)} />
+          <Info label="Total servicos" value={money(cliente.totalServicos)} />
+        </div>
+      </div>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Filtros do historico</h2>
+            <p>{vendasFiltradas.length} vendas · {servicosFiltrados.length} servicos · {money(totalVendas + totalServicos)}</p>
+          </div>
+          <Filter size={18} />
+        </div>
+        <div className="client360-filters">
+          <label>
+            Tipo
+            <select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as typeof kindFilter)}>
+              <option value="todos">Vendas e servicos</option>
+              <option value="vendas">Somente vendas</option>
+              <option value="servicos">Somente servicos</option>
+            </select>
+          </label>
+          <label>
+            Vendedor historico
+            <select value={sellerFilter} onChange={(event) => setSellerFilter(event.target.value)}>
+              <option value="todos">Todos vendedores</option>
+              {sellers.map((seller) => <option key={seller} value={seller}>{seller}</option>)}
+            </select>
+          </label>
+          <label>
+            Veiculo/placa
+            <select value={vehicleFilter} onChange={(event) => setVehicleFilter(event.target.value)}>
+              <option value="todos">Todos veiculos</option>
+              {vehicles.map((vehicle) => <option key={vehicle} value={vehicle}>{vehicle}</option>)}
+            </select>
+          </label>
+          <label>
+            De
+            <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+          </label>
+          <label>
+            Ate
+            <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+          </label>
+          <button className="button" type="button" onClick={() => {
+            setSellerFilter('todos')
+            setVehicleFilter('todos')
+            setKindFilter('todos')
+            setStartDate('')
+            setEndDate('')
+          }}>
+            Limpar filtros
+          </button>
+        </div>
+      </section>
+
+      <div className="metrics-grid">
+        <Metric icon={WalletCards} label="Historico filtrado" value={money(totalVendas + totalServicos)} tone="green" />
+        <Metric icon={Truck} label="Veiculos" value={vehicles.length.toString()} tone="blue" />
+        <Metric icon={UserRound} label="Vendedores historicos" value={sellers.length.toString()} tone="blue" />
+        <Metric icon={BarChart3} label="Ticket medio" value={money(ticketMedio)} tone="amber" />
+      </div>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Vendas</h2>
+            <p>Produtos comprados, vendedor historico e nota/pedido.</p>
+          </div>
+        </div>
+        <div className="table">
+          <div className="table-head client360-sale">
+            <span>Data</span>
+            <span>Produto</span>
+            <span>Vendedor</span>
+            <span>Documento</span>
+            <span>Total</span>
+          </div>
+          {vendasFiltradas.map((venda) => (
+            <div className="table-row client360-sale" key={venda.id}>
+              <span>{dateLabel(venda.dataVenda)}</span>
+              <span><strong>{venda.produtoNome}</strong><small>{venda.produtoCodigo || venda.medida || venda.marca || 'Sem detalhe'}</small></span>
+              <span>{venda.vendedorNome ?? 'Sem vendedor'}</span>
+              <span>{venda.nota || venda.pedido || 'Sem documento'}</span>
+              <strong>{money(venda.valorTotal)}</strong>
+            </div>
+          ))}
+          {vendasFiltradas.length === 0 && <div className="empty-state">Nenhuma venda neste filtro.</div>}
+        </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Servicos e veiculos</h2>
+            <p>Quando a placa veio no arquivo, ela aparece aqui para filtrar o veiculo.</p>
+          </div>
+        </div>
+        <div className="table">
+          <div className="table-head client360-service">
+            <span>Data</span>
+            <span>Servico</span>
+            <span>Veiculo</span>
+            <span>Vendedor</span>
+            <span>Total</span>
+          </div>
+          {servicosFiltrados.map((servico) => (
+            <div className="table-row client360-service" key={servico.id}>
+              <span>{dateLabel(servico.dataServico)}</span>
+              <span><strong>{servico.servicoNome}</strong><small>{servico.observacao || servico.servicoCodigo || 'Sem observacao'}</small></span>
+              <span>{servico.placa || 'Sem placa'}</span>
+              <span>{servico.vendedorNome ?? 'Sem vendedor'}</span>
+              <strong>{money(servico.valorTotal)}</strong>
+            </div>
+          ))}
+          {servicosFiltrados.length === 0 && <div className="empty-state">Nenhum servico neste filtro.</div>}
+        </div>
+      </section>
+
+      <section className="detail-grid">
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <h2>Orcamentos</h2>
+              <p>{clienteOrcamentos.length} registros.</p>
+            </div>
+          </div>
+          <div className="status-list">
+            {clienteOrcamentos.map((orcamento) => (
+              <div className="status-row" key={orcamento.id}>
+                <span>{dateLabel(orcamento.data)} · {orcamento.status}</span>
+                <strong>{money(orcamento.valorTotal)}</strong>
+              </div>
+            ))}
+            {clienteOrcamentos.length === 0 && <div className="empty-state">Sem orcamentos.</div>}
+          </div>
+        </div>
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <h2>Timeline</h2>
+              <p>{clienteInteracoes.length} interacoes registradas.</p>
+            </div>
+          </div>
+          <div className="timeline">
+            {clienteInteracoes.map((interacao) => (
+              <div className="timeline-item" key={interacao.id}>
+                <CheckCircle2 size={16} />
+                <span><strong>{interacao.canal}</strong><small>{interacao.resumo}</small></span>
+              </div>
+            ))}
+            {clienteInteracoes.length === 0 && <div className="empty-state">Sem interacoes.</div>}
+          </div>
+        </div>
+      </section>
+    </section>
+  )
+}
+
+function inDateRange(value: string | undefined, startDate: string, endDate: string) {
+  if (!value) return true
+  const day = value.slice(0, 10)
+  if (startDate && day < startDate) return false
+  if (endDate && day > endDate) return false
+  return true
 }
 
 function Importacoes({
