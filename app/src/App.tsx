@@ -1964,6 +1964,7 @@ function Cliente360({
   const [sellerFilter, setSellerFilter] = useState('todos')
   const [vehicleFilter, setVehicleFilter] = useState('todos')
   const [kindFilter, setKindFilter] = useState<'todos' | 'vendas' | 'servicos'>('todos')
+  const [activeTab, setActiveTab] = useState<'resumo' | 'vendas' | 'servicos' | 'orcamentos' | 'timeline'>('resumo')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
 
@@ -2072,6 +2073,51 @@ function Cliente360({
         <Metric icon={BarChart3} label="Ticket medio" value={money(ticketMedio)} tone="amber" />
       </div>
 
+      <div className="client360-tabs">
+        <button className={activeTab === 'resumo' ? 'active' : ''} type="button" onClick={() => setActiveTab('resumo')}>Resumo</button>
+        <button className={activeTab === 'vendas' ? 'active' : ''} type="button" onClick={() => setActiveTab('vendas')}>Vendas</button>
+        <button className={activeTab === 'servicos' ? 'active' : ''} type="button" onClick={() => setActiveTab('servicos')}>Servicos</button>
+        <button className={activeTab === 'orcamentos' ? 'active' : ''} type="button" onClick={() => setActiveTab('orcamentos')}>Orcamentos</button>
+        <button className={activeTab === 'timeline' ? 'active' : ''} type="button" onClick={() => setActiveTab('timeline')}>Timeline</button>
+      </div>
+
+      {activeTab === 'resumo' && (
+        <section className="detail-grid">
+          <div className="panel">
+            <div className="panel-header">
+              <div>
+                <h2>Resumo comercial</h2>
+                <p>Leitura rapida para orientar o proximo contato.</p>
+              </div>
+            </div>
+            <div className="status-list">
+              <div className="status-row"><span>Ultima compra</span><strong>{dateLabel(cliente.ultimaCompraEm)}</strong></div>
+              <div className="status-row"><span>Ultimo servico</span><strong>{dateLabel(cliente.ultimoServicoEm)}</strong></div>
+              <div className="status-row"><span>Responsavel</span><strong>{cliente.responsavel || 'Nao informado'}</strong></div>
+              <div className="status-row"><span>Origem</span><strong>{origemLabel(cliente.origemBase)}</strong></div>
+            </div>
+          </div>
+          <div className="panel">
+            <div className="panel-header">
+              <div>
+                <h2>Veiculos identificados</h2>
+                <p>Placas extraidas dos servicos importados.</p>
+              </div>
+            </div>
+            <div className="status-list">
+              {vehicles.slice(0, 10).map((vehicle) => (
+                <div className="status-row" key={vehicle}>
+                  <span>{vehicle}</span>
+                  <strong>{clienteServicos.filter((servico) => servico.placa === vehicle).length} servicos</strong>
+                </div>
+              ))}
+              {vehicles.length === 0 && <div className="empty-state">Nenhuma placa estruturada encontrada.</div>}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'vendas' && (
       <section className="panel wide">
         <div className="panel-header">
           <div>
@@ -2099,7 +2145,9 @@ function Cliente360({
           {vendasFiltradas.length === 0 && <div className="empty-state">Nenhuma venda neste filtro.</div>}
         </div>
       </section>
+      )}
 
+      {activeTab === 'servicos' && (
       <section className="panel wide">
         <div className="panel-header">
           <div>
@@ -2127,7 +2175,9 @@ function Cliente360({
           {servicosFiltrados.length === 0 && <div className="empty-state">Nenhum servico neste filtro.</div>}
         </div>
       </section>
+      )}
 
+      {activeTab === 'orcamentos' && (
       <section className="detail-grid">
         <div className="panel">
           <div className="panel-header">
@@ -2146,7 +2196,10 @@ function Cliente360({
             {clienteOrcamentos.length === 0 && <div className="empty-state">Sem orcamentos.</div>}
           </div>
         </div>
-        <div className="panel">
+      </section>
+      )}
+      {activeTab === 'timeline' && (
+        <section className="panel wide">
           <div className="panel-header">
             <div>
               <h2>Timeline</h2>
@@ -2162,8 +2215,8 @@ function Cliente360({
             ))}
             {clienteInteracoes.length === 0 && <div className="empty-state">Sem interacoes.</div>}
           </div>
-        </div>
-      </section>
+        </section>
+      )}
     </section>
   )
 }

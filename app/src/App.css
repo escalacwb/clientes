@@ -949,6 +949,29 @@ h3 {
   padding: 9px 10px;
 }
 
+.client360-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid #dde6e2;
+}
+
+.client360-tabs button {
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: #52625d;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  padding: 10px 12px;
+}
+
+.client360-tabs button.active {
+  border-color: #12312f;
+  color: #12312f;
+}
+
 .table-head.client360-sale,
 .table-row.client360-sale {
   grid-template-columns: 96px minmax(240px, 1.5fr) minmax(140px, 0.8fr) minmax(110px, 0.6fr) 110px;
