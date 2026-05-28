@@ -581,6 +581,62 @@ h3 {
   grid-template-columns: minmax(180px, 1fr) 110px 90px 90px minmax(280px, 1.4fr) 80px;
 }
 
+.reference-import-box {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid #d7e5dc;
+  border-radius: 8px;
+  background: #f8faf7;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.reference-import-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.reference-import-copy h2 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.reference-import-copy p {
+  color: #64736f;
+  margin: 0;
+}
+
+.reference-preview {
+  margin-bottom: 12px;
+}
+
+.reference-file {
+  grid-template-columns: minmax(160px, 1fr) minmax(190px, 1.3fr) 70px 80px 80px 80px 90px;
+}
+
+.import-file-list {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid #e0e6df;
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.import-file-list span {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #64736f;
+  font-size: 12px;
+}
+
+.import-file-list strong {
+  color: #20312d;
+  min-width: 130px;
+}
+
 .compact .table-head,
 .compact .table-row {
   min-width: 680px;
@@ -1117,6 +1173,15 @@ h3 {
   background: #fff1f0;
   border: 1px solid #ffccc7;
   color: #a8071a;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.success-alert {
+  border-radius: 8px;
+  background: #f6ffed;
+  border: 1px solid #b7eb8f;
+  color: #135200;
   padding: 10px 12px;
   margin-bottom: 12px;
 }

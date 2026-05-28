@@ -25,6 +25,27 @@ export type ImportacaoPreviewInput = {
   conflitos?: number
 }
 
+export type ReferenceImportResult = {
+  importacaoId: string
+  clientes: number
+  veiculos: number
+  ordens: number
+  vendas: { created: number; ignored: number; conflitos: number }
+  servicos: { created: number; ignored: number; conflitos: number }
+  movimentosComVeiculo: number
+  movimentosSemVeiculo: number
+}
+
+export type ImportacaoArquivoResumo = {
+  id: string
+  importacaoId: string
+  tipo: string
+  arquivoNome: string
+  obrigatorio: boolean
+  totalLinhas: number
+  processadoEm?: string
+}
+
 export async function listImportacoes(): Promise<Importacao[]> {
   const supabase = await getSupabase()
   if (!supabase) return mockImportacoes
@@ -72,6 +93,45 @@ export async function createImportacaoPreview(input: ImportacaoPreviewInput): Pr
   if (error) throw error
 
   return mapImportacao(data as ImportacaoRow)
+}
+
+export async function importReferenceFiles(files: FileList | File[]): Promise<ReferenceImportResult> {
+  const supabase = await getSupabase()
+  if (!supabase) throw new Error('Supabase nao configurado para importacao real.')
+
+  const formData = new FormData()
+  Array.from(files).forEach((file) => formData.append('files', file))
+
+  const { data, error } = await supabase.functions.invoke('import-reference-files', {
+    body: formData,
+  })
+
+  if (error) throw error
+  if (!data?.ok) throw new Error(data?.error ?? 'Nao foi possivel importar os arquivos.')
+
+  return data as ReferenceImportResult
+}
+
+export async function listImportacaoArquivos(): Promise<ImportacaoArquivoResumo[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('importacao_arquivos')
+    .select('id,importacao_id,tipo,arquivo_nome,obrigatorio,total_linhas,processado_em')
+    .order('processado_em', { ascending: false })
+
+  if (error) throw error
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    importacaoId: row.importacao_id,
+    tipo: row.tipo,
+    arquivoNome: row.arquivo_nome,
+    obrigatorio: row.obrigatorio,
+    totalLinhas: row.total_linhas,
+    processadoEm: row.processado_em ?? undefined,
+  }))
 }
 
 function mapImportacao(row: ImportacaoRow): Importacao {

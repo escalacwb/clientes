@@ -104,14 +104,14 @@ export type OrcamentoItemInput = Omit<OrcamentoItem, 'id' | 'orcamentoId' | 'val
 
 export type Importacao = {
   id: string
-  tipo: 'base-inicial' | 'xml-diario' | 'clientes-semanal'
+  tipo: 'base-inicial' | 'xml-diario' | 'clientes-semanal' | 'referencias-diarias'
   arquivoNome: string
   dataImportacao: string
   totalItens: number
   clientesEncontrados: number
   clientesCriados: number
   conflitos: number
-  status: 'processada' | 'pendente' | 'com-conflitos'
+  status: 'processada' | 'pendente' | 'com-conflitos' | 'processando' | 'erro'
 }
 
 export type ImportacaoConflito = {

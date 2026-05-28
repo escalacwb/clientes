@@ -44,6 +44,7 @@ import {
 } from './lib/crm'
 import { previewXmlFiles, type XmlImportPreview } from './lib/xmlImport'
 import { previewWorkbookFiles, type WorkbookImportPreview } from './lib/workbookPreview'
+import { previewReferenceImportFiles, type ReferenceImportPreview } from './lib/referenceImportPreview'
 import { isSupabaseConfigured } from './lib/supabase'
 import { buildOportunidades } from './lib/oportunidades'
 import { carteiraFiltros, filterClientes } from './lib/filtros'
@@ -58,6 +59,8 @@ import { listClienteServicosItens, listClienteVendasItens } from './repositories
 import { createInteracao } from './repositories/interacoesRepository'
 import { listInteracoes } from './repositories/interacoesRepository'
 import { createImportacaoPreview } from './repositories/importacoesRepository'
+import { importReferenceFiles } from './repositories/importacoesRepository'
+import { listImportacaoArquivos, type ImportacaoArquivoResumo } from './repositories/importacoesRepository'
 import { listImportacoes } from './repositories/importacoesRepository'
 import { createMesclagem, listMesclagens, listPossiveisDuplicados } from './repositories/mesclagensRepository'
 import { createOrcamento } from './repositories/orcamentosRepository'
@@ -632,7 +635,7 @@ function App() {
         {session.role === 'admin' && view === 'importacoes' && (
           <Importacoes
             importacoes={importacoes}
-            onAddImportacao={(importacao) => setImportacoes((current) => [importacao, ...current])}
+            onAddImportacao={(importacao) => setImportacoes((current) => [importacao, ...current.filter((item) => item.id !== importacao.id)])}
           />
         )}
         {session.role === 'admin' && view === 'conflitos' && (
@@ -2236,12 +2239,28 @@ function Importacoes({
   importacoes: Importacao[]
   onAddImportacao: (importacao: Importacao) => void
 }) {
+  const [arquivosResumo, setArquivosResumo] = useState<ImportacaoArquivoResumo[]>([])
   const [previews, setPreviews] = useState<XmlImportPreview[]>([])
   const [workbookPreviews, setWorkbookPreviews] = useState<WorkbookImportPreview[]>([])
+  const [referencePreview, setReferencePreview] = useState<ReferenceImportPreview | null>(null)
+  const [referenceFiles, setReferenceFiles] = useState<File[]>([])
   const [isReading, setIsReading] = useState(false)
   const [isReadingWorkbook, setIsReadingWorkbook] = useState(false)
+  const [isReadingReference, setIsReadingReference] = useState(false)
+  const [isImportingReference, setIsImportingReference] = useState(false)
+  const [referenceImportResult, setReferenceImportResult] = useState('')
   const [error, setError] = useState('')
   const [registeredFiles, setRegisteredFiles] = useState<string[]>([])
+  const arquivosPorImportacao = useMemo(() => {
+    return arquivosResumo.reduce<Record<string, ImportacaoArquivoResumo[]>>((acc, arquivo) => {
+      acc[arquivo.importacaoId] = [...(acc[arquivo.importacaoId] ?? []), arquivo]
+      return acc
+    }, {})
+  }, [arquivosResumo])
+
+  useEffect(() => {
+    listImportacaoArquivos().then(setArquivosResumo).catch(() => setArquivosResumo([]))
+  }, [importacoes.length])
 
   async function handleFiles(files: FileList | null) {
     if (!files?.length) return
@@ -2268,6 +2287,23 @@ function Importacoes({
       setError(exception instanceof Error ? exception.message : 'Nao foi possivel ler a planilha.')
     } finally {
       setIsReadingWorkbook(false)
+    }
+  }
+
+  async function handleReferenceFiles(files: FileList | null) {
+    if (!files?.length) return
+    setIsReadingReference(true)
+    setError('')
+    setReferenceImportResult('')
+
+    try {
+      const selectedFiles = Array.from(files)
+      setReferenceFiles(selectedFiles)
+      setReferencePreview(await previewReferenceImportFiles(selectedFiles))
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel validar os arquivos diarios.')
+    } finally {
+      setIsReadingReference(false)
     }
   }
 
@@ -2307,6 +2343,46 @@ function Importacoes({
     }
   }
 
+  async function registerReferencePreview(preview: ReferenceImportPreview) {
+    setError('')
+
+    try {
+      const created = await createImportacaoPreview({
+        tipo: 'referencias-diarias',
+        arquivoNome: preview.arquivoNome,
+        totalItens: preview.itensDetectados,
+        clientesEncontrados: preview.clientesDetectados,
+        conflitos: preview.avisos.length,
+      })
+      onAddImportacao(created)
+      setRegisteredFiles((current) => [...current, preview.arquivoNome])
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel registrar a previa da importacao diaria.')
+    }
+  }
+
+  async function runReferenceImport() {
+    if (!referencePreview?.ready || referenceFiles.length === 0) return
+    setIsImportingReference(true)
+    setError('')
+    setReferenceImportResult('')
+
+    try {
+      const result = await importReferenceFiles(referenceFiles)
+      setReferenceImportResult(
+        `Importacao concluida: ${result.clientes} clientes, ${result.veiculos} veiculos, ${result.ordens} ordens, ${result.vendas.created + result.servicos.created} itens.`,
+      )
+      const updated = await listImportacoes()
+      const created = updated.find((item) => item.id === result.importacaoId)
+      if (created) onAddImportacao(created)
+      setArquivosResumo(await listImportacaoArquivos())
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel concluir a importacao diaria.')
+    } finally {
+      setIsImportingReference(false)
+    }
+  }
+
   return (
     <section className="grid-layout">
       <section className="panel wide">
@@ -2336,6 +2412,85 @@ function Importacoes({
           </label>
         </div>
         {error && <div className="alert">{error}</div>}
+        <div className="reference-import-box">
+          <div className="reference-import-copy">
+            <h2>Importacao diaria Capital</h2>
+            <p>Valida carros atendidos, clientes, vendas de produtos, vendas de servicos e listas de preco.</p>
+          </div>
+          <label className="file-button">
+            <FileUp size={16} />
+            {isReadingReference ? 'Validando...' : 'Selecionar pacote'}
+            <input type="file" accept=".xls,.xlsx,.csv" multiple onChange={(event) => handleReferenceFiles(event.target.files)} />
+          </label>
+        </div>
+        {referencePreview && (
+          <div className="preview-card reference-preview">
+            <div className="panel-header">
+              <div>
+                <h2>{referencePreview.ready ? 'Pacote pronto para importar' : 'Pacote incompleto'}</h2>
+                <p>
+                  {referencePreview.files.filter((file) => file.status === 'ok').length} arquivos reconhecidos -
+                  {' '}{referencePreview.itensDetectados} itens - {referencePreview.ordensDetectadas} ordens
+                </p>
+              </div>
+              <button
+                className="button primary"
+                disabled={!referencePreview.ready || registeredFiles.includes(referencePreview.arquivoNome)}
+                onClick={() => registerReferencePreview(referencePreview)}
+                type="button"
+              >
+                {registeredFiles.includes(referencePreview.arquivoNome) ? 'Previa registrada' : 'Registrar previa'}
+              </button>
+              <button
+                className="button"
+                disabled={!referencePreview.ready || isImportingReference}
+                onClick={runReferenceImport}
+                type="button"
+              >
+                {isImportingReference ? 'Importando...' : 'Importar agora'}
+              </button>
+            </div>
+            {referenceImportResult && <div className="success-alert">{referenceImportResult}</div>}
+            <div className={`readiness ${referencePreview.ready ? 'ok' : 'danger'}`}>
+              <strong>{referencePreview.ready ? 'Estrutura obrigatoria reconhecida' : 'Faltam arquivos obrigatorios'}</strong>
+              <span>Clientes, ordens, itens, placas e KM serao deduplicados antes de gravar.</span>
+            </div>
+            <div className="info-grid import-quality">
+              <Info label="Clientes" value={referencePreview.clientesDetectados.toString()} />
+              <Info label="Ordens" value={referencePreview.ordensDetectadas.toString()} />
+              <Info label="Itens" value={referencePreview.itensDetectados.toString()} />
+              <Info label="Placas" value={referencePreview.placasDetectadas.toString()} />
+              <Info label="KM" value={referencePreview.kmsDetectados.toString()} />
+            </div>
+            {referencePreview.avisos.length > 0 && (
+              <div className="warning-list">
+                {referencePreview.avisos.map((aviso) => <span key={aviso}>{aviso}</span>)}
+              </div>
+            )}
+            <div className="table compact">
+              <div className="table-head reference-file">
+                <span>Arquivo</span>
+                <span>Status</span>
+                <span>Linhas</span>
+                <span>Clientes</span>
+                <span>Ordens</span>
+                <span>Itens</span>
+                <span>Placas/KM</span>
+              </div>
+              {referencePreview.files.map((file) => (
+                <div className="table-row reference-file" key={file.kind}>
+                  <span>{file.label}</span>
+                  <span>{file.status === 'ok' ? file.fileName : file.required ? 'Obrigatorio ausente' : 'Opcional ausente'}</span>
+                  <span>{file.totalRows}</span>
+                  <span>{file.clientes}</span>
+                  <span>{file.ordens}</span>
+                  <span>{file.itens}</span>
+                  <span>{file.placas}/{file.kms}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="dual-upload">
           <label className="file-button secondary">
             <FileUp size={16} />
@@ -2477,6 +2632,16 @@ function Importacoes({
             <Info label="Novos" value={importacao.clientesCriados.toString()} />
             <Info label="Conflitos" value={importacao.conflitos.toString()} />
           </div>
+          {arquivosPorImportacao[importacao.id]?.length > 0 && (
+            <div className="import-file-list">
+              {arquivosPorImportacao[importacao.id].map((arquivo) => (
+                <span key={arquivo.id}>
+                  <strong>{arquivo.tipo}</strong>
+                  {arquivo.arquivoNome} - {arquivo.totalLinhas} linhas
+                </span>
+              ))}
+            </div>
+          )}
         </section>
       ))}
     </section>
