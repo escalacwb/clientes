@@ -54,7 +54,7 @@ import { assignClienteVendedor } from './repositories/clientesRepository'
 import { listClientes } from './repositories/clientesRepository'
 import { updateClienteComercial } from './repositories/clientesRepository'
 import { listConflitos, resolveConflito } from './repositories/conflitosRepository'
-import { listServicosItens, listVendasItens } from './repositories/historicoRepository'
+import { listClienteServicosItens, listClienteVendasItens } from './repositories/historicoRepository'
 import { createInteracao } from './repositories/interacoesRepository'
 import { listInteracoes } from './repositories/interacoesRepository'
 import { createImportacaoPreview } from './repositories/importacoesRepository'
@@ -133,8 +133,8 @@ function App() {
   const [session, setSession] = useState<SessaoUsuario | null>(null)
   const [isCheckingSession, setIsCheckingSession] = useState(true)
   const [view, setView] = useState(() => localStorage.getItem('capital-crm:last-view') ?? 'dashboard')
-  const [clientes, setClientes] = useState(seedClientes)
-  const [selectedClientId, setSelectedClientId] = useState(seedClientes[0].id)
+  const [clientes, setClientes] = useState<Cliente[]>(isSupabaseConfigured ? [] : seedClientes)
+  const [selectedClientId, setSelectedClientId] = useState(isSupabaseConfigured ? '' : seedClientes[0].id)
   const [query, setQuery] = useState('')
   const [clienteFiltro, setClienteFiltro] = useState<CarteiraFiltro>(
     () => (localStorage.getItem('capital-crm:cliente-filter') as CarteiraFiltro | null) ?? 'todos',
@@ -142,18 +142,19 @@ function App() {
   const [carteiraFiltro, setCarteiraFiltro] = useState<CarteiraFiltro>(
     () => (localStorage.getItem('capital-crm:carteira-filter') as CarteiraFiltro | null) ?? 'todos',
   )
-  const [interacoes, setInteracoes] = useState(seedInteracoes)
-  const [orcamentos, setOrcamentos] = useState(seedOrcamentos)
-  const [importacoes, setImportacoes] = useState(seedImportacoes)
-  const [conflitos, setConflitos] = useState(seedConflitos)
+  const [interacoes, setInteracoes] = useState<Interacao[]>(isSupabaseConfigured ? [] : seedInteracoes)
+  const [orcamentos, setOrcamentos] = useState<Orcamento[]>(isSupabaseConfigured ? [] : seedOrcamentos)
+  const [importacoes, setImportacoes] = useState<Importacao[]>(isSupabaseConfigured ? [] : seedImportacoes)
+  const [conflitos, setConflitos] = useState<ImportacaoConflito[]>(isSupabaseConfigured ? [] : seedConflitos)
   const [usuarios, setUsuarios] = useState(isSupabaseConfigured ? authUsuarios : seedVendedores)
-  const [alteracoes, setAlteracoes] = useState(seedAlteracoes)
-  const [tarefas, setTarefas] = useState(seedTarefas)
-  const [vendasItens, setVendasItens] = useState(seedVendasItens)
-  const [servicosItens, setServicosItens] = useState(seedServicosItens)
-  const [possiveisDuplicados, setPossiveisDuplicados] = useState(seedPossiveisDuplicados)
-  const [mesclagens, setMesclagens] = useState(seedMesclagens)
-  const [isLoadingData, setIsLoadingData] = useState(false)
+  const [alteracoes, setAlteracoes] = useState<ClienteAlteracao[]>(isSupabaseConfigured ? [] : seedAlteracoes)
+  const [tarefas, setTarefas] = useState<Tarefa[]>(isSupabaseConfigured ? [] : seedTarefas)
+  const [vendasItens, setVendasItens] = useState<VendaItem[]>(isSupabaseConfigured ? [] : seedVendasItens)
+  const [servicosItens, setServicosItens] = useState<ServicoItem[]>(isSupabaseConfigured ? [] : seedServicosItens)
+  const [possiveisDuplicados, setPossiveisDuplicados] = useState<PossivelDuplicado[]>(isSupabaseConfigured ? [] : seedPossiveisDuplicados)
+  const [mesclagens, setMesclagens] = useState<ClienteMesclagem[]>(isSupabaseConfigured ? [] : seedMesclagens)
+  const [isLoadingData, setIsLoadingData] = useState(isSupabaseConfigured)
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [dataError, setDataError] = useState('')
 
   useEffect(() => {
@@ -209,8 +210,6 @@ function App() {
           loadedTarefas,
           loadedPossiveisDuplicados,
           loadedMesclagens,
-          loadedVendasItens,
-          loadedServicosItens,
         ] = await Promise.all([
           listClientes(),
           listInteracoes(),
@@ -222,8 +221,6 @@ function App() {
           listTarefas(),
           listPossiveisDuplicados(),
           listMesclagens(),
-          listVendasItens(),
-          listServicosItens(),
         ])
 
         if (!isMounted) return
@@ -237,8 +234,6 @@ function App() {
         setTarefas(loadedTarefas)
         setPossiveisDuplicados(loadedPossiveisDuplicados)
         setMesclagens(loadedMesclagens)
-        setVendasItens(loadedVendasItens)
-        setServicosItens(loadedServicosItens)
         setSelectedClientId((current) => loadedClientes.some((cliente) => cliente.id === current) ? current : loadedClientes[0]?.id)
       } catch (exception) {
         if (!isMounted) return
@@ -254,6 +249,36 @@ function App() {
       isMounted = false
     }
   }, [isCheckingSession, session])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadSelectedClientHistory() {
+      if (!selectedClientId) return
+      if (isSupabaseConfigured && !session) return
+
+      setIsLoadingHistory(true)
+      try {
+        const [loadedVendas, loadedServicos] = await Promise.all([
+          listClienteVendasItens(selectedClientId),
+          listClienteServicosItens(selectedClientId),
+        ])
+        if (!isMounted) return
+        setVendasItens(loadedVendas)
+        setServicosItens(loadedServicos)
+      } catch (exception) {
+        if (isMounted) setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar o historico do cliente.')
+      } finally {
+        if (isMounted) setIsLoadingHistory(false)
+      }
+    }
+
+    loadSelectedClientHistory()
+
+    return () => {
+      isMounted = false
+    }
+  }, [selectedClientId, session])
 
   const scopedClientes = useMemo(() => {
     if (!session || session.role === 'admin') return clientes
@@ -323,6 +348,25 @@ function App() {
       localStorage.setItem('capital-crm:last-email', nextSession.email)
       setView(nextSession.role === 'admin' ? 'dashboard' : 'carteira')
     }} />
+  }
+
+  if (isSupabaseConfigured && isLoadingData && clientes.length === 0) {
+    return (
+      <main className="login-screen">
+        <section className="login-panel">
+          <div className="brand login-brand">
+            <div className="brand-mark">
+              <Truck size={22} />
+            </div>
+            <div>
+              <strong>Capital Truck CRM</strong>
+              <span>Carregando base do Supabase...</span>
+            </div>
+          </div>
+          <div className="empty-state">Buscando clientes e dados comerciais. Nenhum dado demonstrativo sera exibido.</div>
+        </section>
+      </main>
+    )
   }
 
   const visibleNav = nav.filter((item) => session.role === 'admin' || !adminOnlyViews.has(item.id))
@@ -415,6 +459,7 @@ function App() {
             </button>
           )}
           {isLoadingData && <strong>Carregando...</strong>}
+          {isLoadingHistory && <strong>Carregando historico do cliente...</strong>}
           {dataError && <strong>{dataError}</strong>}
         </div>
 

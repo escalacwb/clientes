@@ -51,6 +51,22 @@ export async function listVendasItens(): Promise<VendaItem[]> {
   return data.map(mapVenda)
 }
 
+export async function listClienteVendasItens(clienteId: string): Promise<VendaItem[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return mockVendas.filter((venda) => venda.clienteId === clienteId)
+
+  const data = await fetchAllPages<VendaRow>((from, to) =>
+    supabase
+      .from('vendas_itens')
+      .select('*')
+      .eq('cliente_id', clienteId)
+      .order('data_venda', { ascending: false })
+      .range(from, to),
+  )
+
+  return data.map(mapVenda)
+}
+
 export async function listServicosItens(): Promise<ServicoItem[]> {
   const supabase = await getSupabase()
   if (!supabase) return mockServicos
@@ -59,6 +75,22 @@ export async function listServicosItens(): Promise<ServicoItem[]> {
     supabase
       .from('servicos_itens')
       .select('*')
+      .order('data_servico', { ascending: false })
+      .range(from, to),
+  )
+
+  return data.map(mapServico)
+}
+
+export async function listClienteServicosItens(clienteId: string): Promise<ServicoItem[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return mockServicos.filter((servico) => servico.clienteId === clienteId)
+
+  const data = await fetchAllPages<ServicoRow>((from, to) =>
+    supabase
+      .from('servicos_itens')
+      .select('*')
+      .eq('cliente_id', clienteId)
       .order('data_servico', { ascending: false })
       .range(from, to),
   )
