@@ -843,7 +843,7 @@ h3 {
 
 .budget-item-row {
   display: grid;
-  grid-template-columns: 92px minmax(150px, 1fr) 72px 94px 100px;
+  grid-template-columns: minmax(190px, 1.2fr) 92px minmax(150px, 1fr) 72px 94px 78px 100px;
   gap: 8px;
   align-items: center;
 }
@@ -1517,6 +1517,10 @@ h3 {
 
   .client-card {
     position: static;
+  }
+
+  .budget-item-row {
+    grid-template-columns: 1fr;
   }
 
   .import-flow {

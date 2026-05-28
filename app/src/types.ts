@@ -77,7 +77,9 @@ export type Orcamento = {
   valorTotal: number
   validade: string
   previsaoFechamento?: string
+  formaPagamento?: string
   motivoPerda?: string
+  observacao?: string
   itens?: OrcamentoItem[]
 }
 
@@ -90,16 +92,33 @@ export type OrcamentoInput = Omit<Orcamento, 'id' | 'data' | 'status' | 'itens'>
 export type OrcamentoItem = {
   id: string
   orcamentoId: string
+  catalogoItemId?: string
+  codigo?: string
   descricao: string
   tipo: 'produto' | 'servico'
   quantidade: number
   valorUnitario: number
   valorTotal: number
+  descontoPercentual?: number
   observacao?: string
 }
 
 export type OrcamentoItemInput = Omit<OrcamentoItem, 'id' | 'orcamentoId' | 'valorTotal'> & {
   valorTotal?: number
+}
+
+export type CatalogoItem = {
+  id: string
+  tipo: 'produto' | 'servico'
+  codigo: string
+  descricao: string
+  unidade?: string
+  grupo?: string
+  subgrupo?: string
+  marca?: string
+  preco: number
+  descontoMaximo?: number
+  estoque?: number
 }
 
 export type Importacao = {

@@ -164,6 +164,22 @@ create table public.tarefas (
   criado_em timestamptz not null default now()
 );
 
+create table public.catalogo_itens (
+  id uuid primary key default gen_random_uuid(),
+  tipo text not null check (tipo in ('produto', 'servico')),
+  codigo text not null,
+  descricao text not null,
+  unidade text,
+  grupo text,
+  subgrupo text,
+  marca text,
+  ativo boolean not null default true,
+  raw_data jsonb not null default '{}'::jsonb,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now(),
+  unique (tipo, codigo)
+);
+
 create table public.orcamentos (
   id uuid primary key default gen_random_uuid(),
   cliente_id uuid not null references public.clientes(id),
@@ -183,11 +199,14 @@ create table public.orcamentos (
 create table public.orcamento_itens (
   id uuid primary key default gen_random_uuid(),
   orcamento_id uuid not null references public.orcamentos(id),
+  catalogo_item_id uuid references public.catalogo_itens(id),
+  codigo text,
   descricao text not null,
   tipo text not null default 'produto',
   quantidade numeric(12, 3) not null default 1,
   valor_unitario numeric(14, 2) not null default 0,
   valor_total numeric(14, 2) not null default 0,
+  desconto_percentual numeric(8, 2),
   observacao text
 );
 
@@ -221,6 +240,20 @@ create table public.listas_preco (
   vigencia_fim date,
   ativo boolean not null default true,
   criado_em timestamptz not null default now()
+);
+
+create table public.catalogo_precos (
+  id uuid primary key default gen_random_uuid(),
+  catalogo_item_id uuid not null references public.catalogo_itens(id) on delete cascade,
+  lista_preco_id uuid references public.listas_preco(id),
+  valor numeric(14, 2) not null default 0,
+  desconto_maximo numeric(8, 2),
+  estoque numeric(14, 3),
+  vigencia_inicio date not null default current_date,
+  importacao_arquivo_id uuid,
+  raw_data jsonb not null default '{}'::jsonb,
+  criado_em timestamptz not null default now(),
+  unique (catalogo_item_id, vigencia_inicio, importacao_arquivo_id)
 );
 
 create table public.produto_precos (
@@ -746,6 +779,8 @@ alter table public.orcamento_itens enable row level security;
 alter table public.produtos enable row level security;
 alter table public.produto_aliases enable row level security;
 alter table public.listas_preco enable row level security;
+alter table public.catalogo_itens enable row level security;
+alter table public.catalogo_precos enable row level security;
 alter table public.produto_precos enable row level security;
 alter table public.campanhas enable row level security;
 alter table public.campanha_envios enable row level security;
@@ -936,6 +971,14 @@ create policy listas_preco_read_authenticated
 on public.listas_preco for select
 using (auth.role() = 'authenticated');
 
+create policy catalogo_itens_read_authenticated
+on public.catalogo_itens for select
+using (auth.role() = 'authenticated');
+
+create policy catalogo_precos_read_authenticated
+on public.catalogo_precos for select
+using (auth.role() = 'authenticated');
+
 create policy produto_precos_read_authenticated
 on public.produto_precos for select
 using (auth.role() = 'authenticated');
@@ -952,6 +995,16 @@ with check (public.current_user_is_admin());
 
 create policy admin_manage_listas_preco
 on public.listas_preco for all
+using (public.current_user_is_admin())
+with check (public.current_user_is_admin());
+
+create policy admin_manage_catalogo_itens
+on public.catalogo_itens for all
+using (public.current_user_is_admin())
+with check (public.current_user_is_admin());
+
+create policy admin_manage_catalogo_precos
+on public.catalogo_precos for all
 using (public.current_user_is_admin())
 with check (public.current_user_is_admin());
 

@@ -11,17 +11,22 @@ type OrcamentoRow = {
   valor_total: number
   validade: string
   previsao_fechamento: string | null
+  forma_pagamento: string | null
   motivo_perda: string | null
+  observacao: string | null
 }
 
 type OrcamentoItemRow = {
   id: string
   orcamento_id: string
+  catalogo_item_id: string | null
+  codigo: string | null
   descricao: string
   tipo: OrcamentoItem['tipo']
   quantidade: number
   valor_unitario: number
   valor_total: number
+  desconto_percentual: number | null
   observacao: string | null
 }
 
@@ -79,7 +84,9 @@ export async function createOrcamento(input: OrcamentoInput, itens: OrcamentoIte
       valor_total: input.valorTotal,
       validade: input.validade,
       previsao_fechamento: input.previsaoFechamento ?? null,
+      forma_pagamento: input.formaPagamento ?? null,
       motivo_perda: input.motivoPerda ?? null,
+      observacao: input.observacao ?? null,
     })
     .select('*')
     .single()
@@ -139,11 +146,14 @@ async function createOrcamentoItens(orcamentoId: string, itens: OrcamentoItemInp
     .insert(
       itens.map((item) => ({
         orcamento_id: orcamentoId,
+        catalogo_item_id: item.catalogoItemId ?? null,
+        codigo: item.codigo ?? null,
         descricao: item.descricao,
         tipo: item.tipo,
         quantidade: item.quantidade,
         valor_unitario: item.valorUnitario,
         valor_total: item.valorTotal ?? item.quantidade * item.valorUnitario,
+        desconto_percentual: item.descontoPercentual ?? null,
         observacao: item.observacao ?? null,
       })),
     )
@@ -164,7 +174,9 @@ function mapOrcamento(row: OrcamentoRow): Orcamento {
     valorTotal: row.valor_total,
     validade: row.validade,
     previsaoFechamento: row.previsao_fechamento ?? undefined,
+    formaPagamento: row.forma_pagamento ?? undefined,
     motivoPerda: row.motivo_perda ?? undefined,
+    observacao: row.observacao ?? undefined,
   }
 }
 
@@ -172,11 +184,14 @@ function mapOrcamentoItem(row: OrcamentoItemRow): OrcamentoItem {
   return {
     id: row.id,
     orcamentoId: row.orcamento_id,
+    catalogoItemId: row.catalogo_item_id ?? undefined,
+    codigo: row.codigo ?? undefined,
     descricao: row.descricao,
     tipo: row.tipo,
     quantidade: row.quantidade,
     valorUnitario: row.valor_unitario,
     valorTotal: row.valor_total,
+    descontoPercentual: row.desconto_percentual ?? undefined,
     observacao: row.observacao ?? undefined,
   }
 }

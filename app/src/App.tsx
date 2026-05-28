@@ -51,6 +51,7 @@ import { carteiraFiltros, filterClientes } from './lib/filtros'
 import { getCurrentSession, signInWithPassword, signOut } from './repositories/authRepository'
 import { listClienteAlteracoes } from './repositories/auditoriaRepository'
 import { upsertCampanhaEnvio } from './repositories/campanhasRepository'
+import { listCatalogoItens } from './repositories/catalogoRepository'
 import { assignClienteVendedor } from './repositories/clientesRepository'
 import { listClientes } from './repositories/clientesRepository'
 import { updateClienteComercial } from './repositories/clientesRepository'
@@ -71,6 +72,7 @@ import { listUsuarios } from './repositories/usuariosRepository'
 import type {
   CampanhaEnvioStatus,
   CarteiraFiltro,
+  CatalogoItem,
   Cliente,
   ClienteAlteracao,
   ClienteMesclagem,
@@ -156,6 +158,7 @@ function App() {
   const [servicosItens, setServicosItens] = useState<ServicoItem[]>(isSupabaseConfigured ? [] : seedServicosItens)
   const [possiveisDuplicados, setPossiveisDuplicados] = useState<PossivelDuplicado[]>(isSupabaseConfigured ? [] : seedPossiveisDuplicados)
   const [mesclagens, setMesclagens] = useState<ClienteMesclagem[]>(isSupabaseConfigured ? [] : seedMesclagens)
+  const [catalogo, setCatalogo] = useState<CatalogoItem[]>([])
   const [isLoadingData, setIsLoadingData] = useState(isSupabaseConfigured)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [dataError, setDataError] = useState('')
@@ -213,6 +216,7 @@ function App() {
           loadedTarefas,
           loadedPossiveisDuplicados,
           loadedMesclagens,
+          loadedCatalogo,
         ] = await Promise.all([
           listClientes(),
           listInteracoes(),
@@ -224,6 +228,7 @@ function App() {
           listTarefas(),
           listPossiveisDuplicados(),
           listMesclagens(),
+          listCatalogoItens(),
         ])
 
         if (!isMounted) return
@@ -237,6 +242,7 @@ function App() {
         setTarefas(loadedTarefas)
         setPossiveisDuplicados(loadedPossiveisDuplicados)
         setMesclagens(loadedMesclagens)
+        setCatalogo(loadedCatalogo)
         setSelectedClientId((current) => loadedClientes.some((cliente) => cliente.id === current) ? current : loadedClientes[0]?.id)
       } catch (exception) {
         if (!isMounted) return
@@ -489,6 +495,7 @@ function App() {
             orcamentos={scopedOrcamentos}
             vendasItens={scopedVendasItens}
             servicosItens={scopedServicosItens}
+            catalogo={catalogo}
             filtro={clienteFiltro}
             onFilterChange={setClienteFiltro}
             onSelect={(cliente) => setSelectedClientId(cliente.id)}
@@ -947,6 +954,7 @@ function Clientes({
   orcamentos,
   vendasItens,
   servicosItens,
+  catalogo,
   filtro,
   onFilterChange,
   onSelect,
@@ -961,6 +969,7 @@ function Clientes({
   orcamentos: Orcamento[]
   vendasItens: VendaItem[]
   servicosItens: ServicoItem[]
+  catalogo: CatalogoItem[]
   filtro: CarteiraFiltro
   onFilterChange: (filtro: CarteiraFiltro) => void
   onSelect: (cliente: Cliente) => void
@@ -1024,6 +1033,7 @@ function Clientes({
         orcamentos={orcamentos}
         vendasItens={vendasItens}
         servicosItens={servicosItens}
+        catalogo={catalogo}
         onOpenFullProfile={() => onOpenFullProfile(selectedClient)}
         onUpdateClient={onUpdateClient}
         onAddInteraction={onAddInteraction}
@@ -1444,6 +1454,7 @@ function FichaCliente({
   orcamentos,
   vendasItens,
   servicosItens,
+  catalogo,
   onUpdateClient,
   onAddInteraction,
   onAddBudget,
@@ -1454,6 +1465,7 @@ function FichaCliente({
   orcamentos: Orcamento[]
   vendasItens: VendaItem[]
   servicosItens: ServicoItem[]
+  catalogo: CatalogoItem[]
   onUpdateClient: (clienteId: string, patch: Partial<Cliente>) => void
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
   onAddBudget: (orcamento: OrcamentoInput) => Promise<Orcamento>
@@ -1475,6 +1487,7 @@ function FichaCliente({
   const [budgetForm, setBudgetForm] = useState({
     validade: '',
     previsaoFechamento: '',
+    formaPagamento: '',
     observacao: '',
   })
   const [budgetItems, setBudgetItems] = useState<OrcamentoItemInput[]>([
@@ -1516,6 +1529,18 @@ function FichaCliente({
         `Bom dia, ${cliente.responsavel ?? cliente.nome}. Aqui e da Capital Truck Center. Estou passando para ver se precisa cotar pneus ou algum servico.`,
       )}`
     : undefined
+  const validBudgetItems = budgetItems
+    .filter((item) => item.descricao.trim() && item.quantidade > 0 && item.valorUnitario > 0)
+    .map((item) => {
+      const discountFactor = 1 - Math.min(Math.max(item.descontoPercentual ?? 0, 0), 100) / 100
+      const valorTotal = item.quantidade * item.valorUnitario * discountFactor
+      return { ...item, valorTotal }
+    })
+  const budgetTotal = validBudgetItems.reduce((total, item) => total + (item.valorTotal ?? 0), 0)
+  const quoteMessage = buildQuoteMessage(cliente, validBudgetItems, budgetForm.validade, budgetForm.formaPagamento, budgetForm.observacao)
+  const quoteWhatsUrl = cliente.whatsapp && validBudgetItems.length > 0
+    ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(quoteMessage)}`
+    : undefined
 
   async function submitInteraction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -1548,19 +1573,19 @@ function FichaCliente({
 
   async function submitBudget(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const validItems = budgetItems.filter((item) => item.descricao.trim() && item.quantidade > 0 && item.valorUnitario > 0)
-    const value = validItems.reduce((total, item) => total + item.quantidade * item.valorUnitario, 0)
-    if (!Number.isFinite(value) || value <= 0) return
+    if (!Number.isFinite(budgetTotal) || budgetTotal <= 0) return
 
     setFormError('')
     try {
       await onAddBudget({
         clienteId: cliente.id,
         vendedorId: cliente.vendedorId ?? 'u-1',
-        valorTotal: value,
+        valorTotal: budgetTotal,
         validade: budgetForm.validade,
         previsaoFechamento: budgetForm.previsaoFechamento || undefined,
-        itens: validItems,
+        formaPagamento: budgetForm.formaPagamento || undefined,
+        observacao: budgetForm.observacao || undefined,
+        itens: validBudgetItems,
       })
 
       await onAddInteraction({
@@ -1568,11 +1593,11 @@ function FichaCliente({
         vendedorId: cliente.vendedorId ?? 'u-1',
         canal: 'WhatsApp',
         tipo: 'orcamento',
-        resumo: budgetForm.observacao || `Orcamento criado no valor de ${money(value)}.`,
+        resumo: budgetForm.observacao || `Orcamento criado no valor de ${money(budgetTotal)}.`,
         resultado: 'pediu orcamento',
       })
 
-      setBudgetForm({ validade: '', previsaoFechamento: '', observacao: '' })
+      setBudgetForm({ validade: '', previsaoFechamento: '', formaPagamento: '', observacao: '' })
       setBudgetItems([{ descricao: '', tipo: 'produto', quantidade: 1, valorUnitario: 0 }])
       setShowBudgetForm(false)
     } catch (exception) {
@@ -1768,9 +1793,46 @@ function FichaCliente({
               onChange={(event) => setBudgetForm({ ...budgetForm, previsaoFechamento: event.target.value })}
             />
           </label>
+          <label className="span-2">
+            Condicao de pagamento
+            <input
+              value={budgetForm.formaPagamento}
+              onChange={(event) => setBudgetForm({ ...budgetForm, formaPagamento: event.target.value })}
+              placeholder="Ex.: a vista, 30 dias, 30/60/90 ou no cartao"
+            />
+          </label>
           <div className="budget-items span-2">
+            {catalogo.length === 0 && (
+              <div className="empty-state compact">Catalogo ainda nao carregado. Voce pode montar o orcamento manualmente.</div>
+            )}
             {budgetItems.map((item, index) => (
               <div className="budget-item-row" key={index}>
+                <select
+                  value={item.catalogoItemId ?? ''}
+                  onChange={(event) => {
+                    const selected = catalogo.find((catalogoItem) => catalogoItem.id === event.target.value)
+                    const next = [...budgetItems]
+                    next[index] = selected
+                      ? {
+                          ...item,
+                          catalogoItemId: selected.id,
+                          codigo: selected.codigo,
+                          descricao: selected.descricao,
+                          tipo: selected.tipo,
+                          valorUnitario: selected.preco,
+                          descontoPercentual: item.descontoPercentual ?? 0,
+                        }
+                      : { ...item, catalogoItemId: undefined, codigo: undefined }
+                    setBudgetItems(next)
+                  }}
+                >
+                  <option value="">Catalogo</option>
+                  {catalogo.map((catalogoItem) => (
+                    <option key={catalogoItem.id} value={catalogoItem.id}>
+                      {catalogoItem.tipo === 'produto' ? 'Produto' : 'Servico'} | {catalogoItem.codigo} | {catalogoItem.descricao} | {money(catalogoItem.preco)}
+                    </option>
+                  ))}
+                </select>
                 <select
                   value={item.tipo}
                   onChange={(event) => {
@@ -1815,7 +1877,20 @@ function FichaCliente({
                   }}
                   placeholder="Unitario"
                 />
-                <strong>{money(item.quantidade * item.valorUnitario)}</strong>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={item.descontoPercentual ?? 0}
+                  onChange={(event) => {
+                    const next = [...budgetItems]
+                    next[index] = { ...item, descontoPercentual: Number(event.target.value) }
+                    setBudgetItems(next)
+                  }}
+                  placeholder="Desc. %"
+                />
+                <strong>{money((item.quantidade * item.valorUnitario) * (1 - Math.min(Math.max(item.descontoPercentual ?? 0, 0), 100) / 100))}</strong>
               </div>
             ))}
             <button
@@ -1834,10 +1909,17 @@ function FichaCliente({
               placeholder="Ex.: quatro pneus 275/80R22.5 com condicao para pagamento em 30 dias"
             />
           </label>
+          <label className="span-2">
+            Mensagem para WhatsApp
+            <textarea readOnly value={quoteMessage} />
+          </label>
           <div className="budget-total span-2">
             <span>Total</span>
-            <strong>{money(budgetItems.reduce((total, item) => total + item.quantidade * item.valorUnitario, 0))}</strong>
+            <strong>{money(budgetTotal)}</strong>
           </div>
+          <a className={!quoteWhatsUrl ? 'button disabled' : 'button'} href={quoteWhatsUrl} target="_blank" rel="noreferrer">
+            <MessageCircle size={16} /> Abrir WA.ME
+          </a>
           <button className="button primary" type="submit">Criar orcamento</button>
         </form>
       )}
@@ -1938,6 +2020,31 @@ function FichaCliente({
       </div>
     </aside>
   )
+}
+
+function buildQuoteMessage(
+  cliente: Cliente,
+  itens: OrcamentoItemInput[],
+  validade?: string,
+  formaPagamento?: string,
+  observacao?: string,
+) {
+  const lines = [
+    `Ola, ${cliente.responsavel ?? cliente.nome}. Segue orcamento Capital Truck Center:`,
+    '',
+    ...itens.map((item, index) => {
+      const desconto = item.descontoPercentual ? `, desc. ${item.descontoPercentual}%` : ''
+      return `${index + 1}. ${item.quantidade}x ${item.descricao} - ${money(item.valorUnitario)} un.${desconto} = ${money(item.valorTotal ?? 0)}`
+    }),
+    '',
+    `Total: ${money(itens.reduce((total, item) => total + (item.valorTotal ?? 0), 0))}`,
+  ]
+
+  if (formaPagamento?.trim()) lines.push(`Condicao: ${formaPagamento.trim()}`)
+  if (validade) lines.push(`Validade: ${dateLabel(validade)}`)
+  if (observacao?.trim()) lines.push('', observacao.trim())
+  lines.push('', 'Posso confirmar disponibilidade e prazo para voce?')
+  return lines.join('\n')
 }
 
 function origemLabel(origemBase?: Cliente['origemBase']) {

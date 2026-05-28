@@ -129,6 +129,10 @@ alter table public.servicos_itens
   add column if not exists veiculo_observacao text,
   add column if not exists raw_data jsonb not null default '{}'::jsonb;
 
+alter table public.orcamentos
+  add column if not exists forma_pagamento text,
+  add column if not exists observacao text;
+
 alter table public.clientes
   add column if not exists vendedor_codigo_erp text,
   add column if not exists vendedor_nome_erp text,
@@ -173,6 +177,11 @@ create table if not exists public.catalogo_precos (
 
 create index if not exists catalogo_itens_tipo_descricao_idx on public.catalogo_itens(tipo, descricao);
 create index if not exists catalogo_precos_item_idx on public.catalogo_precos(catalogo_item_id, vigencia_inicio desc);
+
+alter table public.orcamento_itens
+  add column if not exists catalogo_item_id uuid references public.catalogo_itens(id),
+  add column if not exists codigo text,
+  add column if not exists desconto_percentual numeric(8, 2);
 
 drop view if exists public.vw_ordens_360;
 
