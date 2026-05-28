@@ -1,8 +1,11 @@
 # Backlog de evolucao do Capital Truck CRM
 
+> Roadmap profissional atualizado: `ROADMAP_IMPLEMENTACOES_PROFISSIONAL_CRM.md`.
+> Este arquivo fica como backlog historico; a sequencia atual de produto deve seguir o roadmap novo.
+
 ## Diagnostico atual
 
-- A base importada tem 2.831 clientes no Supabase.
+- A base importada atual tem 21.575 clientes no Supabase, 10.541 veiculos, 32.958 ordens, 7.257 itens de vendas, 53.796 itens de servicos e 74 itens no catalogo importado.
 - As tabelas `campanhas` e `campanha_envios` estao vazias.
 - A tela historico carrega apenas 1.000 vendas e 1.000 servicos por causa de `limit(1000)` no frontend.
 - O campo atual `clientes.origem` nao separa claramente Capital Truck Center x Rodobens. Hoje ele guarda valores como `Adicionado por serviços`, `Adicionado do arquivo.xls` e `Já existia no sell-out`.
@@ -265,4 +268,3 @@ Construir um CRM operacional para venda e pos-venda de pneus/servicos, com:
 6. Evoluir orcamentos com itens, preco e WhatsApp.
 7. Profissionalizar campanhas.
 8. Criar dashboards gerenciais.
-
