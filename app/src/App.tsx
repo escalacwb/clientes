@@ -2320,10 +2320,12 @@ function Campanhas({
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
   onAddTask: (task: TarefaInput) => Promise<Tarefa>
 }) {
+  const [showSuggestion, setShowSuggestion] = useState(false)
   const [statuses, setStatuses] = useState<Record<string, CampanhaEnvioStatus>>({})
   const [statusFilter, setStatusFilter] = useState<CampanhaEnvioStatus | 'todos'>('todos')
   const [campaignError, setCampaignError] = useState('')
-  const campanhaClientes = clientes.filter((cliente) => cliente.whatsapp && daysSince(cliente.ultimaCompraEm) > 90)
+  const sugestaoClientes = clientes.filter((cliente) => cliente.whatsapp && daysSince(cliente.ultimaCompraEm) > 90)
+  const campanhaClientes = showSuggestion ? sugestaoClientes : []
   const nextClient = campanhaClientes
     .filter((cliente) => (statuses[cliente.id] ?? 'pendente') === 'pendente')
     .sort((a, b) => b.score - a.score)[0]
@@ -2388,24 +2390,36 @@ function Campanhas({
     <section className="panel wide">
       <div className="panel-header">
         <div>
-          <h2>Campanha: clientes sem compra ha 90 dias</h2>
-          <p>{campanhaClientes.length} clientes com WhatsApp valido na lista inicial.</p>
+          <h2>Campanhas WhatsApp</h2>
+          <p>{showSuggestion ? `${campanhaClientes.length} clientes na previa de reativacao.` : 'Nenhuma campanha ativa cadastrada.'}</p>
         </div>
         <div className="toolbar-actions">
-          <label className="mini-select">
-            <Filter size={15} />
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as CampanhaEnvioStatus | 'todos')}>
-              <option value="todos">Todos os status</option>
-              <option value="pendente">Pendentes</option>
-              <option value="enviado">Enviados</option>
-              <option value="respondeu">Responderam</option>
-              <option value="virou_orcamento">Virou orcamento</option>
-              <option value="nao_respondeu">Nao respondeu</option>
-            </select>
-          </label>
+          {showSuggestion && (
+            <label className="mini-select">
+              <Filter size={15} />
+              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as CampanhaEnvioStatus | 'todos')}>
+                <option value="todos">Todos os status</option>
+                <option value="pendente">Pendentes</option>
+                <option value="enviado">Enviados</option>
+                <option value="respondeu">Responderam</option>
+                <option value="virou_orcamento">Virou orcamento</option>
+                <option value="nao_respondeu">Nao respondeu</option>
+              </select>
+            </label>
+          )}
           <Send size={18} />
         </div>
       </div>
+      {!showSuggestion && (
+        <div className="empty-state">
+          Nenhuma campanha foi criada ainda.
+          <button className="button primary" type="button" onClick={() => setShowSuggestion(true)}>
+            Montar previa de reativacao
+          </button>
+        </div>
+      )}
+      {showSuggestion && (
+        <>
       <div className="message-template">
         {mensagem}
       </div>
@@ -2452,7 +2466,6 @@ function Campanhas({
                   href={waUrl}
                   target="_blank"
                   rel="noreferrer"
-                  onClick={() => markStatus(cliente, 'pendente', finalMessage)}
                 >
                   <MessageCircle size={16} /> Abrir
                 </a>
@@ -2474,6 +2487,8 @@ function Campanhas({
         })}
         {filteredClientes.length === 0 && <div className="empty-state">Nenhum cliente neste status de campanha.</div>}
       </div>
+        </>
+      )}
     </section>
   )
 }
