@@ -108,6 +108,27 @@ const nav = [
 
 const adminOnlyViews = new Set(['importacoes', 'conflitos', 'mesclagem', 'relatorios', 'usuarios', 'auditoria'])
 
+const authUsuarios: Vendedor[] = [
+  {
+    id: 'login-wagner-fonseca',
+    nome: 'Wagner Fonseca',
+    email: 'wagner.fonseca@capitaltruck.local',
+    role: 'admin',
+  },
+  {
+    id: 'login-william-brandenburg',
+    nome: 'William Brandenburg',
+    email: 'william.brandenburg@capitaltruck.local',
+    role: 'vendedor',
+  },
+  {
+    id: 'login-mateus-silva',
+    nome: 'Mateus Silva',
+    email: 'mateus.silva@capitaltruck.local',
+    role: 'vendedor',
+  },
+]
+
 function App() {
   const [session, setSession] = useState<SessaoUsuario | null>(null)
   const [isCheckingSession, setIsCheckingSession] = useState(true)
@@ -125,7 +146,7 @@ function App() {
   const [orcamentos, setOrcamentos] = useState(seedOrcamentos)
   const [importacoes, setImportacoes] = useState(seedImportacoes)
   const [conflitos, setConflitos] = useState(seedConflitos)
-  const [usuarios, setUsuarios] = useState(seedVendedores)
+  const [usuarios, setUsuarios] = useState(isSupabaseConfigured ? authUsuarios : seedVendedores)
   const [alteracoes, setAlteracoes] = useState(seedAlteracoes)
   const [tarefas, setTarefas] = useState(seedTarefas)
   const [vendasItens, setVendasItens] = useState(seedVendasItens)
@@ -654,11 +675,20 @@ function titleFor(view: string) {
 
 function Login({ usuarios, onLogin }: { usuarios: Vendedor[]; onLogin: (session: SessaoUsuario) => void }) {
   const [email, setEmail] = useState(
-    () => localStorage.getItem('capital-crm:last-email') ?? usuarios[0]?.email ?? seedVendedores[0].email,
+    () => {
+      const lastEmail = localStorage.getItem('capital-crm:last-email')
+      if (lastEmail && usuarios.some((usuario) => usuario.email === lastEmail)) return lastEmail
+      return usuarios[0]?.email ?? seedVendedores[0].email
+    },
   )
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (usuarios.some((usuario) => usuario.email === email)) return
+    setEmail(usuarios[0]?.email ?? seedVendedores[0].email)
+  }, [email, usuarios])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
