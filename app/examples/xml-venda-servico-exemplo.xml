@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<documento>
+  <cliente>
+    <codigoCliente>ERP-1042</codigoCliente>
+    <CNPJ>12345678000190</CNPJ>
+    <xNome>Trans Norte Logistica Ltda</xNome>
+  </cliente>
+  <emissao>2026-05-28</emissao>
+  <nNF>000123</nNF>
+  <vendedor>Rafael Costa</vendedor>
+  <empresa>Capital Truck Center</empresa>
+  <itens>
+    <item>
+      <cProd>PN29580</cProd>
+      <xProd>PNEU 295/80 R22.5 MICHELIN</xProd>
+      <qCom>4</qCom>
+      <vUnCom>4200.50</vUnCom>
+      <vProd>16802.00</vProd>
+    </item>
+    <item>
+      <codigoServico>ALINHAMENTO</codigoServico>
+      <xServ>ALINHAMENTO CAMINHAO</xServ>
+      <qtd>1</qtd>
+      <valorUnitario>350.00</valorUnitario>
+      <vServ>350.00</vServ>
+    </item>
+  </itens>
+</documento>

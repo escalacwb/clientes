@@ -1,0 +1,3108 @@
+import {
+  AlertTriangle,
+  BarChart3,
+  CalendarClock,
+  CheckCircle2,
+  ClipboardList,
+  FileUp,
+  Filter,
+  Gauge,
+  MessageCircle,
+  Phone,
+  Search,
+  Send,
+  ShieldCheck,
+  Truck,
+  UserRound,
+  UsersRound,
+  WalletCards,
+} from 'lucide-react'
+import { lazy, type FormEvent, Suspense, useEffect, useMemo, useState } from 'react'
+import './App.css'
+import {
+  clientes as seedClientes,
+  alteracoes as seedAlteracoes,
+  conflitos as seedConflitos,
+  importacoes as seedImportacoes,
+  interacoes as seedInteracoes,
+  mesclagens as seedMesclagens,
+  orcamentos as seedOrcamentos,
+  possiveisDuplicados as seedPossiveisDuplicados,
+  servicosItens as seedServicosItens,
+  tarefas as seedTarefas,
+  vendedores as seedVendedores,
+  vendasItens as seedVendasItens,
+} from './data/mockData'
+import {
+  bestNextAction,
+  dateLabel,
+  daysSince,
+  money,
+  opportunityReason,
+  opportunityScore,
+  smartSummary,
+} from './lib/crm'
+import { previewXmlFiles, type XmlImportPreview } from './lib/xmlImport'
+import { previewWorkbookFiles, type WorkbookImportPreview } from './lib/workbookPreview'
+import { isSupabaseConfigured } from './lib/supabase'
+import { buildOportunidades } from './lib/oportunidades'
+import { carteiraFiltros, filterClientes } from './lib/filtros'
+import { getCurrentSession, signInWithPassword, signOut } from './repositories/authRepository'
+import { listClienteAlteracoes } from './repositories/auditoriaRepository'
+import { upsertCampanhaEnvio } from './repositories/campanhasRepository'
+import { assignClienteVendedor } from './repositories/clientesRepository'
+import { listClientes } from './repositories/clientesRepository'
+import { updateClienteComercial } from './repositories/clientesRepository'
+import { listConflitos, resolveConflito } from './repositories/conflitosRepository'
+import { listServicosItens, listVendasItens } from './repositories/historicoRepository'
+import { createInteracao } from './repositories/interacoesRepository'
+import { listInteracoes } from './repositories/interacoesRepository'
+import { createImportacaoPreview } from './repositories/importacoesRepository'
+import { listImportacoes } from './repositories/importacoesRepository'
+import { createMesclagem, listMesclagens, listPossiveisDuplicados } from './repositories/mesclagensRepository'
+import { createOrcamento } from './repositories/orcamentosRepository'
+import { listOrcamentos } from './repositories/orcamentosRepository'
+import { updateOrcamentoStatus } from './repositories/orcamentosRepository'
+import { completeTarefa, createTarefa, listTarefas } from './repositories/tarefasRepository'
+import { listUsuarios } from './repositories/usuariosRepository'
+import type {
+  CampanhaEnvioStatus,
+  CarteiraFiltro,
+  Cliente,
+  ClienteAlteracao,
+  ClienteMesclagem,
+  Importacao,
+  ImportacaoConflito,
+  Interacao,
+  InteracaoInput,
+  Orcamento,
+  OrcamentoInput,
+  OrcamentoItemInput,
+  Oportunidade,
+  PossivelDuplicado,
+  ServicoItem,
+  SessaoUsuario,
+  Tarefa,
+  TarefaInput,
+  Vendedor,
+  VendaItem,
+} from './types'
+
+const SalesChart = lazy(() => import('./components/SalesChart'))
+
+const nav = [
+  { id: 'dashboard', label: 'Dashboard', icon: Gauge },
+  { id: 'clientes', label: 'Clientes', icon: UsersRound },
+  { id: 'carteira', label: 'Minha carteira', icon: ClipboardList },
+  { id: 'oportunidades', label: 'Oportunidades', icon: AlertTriangle },
+  { id: 'tarefas', label: 'Tarefas', icon: CalendarClock },
+  { id: 'importacoes', label: 'Importacoes', icon: FileUp },
+  { id: 'conflitos', label: 'Conflitos', icon: AlertTriangle },
+  { id: 'mesclagem', label: 'Mesclagem', icon: UsersRound },
+  { id: 'campanhas', label: 'Campanhas', icon: Send },
+  { id: 'orcamentos', label: 'Orcamentos', icon: WalletCards },
+  { id: 'relatorios', label: 'Relatorios', icon: BarChart3 },
+  { id: 'usuarios', label: 'Usuarios', icon: ShieldCheck },
+  { id: 'auditoria', label: 'Auditoria', icon: CheckCircle2 },
+]
+
+const adminOnlyViews = new Set(['importacoes', 'conflitos', 'mesclagem', 'relatorios', 'usuarios', 'auditoria'])
+
+function App() {
+  const [session, setSession] = useState<SessaoUsuario | null>(null)
+  const [isCheckingSession, setIsCheckingSession] = useState(true)
+  const [view, setView] = useState(() => localStorage.getItem('capital-crm:last-view') ?? 'dashboard')
+  const [clientes, setClientes] = useState(seedClientes)
+  const [selectedClientId, setSelectedClientId] = useState(seedClientes[0].id)
+  const [query, setQuery] = useState('')
+  const [clienteFiltro, setClienteFiltro] = useState<CarteiraFiltro>(
+    () => (localStorage.getItem('capital-crm:cliente-filter') as CarteiraFiltro | null) ?? 'todos',
+  )
+  const [carteiraFiltro, setCarteiraFiltro] = useState<CarteiraFiltro>(
+    () => (localStorage.getItem('capital-crm:carteira-filter') as CarteiraFiltro | null) ?? 'todos',
+  )
+  const [interacoes, setInteracoes] = useState(seedInteracoes)
+  const [orcamentos, setOrcamentos] = useState(seedOrcamentos)
+  const [importacoes, setImportacoes] = useState(seedImportacoes)
+  const [conflitos, setConflitos] = useState(seedConflitos)
+  const [usuarios, setUsuarios] = useState(seedVendedores)
+  const [alteracoes, setAlteracoes] = useState(seedAlteracoes)
+  const [tarefas, setTarefas] = useState(seedTarefas)
+  const [vendasItens, setVendasItens] = useState(seedVendasItens)
+  const [servicosItens, setServicosItens] = useState(seedServicosItens)
+  const [possiveisDuplicados, setPossiveisDuplicados] = useState(seedPossiveisDuplicados)
+  const [mesclagens, setMesclagens] = useState(seedMesclagens)
+  const [isLoadingData, setIsLoadingData] = useState(false)
+  const [dataError, setDataError] = useState('')
+
+  useEffect(() => {
+    let isMounted = true
+
+    getCurrentSession()
+      .then((currentSession) => {
+        if (isMounted) setSession(currentSession)
+      })
+      .finally(() => {
+        if (isMounted) setIsCheckingSession(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem('capital-crm:last-view', view)
+  }, [view])
+
+  useEffect(() => {
+    localStorage.setItem('capital-crm:cliente-filter', clienteFiltro)
+  }, [clienteFiltro])
+
+  useEffect(() => {
+    localStorage.setItem('capital-crm:carteira-filter', carteiraFiltro)
+  }, [carteiraFiltro])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadData() {
+      setIsLoadingData(true)
+      setDataError('')
+
+      try {
+        const [
+          loadedClientes,
+          loadedInteracoes,
+          loadedOrcamentos,
+          loadedImportacoes,
+          loadedConflitos,
+          loadedUsuarios,
+          loadedAlteracoes,
+          loadedTarefas,
+          loadedPossiveisDuplicados,
+          loadedMesclagens,
+          loadedVendasItens,
+          loadedServicosItens,
+        ] = await Promise.all([
+          listClientes(),
+          listInteracoes(),
+          listOrcamentos(),
+          listImportacoes(),
+          listConflitos(),
+          listUsuarios(),
+          listClienteAlteracoes(),
+          listTarefas(),
+          listPossiveisDuplicados(),
+          listMesclagens(),
+          listVendasItens(),
+          listServicosItens(),
+        ])
+
+        if (!isMounted) return
+        setClientes(loadedClientes)
+        setInteracoes(loadedInteracoes)
+        setOrcamentos(loadedOrcamentos)
+        setImportacoes(loadedImportacoes)
+        setConflitos(loadedConflitos)
+        setUsuarios(loadedUsuarios)
+        setAlteracoes(loadedAlteracoes)
+        setTarefas(loadedTarefas)
+        setPossiveisDuplicados(loadedPossiveisDuplicados)
+        setMesclagens(loadedMesclagens)
+        setVendasItens(loadedVendasItens)
+        setServicosItens(loadedServicosItens)
+        setSelectedClientId((current) => loadedClientes.some((cliente) => cliente.id === current) ? current : loadedClientes[0]?.id)
+      } catch (exception) {
+        if (!isMounted) return
+        setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar os dados.')
+      } finally {
+        if (isMounted) setIsLoadingData(false)
+      }
+    }
+
+    loadData()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const scopedClientes = useMemo(() => {
+    if (!session || session.role === 'admin') return clientes
+    return clientes.filter((cliente) => cliente.vendedorId === session.id)
+  }, [clientes, session])
+  const selectedClient =
+    scopedClientes.find((cliente) => cliente.id === selectedClientId) ??
+    scopedClientes[0] ??
+    clientes[0] ??
+    seedClientes[0]
+  const scopedClientIds = useMemo(() => new Set(scopedClientes.map((cliente) => cliente.id)), [scopedClientes])
+  const scopedInteracoes = useMemo(() => {
+    if (!session || session.role === 'admin') return interacoes
+    return interacoes.filter((interacao) => scopedClientIds.has(interacao.clienteId) || interacao.vendedorId === session.id)
+  }, [interacoes, scopedClientIds, session])
+  const scopedOrcamentos = useMemo(() => {
+    if (!session || session.role === 'admin') return orcamentos
+    return orcamentos.filter((orcamento) => scopedClientIds.has(orcamento.clienteId) || orcamento.vendedorId === session.id)
+  }, [orcamentos, scopedClientIds, session])
+  const scopedTarefas = useMemo(() => {
+    if (!session || session.role === 'admin') return tarefas
+    return tarefas.filter((tarefa) => scopedClientIds.has(tarefa.clienteId) || tarefa.vendedorId === session.id)
+  }, [tarefas, scopedClientIds, session])
+  const scopedVendasItens = useMemo(() => {
+    if (!session || session.role === 'admin') return vendasItens
+    return vendasItens.filter((venda) => scopedClientIds.has(venda.clienteId))
+  }, [vendasItens, scopedClientIds, session])
+  const scopedServicosItens = useMemo(() => {
+    if (!session || session.role === 'admin') return servicosItens
+    return servicosItens.filter((servico) => scopedClientIds.has(servico.clienteId))
+  }, [servicosItens, scopedClientIds, session])
+  const scoredClientes = useMemo(
+    () =>
+      scopedClientes
+        .map((cliente) => {
+          const score = opportunityScore(cliente, scopedOrcamentos)
+          return {
+            ...cliente,
+            score,
+            motivo: opportunityReason(cliente, score),
+            proximaMelhorAcao: bestNextAction(cliente),
+          }
+        })
+        .sort((a, b) => b.score - a.score),
+    [scopedClientes, scopedOrcamentos],
+  )
+
+  const filteredClientes = filterClientes(scoredClientes, clienteFiltro, scopedOrcamentos).filter((cliente) => {
+    const haystack = `${cliente.nome} ${cliente.cidade} ${cliente.tipoCliente} ${cliente.tags.join(' ')}`.toLowerCase()
+    return haystack.includes(query.toLowerCase())
+  })
+  const carteiraClientes = filterClientes(scoredClientes, carteiraFiltro, scopedOrcamentos)
+  const oportunidades = useMemo(() => buildOportunidades(scopedClientes, scopedOrcamentos), [scopedClientes, scopedOrcamentos])
+
+  if (isCheckingSession) {
+    return (
+      <div className="login-screen">
+        <div className="login-panel">Carregando sessao...</div>
+      </div>
+    )
+  }
+
+  if (!session) {
+    return <Login usuarios={usuarios} onLogin={(nextSession) => {
+      setSession(nextSession)
+      localStorage.setItem('capital-crm:last-email', nextSession.email)
+      setView(nextSession.role === 'admin' ? 'dashboard' : 'carteira')
+    }} />
+  }
+
+  const visibleNav = nav.filter((item) => session.role === 'admin' || !adminOnlyViews.has(item.id))
+  const canUseScopedClientViews = session.role === 'admin' || scopedClientes.length > 0
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <div className="brand-mark">
+            <Truck size={22} />
+          </div>
+          <div>
+            <strong>Capital Truck CRM</strong>
+            <span>Central de carteira</span>
+          </div>
+        </div>
+
+        <nav className="nav">
+          {visibleNav.map((item) => {
+            const Icon = item.icon
+            return (
+              <button
+                className={view === item.id ? 'nav-item active' : 'nav-item'}
+                key={item.id}
+                onClick={() => setView(item.id)}
+                type="button"
+                title={item.label}
+              >
+                <Icon size={18} />
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
+        </nav>
+
+        <div className="sidebar-footer">
+          <ShieldCheck size={18} />
+          <span>{session.nome} · {session.role} · {session.modo}</span>
+          <button
+            className="sidebar-logout"
+            type="button"
+            onClick={() => {
+              signOut().finally(() => setSession(null))
+            }}
+          >
+            Sair
+          </button>
+        </div>
+      </aside>
+
+      <main className="workspace">
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">MVP operacional</p>
+            <h1>{titleFor(view)}</h1>
+          </div>
+          <div className="search">
+            <Search size={18} />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar cliente, cidade, tag"
+            />
+          </div>
+        </header>
+
+        <div className={dataError ? 'data-banner error' : 'data-banner'}>
+          <span>
+            {isSupabaseConfigured ? 'Supabase configurado' : 'Modo local com dados demonstrativos'}
+            {' · '}
+            {session.role === 'admin' ? `${clientes.length} clientes totais` : `${scopedClientes.length} clientes da sua carteira`}
+          </span>
+          {isLoadingData && <strong>Carregando...</strong>}
+          {dataError && <strong>{dataError}</strong>}
+        </div>
+
+        {view === 'dashboard' && (
+          <Dashboard
+            scoredClientes={scoredClientes}
+            interacoes={scopedInteracoes}
+            orcamentos={scopedOrcamentos}
+            importacoes={importacoes}
+            usuarios={usuarios}
+            oportunidades={oportunidades}
+          />
+        )}
+        {!canUseScopedClientViews && (
+          <section className="panel wide">
+            <div className="empty-state">Sua carteira ainda nao possui clientes atribuidos.</div>
+          </section>
+        )}
+        {canUseScopedClientViews && view === 'clientes' && (
+          <Clientes
+            clientes={filteredClientes}
+            selectedClient={selectedClient}
+            interacoes={scopedInteracoes}
+            orcamentos={scopedOrcamentos}
+            vendasItens={scopedVendasItens}
+            servicosItens={scopedServicosItens}
+            filtro={clienteFiltro}
+            onFilterChange={setClienteFiltro}
+            onSelect={(cliente) => setSelectedClientId(cliente.id)}
+            onUpdateClient={(clienteId, patch) => {
+              updateClienteComercial(clienteId, patch).catch((exception) => {
+                setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o cliente.')
+              })
+              const currentCliente = clientes.find((cliente) => cliente.id === clienteId)
+              setClientes((current) =>
+                current.map((cliente) => (cliente.id === clienteId ? { ...cliente, ...patch } : cliente)),
+              )
+              if (currentCliente) {
+                const changedFields = Object.entries(patch).filter(([key, value]) => currentCliente[key as keyof Cliente] !== value)
+                setAlteracoes((current) => [
+                  ...changedFields.map(([key, value]) => ({
+                    id: `alt-${Date.now()}-${key}`,
+                    clienteId,
+                    clienteNome: currentCliente.nome,
+                    usuarioNome: 'Usuario local',
+                    campo: key,
+                    valorAnterior: String(currentCliente[key as keyof Cliente] ?? ''),
+                    valorNovo: String(value ?? ''),
+                    origem: 'app',
+                    criadoEm: new Date().toISOString(),
+                  })),
+                  ...current,
+                ])
+              }
+            }}
+            onAddInteraction={async (interacao) => {
+              const created = await createInteracao(interacao)
+              setInteracoes((current) => [created, ...current])
+              if (created.dataProximaAcao) {
+                const cliente = clientes.find((item) => item.id === created.clienteId)
+                const tarefa = await createTarefa({
+                  clienteId: created.clienteId,
+                  vendedorId: created.vendedorId,
+                  titulo: created.proximaAcao || bestNextAction(cliente ?? selectedClient),
+                  descricao: created.resumo,
+                  dataVencimento: created.dataProximaAcao,
+                  prioridade: 75,
+                  origem: 'interacao',
+                })
+                setTarefas((current) => [
+                  { ...tarefa, clienteNome: cliente?.nome ?? tarefa.clienteNome },
+                  ...current,
+                ])
+              }
+              return created
+            }}
+            onAddBudget={async (orcamento) => {
+              const created = await createOrcamento(orcamento, orcamento.itens)
+              setOrcamentos((current) => [created, ...current])
+              return created
+            }}
+          />
+        )}
+        {canUseScopedClientViews && view === 'carteira' && (
+          <Carteira
+            clientes={carteiraClientes}
+            baseClientes={scoredClientes}
+            orcamentos={scopedOrcamentos}
+            filtro={carteiraFiltro}
+            onFilterChange={setCarteiraFiltro}
+            onSelect={(cliente) => setSelectedClientId(cliente.id)}
+          />
+        )}
+        {canUseScopedClientViews && view === 'oportunidades' && (
+          <Oportunidades
+            oportunidades={oportunidades}
+            onCreateTask={async (oportunidade) => {
+              const cliente = clientes.find((item) => item.id === oportunidade.clienteId)
+              const created = await createTarefa({
+                clienteId: oportunidade.clienteId,
+                vendedorId: cliente?.vendedorId,
+                titulo: oportunidade.proximaAcao,
+                descricao: oportunidade.motivo,
+                dataVencimento: new Date().toISOString().slice(0, 10),
+                prioridade: oportunidade.prioridade,
+                origem: `oportunidade:${oportunidade.tipo}`,
+              })
+              setTarefas((current) => [
+                {
+                  ...created,
+                  clienteNome: cliente?.nome ?? created.clienteNome,
+                  vendedorNome: cliente?.vendedorNome ?? created.vendedorNome,
+                },
+                ...current,
+              ])
+              return created
+            }}
+          />
+        )}
+        {canUseScopedClientViews && view === 'tarefas' && (
+          <Tarefas
+            clientes={scopedClientes}
+            usuarios={usuarios}
+            tarefas={scopedTarefas}
+            onCreate={async (task) => {
+              const created = await createTarefa(task)
+              const cliente = clientes.find((item) => item.id === created.clienteId)
+              const vendedor = usuarios.find((item) => item.id === created.vendedorId)
+              setTarefas((current) => [
+                {
+                  ...created,
+                  clienteNome: cliente?.nome ?? created.clienteNome,
+                  vendedorNome: vendedor?.nome ?? created.vendedorNome,
+                },
+                ...current,
+              ])
+              return created
+            }}
+            onComplete={(id) => {
+              completeTarefa(id).catch((exception) => {
+                setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel concluir a tarefa.')
+              })
+              setTarefas((current) =>
+                current.map((tarefa) =>
+                  tarefa.id === id ? { ...tarefa, status: 'concluida', concluidaEm: new Date().toISOString() } : tarefa,
+                ),
+              )
+            }}
+          />
+        )}
+        {session.role !== 'admin' && adminOnlyViews.has(view) && (
+          <section className="panel wide">
+            <div className="empty-state">Seu perfil nao tem permissao para acessar esta area.</div>
+          </section>
+        )}
+        {session.role === 'admin' && view === 'importacoes' && (
+          <Importacoes
+            importacoes={importacoes}
+            onAddImportacao={(importacao) => setImportacoes((current) => [importacao, ...current])}
+          />
+        )}
+        {session.role === 'admin' && view === 'conflitos' && (
+          <Conflitos
+            conflitos={conflitos}
+            onResolve={(id, decisao) =>
+              resolveConflito(id, decisao).then(() => {
+                setConflitos((current) =>
+                  current.map((conflito) =>
+                    conflito.id === id ? { ...conflito, resolvido: true, decisao } : conflito,
+                  ),
+                )
+              })
+            }
+          />
+        )}
+        {session.role === 'admin' && view === 'mesclagem' && (
+          <Mesclagem
+            duplicados={possiveisDuplicados}
+            mesclagens={mesclagens}
+            onMerge={async (duplicado, principal) => {
+              const principalIsA = principal === 'a'
+              const created = await createMesclagem({
+                clientePrincipalId: principalIsA ? duplicado.clienteAId : duplicado.clienteBId,
+                clientePrincipalNome: principalIsA ? duplicado.clienteANome : duplicado.clienteBNome,
+                clienteMescladoId: principalIsA ? duplicado.clienteBId : duplicado.clienteAId,
+                clienteMescladoNome: principalIsA ? duplicado.clienteBNome : duplicado.clienteANome,
+                motivo: duplicado.motivo,
+              })
+              setMesclagens((current) => [created, ...current])
+              setPossiveisDuplicados((current) => current.filter((item) => item.id !== duplicado.id))
+              return created
+            }}
+          />
+        )}
+        {canUseScopedClientViews && view === 'campanhas' && (
+          <Campanhas
+            clientes={scoredClientes}
+            onAddInteraction={async (interacao) => {
+              const created = await createInteracao(interacao)
+              setInteracoes((current) => [created, ...current])
+              return created
+            }}
+            onAddTask={async (task) => {
+              const created = await createTarefa(task)
+              setTarefas((current) => [created, ...current])
+              return created
+            }}
+          />
+        )}
+        {canUseScopedClientViews && view === 'orcamentos' && (
+          <Orcamentos
+            clientes={scopedClientes}
+            orcamentos={scopedOrcamentos}
+            usuarios={usuarios}
+            onStatusChange={(id, status, motivoPerda) => {
+              updateOrcamentoStatus(id, status, motivoPerda).catch((exception) => {
+                setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o orcamento.')
+              })
+              setOrcamentos((current) =>
+                current.map((orcamento) =>
+                  orcamento.id === id ? { ...orcamento, status, motivoPerda } : orcamento,
+                ),
+              )
+            }}
+          />
+        )}
+        {session.role === 'admin' && view === 'relatorios' && (
+          <Relatorios
+            clientes={clientes}
+            interacoes={interacoes}
+            orcamentos={orcamentos}
+            importacoes={importacoes}
+            conflitos={conflitos}
+            usuarios={usuarios}
+            tarefas={tarefas}
+            oportunidades={oportunidades}
+            vendasItens={scopedVendasItens}
+            servicosItens={scopedServicosItens}
+          />
+        )}
+        {session.role === 'admin' && view === 'usuarios' && (
+          <Usuarios
+            clientes={clientes}
+            usuarios={usuarios}
+            onAssignClient={(clienteId, vendedorId) => {
+              assignClienteVendedor(clienteId, vendedorId).catch((exception) => {
+                setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel atribuir vendedor.')
+              })
+              setClientes((current) =>
+                current.map((cliente) => {
+                  if (cliente.id !== clienteId) return cliente
+                  const vendedor = usuarios.find((item) => item.id === vendedorId)
+                  return { ...cliente, vendedorId, vendedorNome: vendedor?.nome }
+                }),
+              )
+            }}
+          />
+        )}
+        {session.role === 'admin' && view === 'auditoria' && <Auditoria alteracoes={alteracoes} />}
+      </main>
+    </div>
+  )
+}
+
+function titleFor(view: string) {
+  const titles: Record<string, string> = {
+    dashboard: 'Painel comercial',
+    clientes: 'Base unica de clientes',
+    carteira: 'Fila diaria do vendedor',
+    oportunidades: 'Oportunidades automaticas',
+    tarefas: 'Tarefas e proximas acoes',
+    importacoes: 'Controle de importacoes',
+    conflitos: 'Conflitos de importacao',
+    mesclagem: 'Mesclagem de clientes',
+    campanhas: 'Campanhas WhatsApp',
+    orcamentos: 'Orcamentos e conversao',
+    relatorios: 'Relatorios gerenciais',
+    usuarios: 'Usuarios e permissoes',
+    auditoria: 'Auditoria',
+  }
+  return titles[view]
+}
+
+function Login({ usuarios, onLogin }: { usuarios: Vendedor[]; onLogin: (session: SessaoUsuario) => void }) {
+  const [email, setEmail] = useState(
+    () => localStorage.getItem('capital-crm:last-email') ?? usuarios[0]?.email ?? seedVendedores[0].email,
+  )
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError('')
+    setIsSubmitting(true)
+
+    try {
+      const session = await signInWithPassword(email, password)
+      onLogin(session)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel entrar.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <main className="login-screen">
+      <section className="login-panel">
+        <div className="brand login-brand">
+          <div className="brand-mark">
+            <Truck size={22} />
+          </div>
+          <div>
+            <strong>Capital Truck CRM</strong>
+            <span>Central de carteira</span>
+          </div>
+        </div>
+        <form className="login-form" onSubmit={submit}>
+          <label>
+            Usuario
+            <select value={email} onChange={(event) => setEmail(event.target.value)}>
+              {usuarios.map((usuario) => <option key={usuario.id} value={usuario.email}>{usuario.nome} · {usuario.role}</option>)}
+            </select>
+          </label>
+          <label>
+            Senha
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder={isSupabaseConfigured ? 'Senha do Supabase Auth' : 'Opcional no modo local'}
+            />
+          </label>
+          {error && <div className="alert">{error}</div>}
+          <button className="button primary" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? 'Entrando...' : 'Entrar'}
+          </button>
+        </form>
+        <p className="login-note">
+          {isSupabaseConfigured ? 'Usando Supabase Auth.' : 'Modo local: escolha um perfil demonstrativo.'}
+        </p>
+      </section>
+    </main>
+  )
+}
+
+function Dashboard({
+  scoredClientes,
+  interacoes,
+  orcamentos,
+  importacoes,
+  usuarios,
+  oportunidades,
+}: {
+  scoredClientes: Array<Cliente & { score: number; motivo: string }>
+  interacoes: Interacao[]
+  orcamentos: Orcamento[]
+  importacoes: Importacao[]
+  usuarios: Vendedor[]
+  oportunidades: Oportunidade[]
+}) {
+  const ativos = scoredClientes.filter((cliente) => daysSince(cliente.ultimaCompraEm) <= 90).length
+  const inativos90 = scoredClientes.filter((cliente) => daysSince(cliente.ultimaCompraEm) > 90).length
+  const vencidos = scoredClientes.filter((cliente) => cliente.proximaAcaoEm && daysSince(cliente.proximaAcaoEm) > 0).length
+  const semVendedor = scoredClientes.filter((cliente) => !cliente.vendedorId).length
+  const oportunidadesAtivas = oportunidades.filter((oportunidade) => !oportunidade.bloqueada).length
+  const chartData = usuarios
+    .filter((vendedor) => vendedor.role !== 'operacao')
+    .map((vendedor) => ({
+      nome: vendedor.nome.split(' ')[0],
+      vendas: scoredClientes
+        .filter((cliente) => cliente.vendedorId === vendedor.id)
+        .reduce((total, cliente) => total + cliente.totalComprado, 0),
+      contatos: interacoes.filter((interacao) => interacao.vendedorId === vendedor.id).length,
+    }))
+
+  return (
+    <section className="grid-layout">
+      <div className="metric-grid">
+        <Metric icon={UsersRound} label="Clientes ativos" value={ativos.toString()} tone="green" />
+        <Metric icon={AlertTriangle} label="Sem compra +90 dias" value={inativos90.toString()} tone="amber" />
+        <Metric icon={CalendarClock} label="Acoes vencidas" value={vencidos.toString()} tone="red" />
+        <Metric icon={UserRound} label="Sem vendedor" value={semVendedor.toString()} tone="blue" />
+        <Metric icon={AlertTriangle} label="Oportunidades" value={oportunidadesAtivas.toString()} tone="amber" />
+      </div>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Prioridade de hoje</h2>
+            <p>Clientes ordenados por oportunidade comercial.</p>
+          </div>
+          <Filter size={18} />
+        </div>
+        <PriorityTable clientes={scoredClientes.slice(0, 5)} />
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Vendas por vendedor</h2>
+            <p>Base demonstrativa para o painel gerencial.</p>
+          </div>
+          <BarChart3 size={18} />
+        </div>
+        <Suspense fallback={<div className="chart-placeholder">Carregando grafico...</div>}>
+          <SalesChart data={chartData} />
+        </Suspense>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Importacao atual</h2>
+            <p>Conflitos ficam pendentes para revisao.</p>
+          </div>
+          <FileUp size={18} />
+        </div>
+        <div className="status-list">
+          {importacoes.map((importacao) => (
+            <div className="status-row" key={importacao.id}>
+              <span>{importacao.arquivoNome}</span>
+              <strong>{importacao.conflitos} conflitos</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Gargalos da carteira</h2>
+            <p>Contagens pelos filtros comerciais principais.</p>
+          </div>
+          <Filter size={18} />
+        </div>
+        <div className="status-list">
+          {carteiraFiltros
+            .filter((filtro) => filtro.id !== 'todos')
+            .slice(0, 6)
+            .map((filtro) => (
+              <div className="status-row" key={filtro.id}>
+                <span>{filtro.label}</span>
+                <strong>{filterClientes(scoredClientes, filtro.id, orcamentos).length}</strong>
+              </div>
+            ))}
+        </div>
+      </section>
+    </section>
+  )
+}
+
+function Clientes({
+  clientes,
+  selectedClient,
+  interacoes,
+  orcamentos,
+  vendasItens,
+  servicosItens,
+  filtro,
+  onFilterChange,
+  onSelect,
+  onUpdateClient,
+  onAddInteraction,
+  onAddBudget,
+}: {
+  clientes: Array<Cliente & { score: number; motivo: string; proximaMelhorAcao: string }>
+  selectedClient: Cliente
+  interacoes: Interacao[]
+  orcamentos: Orcamento[]
+  vendasItens: VendaItem[]
+  servicosItens: ServicoItem[]
+  filtro: CarteiraFiltro
+  onFilterChange: (filtro: CarteiraFiltro) => void
+  onSelect: (cliente: Cliente) => void
+  onUpdateClient: (clienteId: string, patch: Partial<Cliente>) => void
+  onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
+  onAddBudget: (orcamento: OrcamentoInput) => Promise<Orcamento>
+}) {
+  return (
+    <section className="client-layout">
+      <div className="panel table-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Clientes</h2>
+            <p>{clientes.length} registros na visao atual.</p>
+          </div>
+          <FilterControl clientes={clientes} orcamentos={orcamentos} value={filtro} onChange={onFilterChange} />
+        </div>
+        <div className="table">
+          <div className="table-head four">
+            <span>Cliente</span>
+            <span>Cidade</span>
+            <span>Vendedor</span>
+            <span>Score</span>
+          </div>
+          {clientes.map((cliente) => (
+            <button className="table-row four clickable" key={cliente.id} onClick={() => onSelect(cliente)} type="button">
+              <span>
+                <strong>{cliente.nome}</strong>
+                <small>{cliente.tipoCliente}</small>
+              </span>
+              <span>{cliente.cidade}/{cliente.uf}</span>
+              <span>{cliente.vendedorNome ?? 'Sem vendedor'}</span>
+              <span className="score">{cliente.score}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <FichaCliente
+        cliente={selectedClient}
+        interacoes={interacoes}
+        orcamentos={orcamentos}
+        vendasItens={vendasItens}
+        servicosItens={servicosItens}
+        onUpdateClient={onUpdateClient}
+        onAddInteraction={onAddInteraction}
+        onAddBudget={onAddBudget}
+      />
+    </section>
+  )
+}
+
+function Carteira({
+  clientes,
+  baseClientes,
+  orcamentos,
+  filtro,
+  onFilterChange,
+  onSelect,
+}: {
+  clientes: Array<Cliente & { score: number; motivo: string; proximaMelhorAcao: string }>
+  baseClientes: Array<Cliente & { score: number; motivo: string; proximaMelhorAcao: string }>
+  orcamentos: Orcamento[]
+  filtro: CarteiraFiltro
+  onFilterChange: (filtro: CarteiraFiltro) => void
+  onSelect: (cliente: Cliente) => void
+}) {
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Minha rotina de hoje</h2>
+          <p>Fila priorizada por orcamentos, recompra, inatividade e dados incompletos.</p>
+        </div>
+        <FilterControl clientes={baseClientes} orcamentos={orcamentos} value={filtro} onChange={onFilterChange} />
+      </div>
+      <PriorityTable clientes={clientes} onSelect={onSelect} showActions />
+    </section>
+  )
+}
+
+function FilterControl({
+  clientes,
+  orcamentos,
+  value,
+  onChange,
+}: {
+  clientes: Cliente[]
+  orcamentos: Orcamento[]
+  value: CarteiraFiltro
+  onChange: (value: CarteiraFiltro) => void
+}) {
+  return (
+    <label className="filter-control">
+      <Filter size={16} />
+      <select value={value} onChange={(event) => onChange(event.target.value as CarteiraFiltro)}>
+        {carteiraFiltros.map((filtro) => (
+          <option key={filtro.id} value={filtro.id}>
+            {filtro.label} ({filterClientes(clientes, filtro.id, orcamentos).length})
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+function Oportunidades({
+  oportunidades,
+  onCreateTask,
+}: {
+  oportunidades: Oportunidade[]
+  onCreateTask: (oportunidade: Oportunidade) => Promise<Tarefa>
+}) {
+  const [filter, setFilter] = useState<'ativas' | 'bloqueadas' | 'todas'>('ativas')
+  const [createdTasks, setCreatedTasks] = useState<string[]>([])
+  const [error, setError] = useState('')
+  const filtered = oportunidades.filter((oportunidade) => {
+    if (filter === 'bloqueadas') return oportunidade.bloqueada
+    if (filter === 'ativas') return !oportunidade.bloqueada
+    return true
+  })
+
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Motor de oportunidades</h2>
+          <p>Regras simples para recompra, inatividade, cadastro incompleto, orcamentos e venda cruzada.</p>
+        </div>
+        <div className="segmented">
+          <button className={filter === 'ativas' ? 'active' : ''} type="button" onClick={() => setFilter('ativas')}>Ativas</button>
+          <button className={filter === 'bloqueadas' ? 'active' : ''} type="button" onClick={() => setFilter('bloqueadas')}>Bloqueadas</button>
+          <button className={filter === 'todas' ? 'active' : ''} type="button" onClick={() => setFilter('todas')}>Todas</button>
+        </div>
+      </div>
+      {error && <div className="alert">{error}</div>}
+      <div className="table">
+        <div className="table-head opportunity">
+          <span>Cliente</span>
+          <span>Tipo</span>
+          <span>Motivo</span>
+          <span>Proxima acao</span>
+          <span>Prioridade</span>
+          <span>Acoes</span>
+        </div>
+        {filtered.map((oportunidade) => (
+          <div className={oportunidade.bloqueada ? 'table-row opportunity blocked' : 'table-row opportunity'} key={oportunidade.id}>
+            <span><strong>{oportunidade.clienteNome}</strong></span>
+            <span>{oportunidade.tipo}</span>
+            <span>{oportunidade.motivo}</span>
+            <span>{oportunidade.proximaAcao}</span>
+            <span className="score">{oportunidade.prioridade}</span>
+            <span>
+              {oportunidade.bloqueada ? (
+                <span className="status-pill">nao contatar</span>
+              ) : createdTasks.includes(oportunidade.id) ? (
+                <span className="status-pill">tarefa criada</span>
+              ) : (
+                <button
+                  className="button primary"
+                  type="button"
+                  onClick={async () => {
+                    setError('')
+                    try {
+                      await onCreateTask(oportunidade)
+                      setCreatedTasks((current) => [...current, oportunidade.id])
+                    } catch (exception) {
+                      setError(exception instanceof Error ? exception.message : 'Nao foi possivel criar a tarefa.')
+                    }
+                  }}
+                >
+                  Criar tarefa
+                </button>
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function Tarefas({
+  clientes,
+  usuarios,
+  tarefas,
+  onCreate,
+  onComplete,
+}: {
+  clientes: Cliente[]
+  usuarios: Vendedor[]
+  tarefas: Tarefa[]
+  onCreate: (task: TarefaInput) => Promise<Tarefa>
+  onComplete: (id: string) => void
+}) {
+  const [filter, setFilter] = useState<'abertas' | 'vencidas' | 'concluidas'>('abertas')
+  const [originFilter, setOriginFilter] = useState('todas')
+  const [ownerFilter, setOwnerFilter] = useState('todos')
+  const [showCreate, setShowCreate] = useState(false)
+  const [form, setForm] = useState({
+    clienteId: clientes[0]?.id ?? '',
+    vendedorId: '',
+    titulo: '',
+    descricao: '',
+    dataVencimento: new Date().toISOString().slice(0, 10),
+    prioridade: '60',
+  })
+  const [error, setError] = useState('')
+  const abertas = tarefas.filter((tarefa) => tarefa.status === 'aberta')
+  const vendedores = usuarios.filter((usuario) => usuario.role === 'vendedor')
+  const workload = vendedores
+    .map((vendedor) => {
+      const abertasVendedor = abertas.filter((tarefa) => tarefa.vendedorId === vendedor.id)
+      return {
+        id: vendedor.id,
+        nome: vendedor.nome,
+        abertas: abertasVendedor.length,
+        vencidas: abertasVendedor.filter((tarefa) => daysSince(tarefa.dataVencimento) > 0).length,
+        prioridadeMedia: abertasVendedor.length
+          ? Math.round(abertasVendedor.reduce((total, tarefa) => total + tarefa.prioridade, 0) / abertasVendedor.length)
+          : 0,
+      }
+    })
+    .sort((a, b) => b.vencidas - a.vencidas || b.prioridadeMedia - a.prioridadeMedia)
+  const overloaded = workload[0]
+  const agendaBuckets = [
+    {
+      id: 'vencidas',
+      label: 'Vencidas',
+      hint: 'pedem acao imediata',
+      tarefas: abertas.filter((tarefa) => daysSince(tarefa.dataVencimento) > 0),
+      onClick: () => setFilter('vencidas'),
+    },
+    {
+      id: 'hoje',
+      label: 'Hoje',
+      hint: 'para fechar o dia',
+      tarefas: abertas.filter((tarefa) => daysSince(tarefa.dataVencimento) === 0),
+      onClick: () => setFilter('abertas'),
+    },
+    {
+      id: 'semana',
+      label: 'Proximos 7 dias',
+      hint: 'preparar abordagens',
+      tarefas: abertas.filter((tarefa) => daysSince(tarefa.dataVencimento) < 0 && daysSince(tarefa.dataVencimento) >= -7),
+      onClick: () => setFilter('abertas'),
+    },
+    {
+      id: 'prioridade',
+      label: 'Alta prioridade',
+      hint: 'maior potencial',
+      tarefas: abertas.filter((tarefa) => tarefa.prioridade >= 80),
+      onClick: () => setFilter('abertas'),
+    },
+  ].map((bucket) => ({
+    ...bucket,
+    tarefas: bucket.tarefas.sort((a, b) => b.prioridade - a.prioridade || a.dataVencimento.localeCompare(b.dataVencimento)),
+  }))
+  const filtered = tarefas
+    .filter((tarefa) => {
+      if (filter === 'concluidas') return tarefa.status === 'concluida'
+      if (filter === 'vencidas') return tarefa.status === 'aberta' && daysSince(tarefa.dataVencimento) > 0
+      return tarefa.status === 'aberta'
+    })
+    .filter((tarefa) => {
+      if (originFilter === 'todas') return true
+      if (originFilter === 'oportunidade') return tarefa.origem.startsWith('oportunidade')
+      return tarefa.origem === originFilter
+    })
+    .filter((tarefa) => ownerFilter === 'todos' || tarefa.vendedorId === ownerFilter)
+    .sort((a, b) => b.prioridade - a.prioridade || a.dataVencimento.localeCompare(b.dataVencimento))
+
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Proximas acoes</h2>
+          <p>Tarefas vindas de retornos, orcamentos, importacoes e oportunidades automaticas.</p>
+        </div>
+        <div className="toolbar-actions">
+          <label className="mini-select">
+            <Filter size={15} />
+            <select value={originFilter} onChange={(event) => setOriginFilter(event.target.value)}>
+              <option value="todas">Todas as origens</option>
+              <option value="manual">Manual</option>
+              <option value="interacao">Interacao</option>
+              <option value="orcamento">Orcamento</option>
+              <option value="importacao">Importacao</option>
+              <option value="campanha">Campanha</option>
+              <option value="oportunidade">Oportunidade</option>
+            </select>
+          </label>
+          <label className="mini-select">
+            <UserRound size={15} />
+            <select value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}>
+              <option value="todos">Todos vendedores</option>
+              {vendedores.map((vendedor) => <option key={vendedor.id} value={vendedor.id}>{vendedor.nome}</option>)}
+            </select>
+          </label>
+          <div className="segmented">
+            <button className={filter === 'abertas' ? 'active' : ''} onClick={() => setFilter('abertas')} type="button">
+              Abertas
+            </button>
+            <button className={filter === 'vencidas' ? 'active' : ''} onClick={() => setFilter('vencidas')} type="button">
+              Vencidas
+            </button>
+            <button className={filter === 'concluidas' ? 'active' : ''} onClick={() => setFilter('concluidas')} type="button">
+              Concluidas
+            </button>
+          </div>
+          <button className="button primary" type="button" onClick={() => setShowCreate((current) => !current)}>
+            Nova tarefa
+          </button>
+        </div>
+      </div>
+      {showCreate && (
+        <form
+          className="task-form"
+          onSubmit={async (event) => {
+            event.preventDefault()
+            setError('')
+            try {
+              await onCreate({
+                clienteId: form.clienteId,
+                vendedorId: form.vendedorId || undefined,
+                titulo: form.titulo,
+                descricao: form.descricao || undefined,
+                dataVencimento: form.dataVencimento,
+                prioridade: Number(form.prioridade),
+                origem: 'manual',
+              })
+              setForm({
+                clienteId: clientes[0]?.id ?? '',
+                vendedorId: '',
+                titulo: '',
+                descricao: '',
+                dataVencimento: new Date().toISOString().slice(0, 10),
+                prioridade: '60',
+              })
+              setShowCreate(false)
+            } catch (exception) {
+              setError(exception instanceof Error ? exception.message : 'Nao foi possivel criar a tarefa.')
+            }
+          }}
+        >
+          <label>
+            Cliente
+            <select
+              value={form.clienteId}
+              onChange={(event) => {
+                const cliente = clientes.find((item) => item.id === event.target.value)
+                setForm({
+                  ...form,
+                  clienteId: event.target.value,
+                  vendedorId: cliente?.vendedorId ?? form.vendedorId,
+                  prioridade: String(cliente ? Math.max(50, Math.min(95, opportunityScore(cliente, []))) : form.prioridade),
+                })
+              }}
+            >
+              {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
+            </select>
+          </label>
+          <label>
+            Vendedor
+            <select value={form.vendedorId} onChange={(event) => setForm({ ...form, vendedorId: event.target.value })}>
+              <option value="">Sem vendedor</option>
+              {usuarios
+                .filter((usuario) => usuario.role === 'vendedor')
+                .map((usuario) => <option key={usuario.id} value={usuario.id}>{usuario.nome}</option>)}
+            </select>
+          </label>
+          <label>
+            Vencimento
+            <input type="date" value={form.dataVencimento} onChange={(event) => setForm({ ...form, dataVencimento: event.target.value })} />
+          </label>
+          <label>
+            Prioridade
+            <input type="number" min="0" max="100" value={form.prioridade} onChange={(event) => setForm({ ...form, prioridade: event.target.value })} />
+          </label>
+          <label className="span-2">
+            Titulo
+            <input value={form.titulo} onChange={(event) => setForm({ ...form, titulo: event.target.value })} required />
+          </label>
+          <label className="span-2">
+            Descricao
+            <textarea value={form.descricao} onChange={(event) => setForm({ ...form, descricao: event.target.value })} />
+          </label>
+          <button className="button primary" type="submit">Criar tarefa</button>
+        </form>
+      )}
+      {error && <div className="alert">{error}</div>}
+      <div className="task-insight">
+        <span>
+          <strong>{overloaded ? `Maior atencao: ${overloaded.nome}` : 'Sem carga atribuida'}</strong>
+          <small>
+            {overloaded
+              ? `${overloaded.vencidas} vencidas, ${overloaded.abertas} abertas, prioridade media ${overloaded.prioridadeMedia}.`
+              : 'Crie ou atribua tarefas para acompanhar a operacao.'}
+          </small>
+        </span>
+        <div className="status-list compact-status">
+          {workload.map((row) => (
+            <div className="status-row" key={row.id}>
+              <span>{row.nome}</span>
+              <strong>{row.abertas} abertas</strong>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="agenda-board">
+        {agendaBuckets.map((bucket) => (
+          <button className="agenda-item" key={bucket.id} onClick={bucket.onClick} type="button">
+            <span>
+              <strong>{bucket.label}</strong>
+              <small>{bucket.hint}</small>
+            </span>
+            <b>{bucket.tarefas.length}</b>
+            <small>{bucket.tarefas[0] ? `${bucket.tarefas[0].clienteNome} - ${dateLabel(bucket.tarefas[0].dataVencimento)}` : 'Sem pendencias'}</small>
+          </button>
+        ))}
+      </div>
+      <div className="table">
+        <div className="table-head task">
+          <span>Tarefa</span>
+          <span>Cliente</span>
+          <span>Vendedor</span>
+          <span>Vencimento</span>
+          <span>Prioridade</span>
+          <span>Acoes</span>
+        </div>
+        {filtered.map((tarefa) => (
+          <div className={tarefa.status === 'concluida' ? 'table-row task done' : 'table-row task'} key={tarefa.id}>
+            <span>
+              <strong>{tarefa.titulo}</strong>
+              <small>{tarefa.descricao ?? tarefa.origem}</small>
+            </span>
+            <span>{tarefa.clienteNome}</span>
+            <span>{tarefa.vendedorNome ?? 'Sem vendedor'}</span>
+            <span>{dateLabel(tarefa.dataVencimento)}</span>
+            <span className="score">{tarefa.prioridade}</span>
+            <span>
+              {tarefa.status === 'aberta' ? (
+                <button className="button primary" onClick={() => onComplete(tarefa.id)} type="button">
+                  Concluir
+                </button>
+              ) : (
+                <span className="status-pill">concluida</span>
+              )}
+            </span>
+          </div>
+        ))}
+        {filtered.length === 0 && <div className="empty-state">Nenhuma tarefa nesta visao.</div>}
+      </div>
+    </section>
+  )
+}
+
+function FichaCliente({
+  cliente,
+  interacoes,
+  orcamentos,
+  vendasItens,
+  servicosItens,
+  onUpdateClient,
+  onAddInteraction,
+  onAddBudget,
+}: {
+  cliente: Cliente
+  interacoes: Interacao[]
+  orcamentos: Orcamento[]
+  vendasItens: VendaItem[]
+  servicosItens: ServicoItem[]
+  onUpdateClient: (clienteId: string, patch: Partial<Cliente>) => void
+  onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
+  onAddBudget: (orcamento: OrcamentoInput) => Promise<Orcamento>
+}) {
+  const [showForm, setShowForm] = useState(false)
+  const [showEditForm, setShowEditForm] = useState(false)
+  const [showBudgetForm, setShowBudgetForm] = useState(false)
+  const [formError, setFormError] = useState('')
+  const [form, setForm] = useState({
+    canal: 'WhatsApp',
+    tipo: 'retorno',
+    resultado: 'WhatsApp enviado',
+    resumo: '',
+    dataProximaAcao: '',
+  })
+  const [budgetForm, setBudgetForm] = useState({
+    validade: '',
+    previsaoFechamento: '',
+    observacao: '',
+  })
+  const [budgetItems, setBudgetItems] = useState<OrcamentoItemInput[]>([
+    { descricao: '', tipo: 'produto', quantidade: 1, valorUnitario: 0 },
+  ])
+  const [editForm, setEditForm] = useState({
+    telefone: cliente.telefone ?? '',
+    whatsapp: cliente.whatsapp ?? '',
+    responsavel: cliente.responsavel ?? '',
+    status: cliente.status,
+    observacoes: cliente.observacoes ?? '',
+  })
+  const clienteInteracoes = interacoes.filter((interacao) => interacao.clienteId === cliente.id)
+  const clienteOrcamentos = orcamentos.filter((orcamento) => orcamento.clienteId === cliente.id)
+  const clienteVendas = vendasItens.filter((venda) => venda.clienteId === cliente.id)
+  const clienteServicos = servicosItens.filter((servico) => servico.clienteId === cliente.id)
+  const openBudget = clienteOrcamentos.find((orcamento) => ['aberto', 'enviado', 'negociando'].includes(orcamento.status))
+  const commercialAlerts = [
+    openBudget ? `Orcamento ${openBudget.status} de ${money(openBudget.valorTotal)} com validade ${dateLabel(openBudget.validade)}.` : '',
+    openBudget && daysSince(openBudget.validade) > 0 ? 'Orcamento vencido: fazer follow-up imediato.' : '',
+    !cliente.whatsapp ? 'Cliente sem WhatsApp cadastrado.' : '',
+    daysSince(cliente.ultimoContatoEm) > 60 ? 'Sem contato comercial ha mais de 60 dias.' : '',
+    daysSince(cliente.ultimaCompraEm) > 180 ? 'Cliente em risco: mais de 180 dias sem compra.' : '',
+  ].filter(Boolean)
+  const whatsUrl = cliente.whatsapp
+    ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(
+        `Bom dia, ${cliente.responsavel ?? cliente.nome}. Aqui e da Capital Truck Center. Estou passando para ver se precisa cotar pneus ou algum servico.`,
+      )}`
+    : undefined
+
+  async function submitInteraction(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!form.resumo.trim()) return
+
+    setFormError('')
+    try {
+      await onAddInteraction({
+      clienteId: cliente.id,
+      vendedorId: cliente.vendedorId ?? 'u-1',
+      canal: form.canal as Interacao['canal'],
+      tipo: form.tipo,
+      resumo: form.resumo.trim(),
+      resultado: form.resultado,
+      proximaAcao: form.dataProximaAcao ? bestNextAction(cliente) : undefined,
+      dataProximaAcao: form.dataProximaAcao || undefined,
+      })
+      setForm({
+        canal: 'WhatsApp',
+        tipo: 'retorno',
+        resultado: 'WhatsApp enviado',
+        resumo: '',
+        dataProximaAcao: '',
+      })
+      setShowForm(false)
+    } catch (exception) {
+      setFormError(exception instanceof Error ? exception.message : 'Nao foi possivel registrar o contato.')
+    }
+  }
+
+  async function submitBudget(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const validItems = budgetItems.filter((item) => item.descricao.trim() && item.quantidade > 0 && item.valorUnitario > 0)
+    const value = validItems.reduce((total, item) => total + item.quantidade * item.valorUnitario, 0)
+    if (!Number.isFinite(value) || value <= 0) return
+
+    setFormError('')
+    try {
+      await onAddBudget({
+        clienteId: cliente.id,
+        vendedorId: cliente.vendedorId ?? 'u-1',
+        valorTotal: value,
+        validade: budgetForm.validade,
+        previsaoFechamento: budgetForm.previsaoFechamento || undefined,
+        itens: validItems,
+      })
+
+      await onAddInteraction({
+        clienteId: cliente.id,
+        vendedorId: cliente.vendedorId ?? 'u-1',
+        canal: 'WhatsApp',
+        tipo: 'orcamento',
+        resumo: budgetForm.observacao || `Orcamento criado no valor de ${money(value)}.`,
+        resultado: 'pediu orcamento',
+      })
+
+      setBudgetForm({ validade: '', previsaoFechamento: '', observacao: '' })
+      setBudgetItems([{ descricao: '', tipo: 'produto', quantidade: 1, valorUnitario: 0 }])
+      setShowBudgetForm(false)
+    } catch (exception) {
+      setFormError(exception instanceof Error ? exception.message : 'Nao foi possivel criar o orcamento.')
+    }
+  }
+
+  return (
+    <aside className="panel client-card">
+      <div className="client-hero">
+        <span className="status-pill">{cliente.status}</span>
+        <h2>{cliente.nome}</h2>
+        <p>{cliente.cidade}/{cliente.uf} · {cliente.tipoCliente}</p>
+      </div>
+
+      {formError && <div className="alert">{formError}</div>}
+      <div className="next-action-card">
+        <span>
+          <strong>Proxima melhor acao</strong>
+          <small>{bestNextAction(cliente)}</small>
+        </span>
+      </div>
+      {commercialAlerts.length > 0 && (
+        <div className="client-alerts">
+          {commercialAlerts.map((alert) => (
+            <div key={alert}>
+              <AlertTriangle size={15} />
+              <span>{alert}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="quick-actions">
+        <a className={!whatsUrl ? 'button disabled' : 'button'} href={whatsUrl} target="_blank" rel="noreferrer">
+          <MessageCircle size={16} /> WhatsApp
+        </a>
+        <button
+          className="button"
+          type="button"
+          onClick={() => {
+            setForm((current) => ({
+              ...current,
+              resumo: current.resumo || bestNextAction(cliente),
+            }))
+            setShowForm((current) => !current)
+          }}
+        >
+          <Phone size={16} /> Contato
+        </button>
+        <button className="button" type="button" onClick={() => setShowBudgetForm((current) => !current)}>
+          <WalletCards size={16} /> Orcamento
+        </button>
+        <button className="button" type="button" onClick={() => {
+          setEditForm({
+            telefone: cliente.telefone ?? '',
+            whatsapp: cliente.whatsapp ?? '',
+            responsavel: cliente.responsavel ?? '',
+            status: cliente.status,
+            observacoes: cliente.observacoes ?? '',
+          })
+          setShowEditForm((current) => !current)
+        }}>
+          <UserRound size={16} /> Editar
+        </button>
+        <button
+          className="button danger"
+          type="button"
+          onClick={async () => {
+            onUpdateClient(cliente.id, { status: 'Nao contatar' })
+            await onAddInteraction({
+              clienteId: cliente.id,
+              vendedorId: cliente.vendedorId ?? 'u-1',
+              canal: 'WhatsApp',
+              tipo: 'atualizacao cadastral',
+              resumo: 'Cliente marcado como nao contatar.',
+              resultado: 'nao contatar',
+            })
+          }}
+        >
+          Nao contatar
+        </button>
+      </div>
+
+      {showEditForm && (
+        <form
+          className="contact-form"
+          onSubmit={(event) => {
+            event.preventDefault()
+            onUpdateClient(cliente.id, {
+              telefone: editForm.telefone,
+              whatsapp: editForm.whatsapp,
+              responsavel: editForm.responsavel,
+              status: editForm.status as Cliente['status'],
+              observacoes: editForm.observacoes,
+            })
+            setShowEditForm(false)
+          }}
+        >
+          <label>
+            Telefone
+            <input value={editForm.telefone} onChange={(event) => setEditForm({ ...editForm, telefone: event.target.value })} />
+          </label>
+          <label>
+            WhatsApp
+            <input value={editForm.whatsapp} onChange={(event) => setEditForm({ ...editForm, whatsapp: event.target.value })} />
+          </label>
+          <label>
+            Responsavel
+            <input value={editForm.responsavel} onChange={(event) => setEditForm({ ...editForm, responsavel: event.target.value })} />
+          </label>
+          <label>
+            Status
+            <select value={editForm.status} onChange={(event) => setEditForm({ ...editForm, status: event.target.value as Cliente['status'] })}>
+              <option>Novo</option>
+              <option>Ativo</option>
+              <option>Em acompanhamento</option>
+              <option>Orcamento aberto</option>
+              <option>Reativar</option>
+              <option>Inativo</option>
+              <option>Nao contatar</option>
+            </select>
+          </label>
+          <label className="span-2">
+            Observacoes comerciais
+            <textarea value={editForm.observacoes} onChange={(event) => setEditForm({ ...editForm, observacoes: event.target.value })} />
+          </label>
+          <button className="button primary" type="submit">Salvar cadastro</button>
+        </form>
+      )}
+
+      {showForm && (
+        <form className="contact-form" onSubmit={submitInteraction}>
+          <label>
+            Canal
+            <select value={form.canal} onChange={(event) => setForm({ ...form, canal: event.target.value })}>
+              <option>WhatsApp</option>
+              <option>Ligacao</option>
+              <option>Presencial</option>
+              <option>Email</option>
+              <option>Campanha</option>
+            </select>
+          </label>
+          <label>
+            Resultado
+            <select value={form.resultado} onChange={(event) => setForm({ ...form, resultado: event.target.value })}>
+              <option>WhatsApp enviado</option>
+              <option>respondeu</option>
+              <option>pediu orcamento</option>
+              <option>pediu retorno depois</option>
+              <option>sem interesse</option>
+              <option>telefone invalido</option>
+            </select>
+          </label>
+          <label className="span-2">
+            Resumo
+            <textarea
+              value={form.resumo}
+              onChange={(event) => setForm({ ...form, resumo: event.target.value })}
+              placeholder="Ex.: pediu cotacao para 4 pneus 295/80R22.5 na sexta-feira"
+            />
+          </label>
+          <label>
+            Proxima acao
+            <input
+              type="date"
+              value={form.dataProximaAcao}
+              onChange={(event) => setForm({ ...form, dataProximaAcao: event.target.value })}
+            />
+          </label>
+          <button className="button primary" type="submit">Registrar</button>
+        </form>
+      )}
+
+      {showBudgetForm && (
+        <form className="contact-form" onSubmit={submitBudget}>
+          <label>
+            Validade
+            <input
+              type="date"
+              value={budgetForm.validade}
+              onChange={(event) => setBudgetForm({ ...budgetForm, validade: event.target.value })}
+              required
+            />
+          </label>
+          <label>
+            Prev. fechamento
+            <input
+              type="date"
+              value={budgetForm.previsaoFechamento}
+              onChange={(event) => setBudgetForm({ ...budgetForm, previsaoFechamento: event.target.value })}
+            />
+          </label>
+          <div className="budget-items span-2">
+            {budgetItems.map((item, index) => (
+              <div className="budget-item-row" key={index}>
+                <select
+                  value={item.tipo}
+                  onChange={(event) => {
+                    const next = [...budgetItems]
+                    next[index] = { ...item, tipo: event.target.value as OrcamentoItemInput['tipo'] }
+                    setBudgetItems(next)
+                  }}
+                >
+                  <option value="produto">Produto</option>
+                  <option value="servico">Servico</option>
+                </select>
+                <input
+                  value={item.descricao}
+                  onChange={(event) => {
+                    const next = [...budgetItems]
+                    next[index] = { ...item, descricao: event.target.value }
+                    setBudgetItems(next)
+                  }}
+                  placeholder="Produto ou servico"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={item.quantidade}
+                  onChange={(event) => {
+                    const next = [...budgetItems]
+                    next[index] = { ...item, quantidade: Number(event.target.value) }
+                    setBudgetItems(next)
+                  }}
+                  placeholder="Qtd."
+                />
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={item.valorUnitario}
+                  onChange={(event) => {
+                    const next = [...budgetItems]
+                    next[index] = { ...item, valorUnitario: Number(event.target.value) }
+                    setBudgetItems(next)
+                  }}
+                  placeholder="Unitario"
+                />
+                <strong>{money(item.quantidade * item.valorUnitario)}</strong>
+              </div>
+            ))}
+            <button
+              className="button"
+              type="button"
+              onClick={() => setBudgetItems([...budgetItems, { descricao: '', tipo: 'produto', quantidade: 1, valorUnitario: 0 }])}
+            >
+              Adicionar item
+            </button>
+          </div>
+          <label className="span-2">
+            Observacao
+            <textarea
+              value={budgetForm.observacao}
+              onChange={(event) => setBudgetForm({ ...budgetForm, observacao: event.target.value })}
+              placeholder="Ex.: quatro pneus 275/80R22.5 com condicao para pagamento em 30 dias"
+            />
+          </label>
+          <div className="budget-total span-2">
+            <span>Total</span>
+            <strong>{money(budgetItems.reduce((total, item) => total + item.quantidade * item.valorUnitario, 0))}</strong>
+          </div>
+          <button className="button primary" type="submit">Criar orcamento</button>
+        </form>
+      )}
+
+      <div className="summary-box">
+        <strong>Resumo inteligente</strong>
+        <p>{smartSummary(cliente, interacoes)}</p>
+      </div>
+
+      <div className="info-grid">
+        <Info label="Ultima compra" value={dateLabel(cliente.ultimaCompraEm)} />
+        <Info label="Ultimo servico" value={dateLabel(cliente.ultimoServicoEm)} />
+        <Info label="Total comprado" value={money(cliente.totalComprado)} />
+        <Info label="Servicos" value={money(cliente.totalServicos)} />
+      </div>
+
+      <div className="tags">
+        {cliente.tags.map((tag) => <span key={tag}>{tag}</span>)}
+      </div>
+
+      <div className="history-section">
+        <h3>Vendas</h3>
+        {clienteVendas.slice(0, 4).map((venda) => (
+          <div className="history-row" key={venda.id}>
+            <span>
+              <strong>{venda.produtoNome}</strong>
+              <small>{dateLabel(venda.dataVenda)} · {venda.quantidade}x · {venda.medida ?? venda.marca ?? 'Produto'}</small>
+            </span>
+            <strong>{money(venda.valorTotal)}</strong>
+          </div>
+        ))}
+        {clienteVendas.length === 0 && <small className="muted">Sem venda registrada.</small>}
+      </div>
+
+      <div className="history-section">
+        <h3>Servicos</h3>
+        {clienteServicos.slice(0, 4).map((servico) => (
+          <div className="history-row" key={servico.id}>
+            <span>
+              <strong>{servico.servicoNome}</strong>
+              <small>{dateLabel(servico.dataServico)} · {servico.quantidade}x {servico.placa ? `· ${servico.placa}` : ''}</small>
+            </span>
+            <strong>{money(servico.valorTotal)}</strong>
+          </div>
+        ))}
+        {clienteServicos.length === 0 && <small className="muted">Sem servico registrado.</small>}
+      </div>
+
+      <div className="timeline">
+        <h3>Timeline</h3>
+        {clienteInteracoes.map((interacao) => (
+          <div className="timeline-item" key={interacao.id}>
+            <CheckCircle2 size={16} />
+            <span>
+              <strong>{interacao.canal}</strong>
+              <small>{interacao.resumo}</small>
+            </span>
+          </div>
+        ))}
+        {clienteOrcamentos.map((orcamento) => (
+          <div className="timeline-item" key={orcamento.id}>
+            <WalletCards size={16} />
+            <span>
+              <strong>Orcamento {orcamento.status}</strong>
+              <small>{money(orcamento.valorTotal)} · validade {dateLabel(orcamento.validade)}</small>
+              {orcamento.itens?.map((item) => (
+                <small key={item.id}>{item.quantidade}x {item.descricao} · {money(item.valorTotal)}</small>
+              ))}
+            </span>
+          </div>
+        ))}
+      </div>
+    </aside>
+  )
+}
+
+function Importacoes({
+  importacoes,
+  onAddImportacao,
+}: {
+  importacoes: Importacao[]
+  onAddImportacao: (importacao: Importacao) => void
+}) {
+  const [previews, setPreviews] = useState<XmlImportPreview[]>([])
+  const [workbookPreviews, setWorkbookPreviews] = useState<WorkbookImportPreview[]>([])
+  const [isReading, setIsReading] = useState(false)
+  const [isReadingWorkbook, setIsReadingWorkbook] = useState(false)
+  const [error, setError] = useState('')
+  const [registeredFiles, setRegisteredFiles] = useState<string[]>([])
+
+  async function handleFiles(files: FileList | null) {
+    if (!files?.length) return
+    setIsReading(true)
+    setError('')
+
+    try {
+      setPreviews(await previewXmlFiles(files))
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel ler o XML.')
+    } finally {
+      setIsReading(false)
+    }
+  }
+
+  async function handleWorkbookFiles(files: FileList | null) {
+    if (!files?.length) return
+    setIsReadingWorkbook(true)
+    setError('')
+
+    try {
+      setWorkbookPreviews(await previewWorkbookFiles(files))
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel ler a planilha.')
+    } finally {
+      setIsReadingWorkbook(false)
+    }
+  }
+
+  async function registerPreview(preview: XmlImportPreview) {
+    setError('')
+
+    try {
+      const created = await createImportacaoPreview({
+        tipo: 'xml-diario',
+        arquivoNome: preview.arquivoNome,
+        totalItens: preview.totalItens,
+        clientesEncontrados: preview.clientesDetectados,
+        conflitos: preview.avisos.length,
+      })
+      onAddImportacao(created)
+      setRegisteredFiles((current) => [...current, preview.arquivoNome])
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel registrar a previa.')
+    }
+  }
+
+  async function registerWorkbookPreview(preview: WorkbookImportPreview) {
+    setError('')
+
+    try {
+      const created = await createImportacaoPreview({
+        tipo: 'base-inicial',
+        arquivoNome: preview.arquivoNome,
+        totalItens: preview.totalRows,
+        clientesEncontrados: preview.clientesDetectados,
+        conflitos: workbookIssueCount(preview),
+      })
+      onAddImportacao(created)
+      setRegisteredFiles((current) => [...current, preview.arquivoNome])
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel registrar a previa da planilha.')
+    }
+  }
+
+  return (
+    <section className="grid-layout">
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Pipeline de importacao</h2>
+            <p>Base Excel inicial, XML diario e cadastro semanal entram pelo mesmo controle.</p>
+          </div>
+          <FileUp size={18} />
+        </div>
+        <div className="import-flow">
+          {['Selecionar arquivos', 'Extrair itens', 'Deduplicar', 'Previa', 'Confirmar', 'Auditar'].map((step) => (
+            <div key={step}>{step}</div>
+          ))}
+        </div>
+      </section>
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Previa de XML diario</h2>
+            <p>Escolha um ou mais XMLs para validar a estrutura antes da importacao.</p>
+          </div>
+          <label className="file-button">
+            <FileUp size={16} />
+            {isReading ? 'Lendo...' : 'Selecionar XML'}
+            <input type="file" accept=".xml,text/xml" multiple onChange={(event) => handleFiles(event.target.files)} />
+          </label>
+        </div>
+        {error && <div className="alert">{error}</div>}
+        <div className="dual-upload">
+          <label className="file-button secondary">
+            <FileUp size={16} />
+            {isReadingWorkbook ? 'Lendo planilha...' : 'Selecionar Excel'}
+            <input type="file" accept=".xlsx,.xls,.csv" multiple onChange={(event) => handleWorkbookFiles(event.target.files)} />
+          </label>
+          <span>Use para validar abas, linhas e campos essenciais da base inicial.</span>
+        </div>
+        {workbookPreviews.length > 0 && (
+          <div className="preview-list">
+            {workbookPreviews.map((preview) => {
+              const stats = workbookStats(preview)
+              const readiness = workbookReadiness(preview)
+              return (
+                <div className="preview-card" key={preview.arquivoNome}>
+                  <div className="panel-header">
+                    <div>
+                      <h2>{preview.arquivoNome}</h2>
+                      <p>
+                        {preview.totalRows} linhas - {preview.clientesDetectados} clientes detectados - {preview.clientesDuplicados} duplicados
+                      </p>
+                    </div>
+                    <button
+                      className="button primary"
+                      disabled={registeredFiles.includes(preview.arquivoNome)}
+                      onClick={() => registerWorkbookPreview(preview)}
+                      type="button"
+                    >
+                      {registeredFiles.includes(preview.arquivoNome) ? 'Registrada' : 'Registrar previa'}
+                    </button>
+                  </div>
+                  <div className={`readiness ${readiness.tone}`}>
+                    <strong>{readiness.label}</strong>
+                    <span>{readiness.detail}</span>
+                  </div>
+                  <div className="info-grid import-quality">
+                    <Info label="Abas clientes" value={stats.clientesSheets.toString()} />
+                    <Info label="Abas vendas" value={stats.vendasSheets.toString()} />
+                    <Info label="Abas servicos" value={stats.servicosSheets.toString()} />
+                    <Info label="Duplicados" value={preview.clientesDuplicados.toString()} />
+                    <Info label="Campos faltantes" value={workbookIssueCount(preview).toString()} />
+                  </div>
+                  {preview.avisos.length > 0 && (
+                    <div className="warning-list">
+                      {preview.avisos.map((aviso) => <span key={aviso}>{aviso}</span>)}
+                    </div>
+                  )}
+                  <div className="recommendation-list">
+                    {workbookRecommendations(preview).map((recommendation) => (
+                      <div key={recommendation}>
+                        <CheckCircle2 size={15} />
+                        <span>{recommendation}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="table compact">
+                    <div className="table-head workbook">
+                      <span>Aba</span>
+                      <span>Tipo</span>
+                      <span>Linhas</span>
+                      <span>Clientes</span>
+                      <span>Campos</span>
+                      <span>Avisos</span>
+                    </div>
+                    {preview.sheets.map((sheet) => (
+                      <div className="table-row workbook" key={sheet.sheetName}>
+                        <span>{sheet.sheetName}</span>
+                        <span>{sheet.role}</span>
+                        <span>{sheet.totalRows}</span>
+                        <span>{sheet.uniqueClientKeys}</span>
+                        <span>{sheet.headers.slice(0, 4).join(', ') || 'Sem cabecalho'}</span>
+                        <span>{sheet.missingClientName + sheet.missingDocument + sheet.duplicateClientKeys}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        {previews.length > 0 && (
+          <div className="preview-list">
+            {previews.map((preview) => (
+              <div className="preview-card" key={preview.arquivoNome}>
+                <div className="panel-header">
+                  <div>
+                    <h2>{preview.arquivoNome}</h2>
+                    <p>{preview.totalItens} itens · {preview.clientesDetectados} clientes · {money(preview.valorTotal)}</p>
+                  </div>
+                  <button
+                    className="button primary"
+                    disabled={registeredFiles.includes(preview.arquivoNome)}
+                    onClick={() => registerPreview(preview)}
+                    type="button"
+                  >
+                    {registeredFiles.includes(preview.arquivoNome) ? 'Registrada' : 'Registrar previa'}
+                  </button>
+                </div>
+                {preview.avisos.length > 0 && (
+                  <div className="warning-list">
+                    {preview.avisos.map((aviso) => <span key={aviso}>{aviso}</span>)}
+                  </div>
+                )}
+                <div className="table compact">
+                  <div className="table-head xml">
+                    <span>Tipo</span>
+                    <span>Cliente</span>
+                    <span>Item</span>
+                    <span>Qtd.</span>
+                    <span>Total</span>
+                  </div>
+                  {preview.itens.map((item, index) => (
+                    <div className="table-row xml" key={`${item.documento}-${item.itemCodigo}-${index}`}>
+                      <span>{item.tipo}</span>
+                      <span>{item.clienteNome || item.codigoCliente || item.cpfCnpj || 'Sem cliente'}</span>
+                      <span>{item.itemNome || 'Sem descricao'}</span>
+                      <span>{item.quantidade}</span>
+                      <span>{money(item.valorTotal)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+      {importacoes.map((importacao) => (
+        <section className="panel" key={importacao.id}>
+          <div className="panel-header">
+            <div>
+              <h2>{importacao.tipo}</h2>
+              <p>{importacao.arquivoNome}</p>
+            </div>
+            <span className="status-pill">{importacao.status}</span>
+          </div>
+          <div className="info-grid">
+            <Info label="Itens" value={importacao.totalItens.toString()} />
+            <Info label="Encontrados" value={importacao.clientesEncontrados.toString()} />
+            <Info label="Novos" value={importacao.clientesCriados.toString()} />
+            <Info label="Conflitos" value={importacao.conflitos.toString()} />
+          </div>
+        </section>
+      ))}
+    </section>
+  )
+}
+
+function workbookStats(preview: WorkbookImportPreview) {
+  return {
+    clientesSheets: preview.sheets.filter((sheet) => sheet.role === 'clientes').length,
+    vendasSheets: preview.sheets.filter((sheet) => sheet.role === 'vendas').length,
+    servicosSheets: preview.sheets.filter((sheet) => sheet.role === 'servicos').length,
+  }
+}
+
+function workbookReadiness(preview: WorkbookImportPreview) {
+  const stats = workbookStats(preview)
+  const issues = workbookIssueCount(preview)
+  const hasCoreSheets = stats.clientesSheets > 0 && (stats.vendasSheets > 0 || stats.servicosSheets > 0)
+
+  if (!hasCoreSheets || preview.clientesDetectados === 0) {
+    return {
+      tone: 'danger',
+      label: 'Bloquear importacao',
+      detail: 'A planilha ainda nao tem clientes e movimento suficientes para alimentar o CRM.',
+    }
+  }
+
+  if (issues > 0 || preview.clientesDuplicados > 0) {
+    return {
+      tone: 'warning',
+      label: 'Revisar antes de confirmar',
+      detail: `${issues} pontos de atencao e ${preview.clientesDuplicados} clientes repetidos detectados.`,
+    }
+  }
+
+  return {
+    tone: 'ok',
+    label: 'Pronta para confirmar',
+    detail: 'Estrutura essencial reconhecida sem conflitos automaticos.',
+  }
+}
+
+function workbookIssueCount(preview: WorkbookImportPreview) {
+  return preview.sheets.reduce(
+    (total, sheet) => total + sheet.missingClientName + (sheet.role === 'resumo' ? 0 : sheet.missingDocument) + sheet.duplicateClientKeys,
+    preview.avisos.length,
+  )
+}
+
+function workbookRecommendations(preview: WorkbookImportPreview) {
+  const recommendations = []
+  const stats = workbookStats(preview)
+
+  if (stats.clientesSheets === 0) recommendations.push('Conferir se a aba de clientes consolidada esta presente no arquivo.')
+  if (stats.vendasSheets === 0) recommendations.push('Anexar ou revisar a aba de vendas para alimentar historico de pneus.')
+  if (stats.servicosSheets === 0) recommendations.push('Anexar ou revisar a aba de servicos para gerar oportunidades de oficina.')
+  if (preview.clientesDuplicados > 0) recommendations.push('Resolver duplicidades por CPF/CNPJ ou codigo ERP antes da confirmacao final.')
+  if (preview.sheets.some((sheet) => sheet.missingDocument > 0 && sheet.role !== 'resumo')) {
+    recommendations.push('Completar CPF/CNPJ ou codigo ERP das linhas sinalizadas para reduzir conflitos.')
+  }
+  if (recommendations.length === 0) recommendations.push('Registrar a previa e seguir para confirmacao da importacao.')
+
+  return recommendations
+}
+
+function Conflitos({
+  conflitos,
+  onResolve,
+}: {
+  conflitos: ImportacaoConflito[]
+  onResolve: (id: string, decisao: NonNullable<ImportacaoConflito['decisao']>) => void
+}) {
+  const [statusFilter, setStatusFilter] = useState<'pendentes' | 'resolvidos' | 'todos'>('pendentes')
+  const [typeFilter, setTypeFilter] = useState('todos')
+  const pendentes = conflitos.filter((conflito) => !conflito.resolvido)
+  const resolvidos = conflitos.filter((conflito) => conflito.resolvido)
+  const tipos = Array.from(new Set(conflitos.map((conflito) => conflito.tipo))).sort()
+  const filtered = conflitos.filter((conflito) => {
+    const statusMatches =
+      statusFilter === 'todos' ||
+      (statusFilter === 'pendentes' && !conflito.resolvido) ||
+      (statusFilter === 'resolvidos' && conflito.resolvido)
+    const typeMatches = typeFilter === 'todos' || conflito.tipo === typeFilter
+    return statusMatches && typeMatches
+  })
+  const decisoes = resolvidos.reduce<Record<string, number>>((acc, conflito) => {
+    if (conflito.decisao) acc[conflito.decisao] = (acc[conflito.decisao] ?? 0) + 1
+    return acc
+  }, {})
+
+  return (
+    <section className="grid-layout">
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Fila de conflitos</h2>
+            <p>{pendentes.length} pendentes · {resolvidos.length} resolvidos</p>
+          </div>
+          <div className="toolbar-actions">
+            <label className="mini-select">
+              <Filter size={15} />
+              <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+                <option value="todos">Todos os tipos</option>
+                {tipos.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}
+              </select>
+            </label>
+            <div className="segmented">
+              <button className={statusFilter === 'pendentes' ? 'active' : ''} onClick={() => setStatusFilter('pendentes')} type="button">
+                Pendentes
+              </button>
+              <button className={statusFilter === 'resolvidos' ? 'active' : ''} onClick={() => setStatusFilter('resolvidos')} type="button">
+                Resolvidos
+              </button>
+              <button className={statusFilter === 'todos' ? 'active' : ''} onClick={() => setStatusFilter('todos')} type="button">
+                Todos
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="info-grid conflict-summary">
+          <Info label="Pendentes" value={pendentes.length.toString()} />
+          <Info label="Resolvidos" value={resolvidos.length.toString()} />
+          <Info label="Unidos" value={(decisoes.unir ?? 0).toString()} />
+          <Info label="Novos" value={(decisoes['criar-novo'] ?? 0).toString()} />
+        </div>
+        <div className="conflict-list">
+          {filtered.map((conflito) => (
+            <article className={conflito.resolvido ? 'conflict-card resolved' : 'conflict-card'} key={conflito.id}>
+              <div>
+                <span className="status-pill">{conflito.tipo}</span>
+                <h2>{conflito.resumo}</h2>
+                <p>{conflito.dadosRecebidos}</p>
+                <div className="tags">
+                  {conflito.possiveisClientes.map((cliente) => <span key={cliente}>{cliente}</span>)}
+                </div>
+              </div>
+              {conflito.resolvido ? (
+                <strong className="resolved-label">Resolvido: {conflito.decisao}</strong>
+              ) : (
+                <div className="conflict-actions">
+                  <button className="button" type="button" onClick={() => onResolve(conflito.id, 'unir')}>Unir</button>
+                  <button className="button" type="button" onClick={() => onResolve(conflito.id, 'manter-separado')}>
+                    Separar
+                  </button>
+                  <button className="button" type="button" onClick={() => onResolve(conflito.id, 'criar-novo')}>
+                    Novo
+                  </button>
+                  <button className="button" type="button" onClick={() => onResolve(conflito.id, 'ignorar')}>
+                    Ignorar
+                  </button>
+                </div>
+              )}
+            </article>
+          ))}
+          {filtered.length === 0 && <div className="empty-state">Nenhum conflito nesta visao.</div>}
+        </div>
+      </section>
+    </section>
+  )
+}
+
+function Mesclagem({
+  duplicados,
+  mesclagens,
+  onMerge,
+}: {
+  duplicados: PossivelDuplicado[]
+  mesclagens: ClienteMesclagem[]
+  onMerge: (duplicado: PossivelDuplicado, principal: 'a' | 'b') => Promise<ClienteMesclagem>
+}) {
+  const [error, setError] = useState('')
+  const [processingId, setProcessingId] = useState('')
+  const [minConfidence, setMinConfidence] = useState(70)
+  const filteredDuplicados = duplicados
+    .filter((duplicado) => duplicado.confianca >= minConfidence)
+    .sort((a, b) => b.confianca - a.confianca)
+  const highConfidence = duplicados.filter((duplicado) => duplicado.confianca >= 90).length
+  const needsReview = duplicados.filter((duplicado) => duplicado.confianca < 90).length
+
+  async function merge(duplicado: PossivelDuplicado, principal: 'a' | 'b') {
+    setError('')
+    setProcessingId(duplicado.id)
+    try {
+      await onMerge(duplicado, principal)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel registrar a mesclagem.')
+    } finally {
+      setProcessingId('')
+    }
+  }
+
+  return (
+    <section className="grid-layout">
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Possiveis duplicados</h2>
+            <p>Escolha o cliente principal antes de mover historico comercial.</p>
+          </div>
+          <label className="confidence-control">
+            <span>Min. confianca {minConfidence}%</span>
+            <input
+              min="0"
+              max="100"
+              step="5"
+              type="range"
+              value={minConfidence}
+              onChange={(event) => setMinConfidence(Number(event.target.value))}
+            />
+          </label>
+        </div>
+        <div className="info-grid merge-summary">
+          <Info label="Pendentes" value={duplicados.length.toString()} />
+          <Info label="Alta confianca" value={highConfidence.toString()} />
+          <Info label="Revisao manual" value={needsReview.toString()} />
+          <Info label="Exibidos" value={filteredDuplicados.length.toString()} />
+        </div>
+        {error && <div className="alert">{error}</div>}
+        <div className="merge-list">
+          {filteredDuplicados.map((duplicado) => (
+            <article className="merge-card" key={duplicado.id}>
+              <div>
+                <span className="status-pill">{duplicado.confianca}% confianca</span>
+                <h2>{duplicado.clienteANome}</h2>
+                <p>{duplicado.clienteBNome}</p>
+                <small>{duplicado.motivo}</small>
+              </div>
+              <div className="merge-actions">
+                <button className="button primary" disabled={processingId === duplicado.id} onClick={() => merge(duplicado, 'a')} type="button">
+                  Manter primeiro
+                </button>
+                <button className="button" disabled={processingId === duplicado.id} onClick={() => merge(duplicado, 'b')} type="button">
+                  Manter segundo
+                </button>
+              </div>
+            </article>
+          ))}
+          {filteredDuplicados.length === 0 && <div className="empty-state">Nenhum duplicado pendente nesta visao.</div>}
+        </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Historico de mesclagens</h2>
+            <p>Nada e apagado: vendas, servicos, interacoes, orcamentos e campanhas devem ser movidos.</p>
+          </div>
+          <CheckCircle2 size={18} />
+        </div>
+        <div className="table">
+          <div className="table-head merge">
+            <span>Data</span>
+            <span>Principal</span>
+            <span>Mesclado</span>
+            <span>Dados movidos</span>
+            <span>Usuario</span>
+          </div>
+          {mesclagens.map((mesclagem) => (
+            <div className="table-row merge" key={mesclagem.id}>
+              <span>{dateLabel(mesclagem.criadoEm)}</span>
+              <span><strong>{mesclagem.clientePrincipalNome}</strong><small>{mesclagem.motivo}</small></span>
+              <span>{mesclagem.clienteMescladoNome}</span>
+              <span>{mesclagem.dadosMovidos.join(', ')}</span>
+              <span>{mesclagem.usuarioNome}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+    </section>
+  )
+}
+
+function Campanhas({
+  clientes,
+  onAddInteraction,
+  onAddTask,
+}: {
+  clientes: Array<Cliente & { score: number; motivo: string }>
+  onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
+  onAddTask: (task: TarefaInput) => Promise<Tarefa>
+}) {
+  const [statuses, setStatuses] = useState<Record<string, CampanhaEnvioStatus>>({})
+  const [statusFilter, setStatusFilter] = useState<CampanhaEnvioStatus | 'todos'>('todos')
+  const [campaignError, setCampaignError] = useState('')
+  const campanhaClientes = clientes.filter((cliente) => cliente.whatsapp && daysSince(cliente.ultimaCompraEm) > 90)
+  const nextClient = campanhaClientes
+    .filter((cliente) => (statuses[cliente.id] ?? 'pendente') === 'pendente')
+    .sort((a, b) => b.score - a.score)[0]
+  const campaignCounts = campanhaClientes.reduce<Record<CampanhaEnvioStatus, number>>(
+    (acc, cliente) => {
+      const status = statuses[cliente.id] ?? 'pendente'
+      acc[status] += 1
+      return acc
+    },
+    { pendente: 0, enviado: 0, respondeu: 0, nao_respondeu: 0, virou_orcamento: 0 },
+  )
+  const filteredClientes = campanhaClientes.filter((cliente) => statusFilter === 'todos' || (statuses[cliente.id] ?? 'pendente') === statusFilter)
+  const campanhaId = 'campanha-inativos-90'
+  const mensagem = 'Bom dia, {primeiro_nome}. Aqui e {nome_vendedor}, da Capital Truck Center. Vi que faz um tempo desde sua ultima compra e estou passando para ver se precisa cotar pneus ou algum servico.'
+
+  function messageFor(cliente: Cliente) {
+    const primeiroNome = (cliente.responsavel || cliente.nome).split(' ')[0]
+    return mensagem
+      .replace('{primeiro_nome}', primeiroNome)
+      .replace('{nome_vendedor}', cliente.vendedorNome || 'Capital Truck Center')
+  }
+
+  async function markStatus(cliente: Cliente, status: CampanhaEnvioStatus, mensagemFinal: string) {
+    setCampaignError('')
+
+    try {
+      await upsertCampanhaEnvio({
+        campanhaId,
+        campanhaNome: 'Clientes sem compra ha 90 dias',
+        clienteId: cliente.id,
+        vendedorId: cliente.vendedorId,
+        telefone: cliente.whatsapp,
+        mensagemFinal,
+        status,
+      })
+      await onAddInteraction({
+        clienteId: cliente.id,
+        vendedorId: cliente.vendedorId ?? 'u-1',
+        canal: 'Campanha',
+        tipo: 'campanha',
+        resumo: campaignSummary(status, mensagemFinal),
+        resultado: status,
+      })
+      if (status === 'virou_orcamento') {
+        await onAddTask({
+          clienteId: cliente.id,
+          vendedorId: cliente.vendedorId,
+          titulo: 'Criar orcamento da campanha',
+          descricao: 'Cliente respondeu campanha e deve receber cotacao formal.',
+          dataVencimento: new Date().toISOString().slice(0, 10),
+          prioridade: 90,
+          origem: 'campanha',
+        })
+      }
+      setStatuses((current) => ({ ...current, [cliente.id]: status }))
+    } catch (exception) {
+      setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o envio.')
+    }
+  }
+
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Campanha: clientes sem compra ha 90 dias</h2>
+          <p>{campanhaClientes.length} clientes com WhatsApp valido na lista inicial.</p>
+        </div>
+        <div className="toolbar-actions">
+          <label className="mini-select">
+            <Filter size={15} />
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as CampanhaEnvioStatus | 'todos')}>
+              <option value="todos">Todos os status</option>
+              <option value="pendente">Pendentes</option>
+              <option value="enviado">Enviados</option>
+              <option value="respondeu">Responderam</option>
+              <option value="virou_orcamento">Virou orcamento</option>
+              <option value="nao_respondeu">Nao respondeu</option>
+            </select>
+          </label>
+          <Send size={18} />
+        </div>
+      </div>
+      <div className="message-template">
+        {mensagem}
+      </div>
+      {nextClient && (
+        <div className="next-campaign-target">
+          <span>
+            <strong>Proximo contato sugerido: {nextClient.nome}</strong>
+            <small>{nextClient.motivo}</small>
+          </span>
+          <a className="button primary" href={`https://wa.me/${nextClient.whatsapp}?text=${encodeURIComponent(messageFor(nextClient))}`} target="_blank" rel="noreferrer">
+            <MessageCircle size={16} /> Abrir WhatsApp
+          </a>
+        </div>
+      )}
+      <div className="info-grid campaign-summary">
+        <Info label="Pendentes" value={campaignCounts.pendente.toString()} />
+        <Info label="Enviados" value={campaignCounts.enviado.toString()} />
+        <Info label="Responderam" value={campaignCounts.respondeu.toString()} />
+        <Info label="Orcamentos" value={campaignCounts.virou_orcamento.toString()} />
+      </div>
+      {campaignError && <div className="alert">{campaignError}</div>}
+      <div className="table">
+        <div className="table-head campaign">
+          <span>Cliente</span>
+          <span>Mensagem</span>
+          <span>Status</span>
+          <span>Acoes</span>
+        </div>
+        {filteredClientes.map((cliente) => {
+          const finalMessage = messageFor(cliente)
+          const waUrl = `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(finalMessage)}`
+
+          return (
+            <div className="table-row campaign" key={cliente.id}>
+              <span>
+                <strong>{cliente.nome}</strong>
+                <small>{cliente.whatsapp}</small>
+              </span>
+              <span>{finalMessage}</span>
+              <span className="status-pill">{statuses[cliente.id] ?? 'pendente'}</span>
+              <span className="campaign-actions">
+                <a
+                  className="button"
+                  href={waUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => markStatus(cliente, 'pendente', finalMessage)}
+                >
+                  <MessageCircle size={16} /> Abrir
+                </a>
+                <button className="button" type="button" onClick={() => markStatus(cliente, 'enviado', finalMessage)}>
+                  Enviado
+                </button>
+                <button className="button" type="button" onClick={() => markStatus(cliente, 'respondeu', finalMessage)}>
+                  Respondeu
+                </button>
+                <button className="button" type="button" onClick={() => markStatus(cliente, 'nao_respondeu', finalMessage)}>
+                  Sem resposta
+                </button>
+                <button className="button" type="button" onClick={() => markStatus(cliente, 'virou_orcamento', finalMessage)}>
+                  Orcamento
+                </button>
+              </span>
+            </div>
+          )
+        })}
+        {filteredClientes.length === 0 && <div className="empty-state">Nenhum cliente neste status de campanha.</div>}
+      </div>
+    </section>
+  )
+}
+
+function campaignSummary(status: CampanhaEnvioStatus, mensagem: string) {
+  const labels: Record<CampanhaEnvioStatus, string> = {
+    pendente: 'WhatsApp aberto com mensagem de campanha.',
+    enviado: 'Mensagem de campanha marcada como enviada.',
+    respondeu: 'Cliente respondeu a campanha.',
+    nao_respondeu: 'Cliente nao respondeu a campanha.',
+    virou_orcamento: 'Campanha virou oportunidade de orcamento.',
+  }
+  return `${labels[status]} Mensagem: ${mensagem}`
+}
+
+function Orcamentos({
+  clientes,
+  orcamentos,
+  usuarios,
+  onStatusChange,
+}: {
+  clientes: Cliente[]
+  orcamentos: Orcamento[]
+  usuarios: Vendedor[]
+  onStatusChange: (id: string, status: Orcamento['status'], motivoPerda?: string) => void
+}) {
+  const [lossReasons, setLossReasons] = useState<Record<string, string>>({})
+  const [statusFilter, setStatusFilter] = useState<Orcamento['status'] | 'todos' | 'vencidos'>('todos')
+  const openStatuses: Orcamento['status'][] = ['aberto', 'enviado', 'negociando']
+  const filteredOrcamentos = orcamentos.filter((orcamento) => {
+    if (statusFilter === 'todos') return true
+    if (statusFilter === 'vencidos') return openStatuses.includes(orcamento.status) && daysSince(orcamento.validade) > 0
+    return orcamento.status === statusFilter
+  })
+  const valorAberto = orcamentos
+    .filter((orcamento) => openStatuses.includes(orcamento.status))
+    .reduce((total, orcamento) => total + orcamento.valorTotal, 0)
+  const vencidos = orcamentos.filter((orcamento) => openStatuses.includes(orcamento.status) && daysSince(orcamento.validade) > 0).length
+  const negociando = orcamentos.filter((orcamento) => orcamento.status === 'negociando').length
+  const ganhos = orcamentos.filter((orcamento) => orcamento.status === 'ganho').length
+
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Orcamentos abertos</h2>
+          <p>Status, validade, previsao de fechamento e motivo de perda ficam centralizados.</p>
+        </div>
+        <div className="toolbar-actions">
+          <label className="mini-select">
+            <Filter size={15} />
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Orcamento['status'] | 'todos' | 'vencidos')}>
+              <option value="todos">Todos os status</option>
+              <option value="aberto">Abertos</option>
+              <option value="enviado">Enviados</option>
+              <option value="negociando">Negociando</option>
+              <option value="ganho">Ganhos</option>
+              <option value="perdido">Perdidos</option>
+              <option value="vencidos">Vencidos</option>
+            </select>
+          </label>
+          <WalletCards size={18} />
+        </div>
+      </div>
+      <div className="info-grid budget-summary">
+        <Info label="Pipeline aberto" value={money(valorAberto)} />
+        <Info label="Vencidos" value={vencidos.toString()} />
+        <Info label="Negociando" value={negociando.toString()} />
+        <Info label="Ganhos" value={ganhos.toString()} />
+      </div>
+      <div className="table">
+        <div className="table-head five">
+          <span>Cliente</span>
+          <span>Status</span>
+          <span>Valor</span>
+          <span>Validade</span>
+          <span>Vendedor</span>
+        </div>
+        {filteredOrcamentos.map((orcamento) => {
+          const cliente = clientes.find((item) => item.id === orcamento.clienteId)
+          const vendedor = usuarios.find((item) => item.id === orcamento.vendedorId)
+          const isExpired = openStatuses.includes(orcamento.status) && daysSince(orcamento.validade) > 0
+          return (
+            <div className={isExpired ? 'table-row five expired-budget' : 'table-row five'} key={orcamento.id}>
+              <span><strong>{cliente?.nome}</strong></span>
+              <span>
+                <span className={isExpired ? 'status-pill danger' : 'status-pill'}>{isExpired ? 'vencido' : orcamento.status}</span>
+              </span>
+              <span>
+                <strong>{money(orcamento.valorTotal)}</strong>
+                <small>{orcamento.itens?.length ?? 0} itens</small>
+              </span>
+              <span>
+                <strong>{dateLabel(orcamento.validade)}</strong>
+                {isExpired && <small>Follow-up imediato</small>}
+              </span>
+              <span>
+                <strong>{vendedor?.nome}</strong>
+                <div className="budget-status-actions">
+                  {orcamento.status === 'enviado' && (
+                    <button className="button" type="button" onClick={() => onStatusChange(orcamento.id, 'negociando')}>
+                      Negociando
+                    </button>
+                  )}
+                  <button className="button" type="button" onClick={() => onStatusChange(orcamento.id, 'enviado')}>
+                    Enviado
+                  </button>
+                  <button className="button" type="button" onClick={() => onStatusChange(orcamento.id, 'ganho')}>
+                    Ganho
+                  </button>
+                  <select
+                    className="assign-select"
+                    value={lossReasons[orcamento.id] ?? ''}
+                    onChange={(event) => setLossReasons({ ...lossReasons, [orcamento.id]: event.target.value })}
+                  >
+                    <option value="">Motivo perda</option>
+                    <option value="preco">Preco</option>
+                    <option value="prazo">Prazo</option>
+                    <option value="concorrente">Concorrente</option>
+                    <option value="sem_estoque">Sem estoque</option>
+                    <option value="nao_respondeu">Nao respondeu</option>
+                  </select>
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => onStatusChange(orcamento.id, 'perdido', lossReasons[orcamento.id] || 'outro')}
+                  >
+                    Perdido
+                  </button>
+                </div>
+              </span>
+            </div>
+          )
+        })}
+        {filteredOrcamentos.length === 0 && <div className="empty-state">Nenhum orcamento nesta visao.</div>}
+      </div>
+    </section>
+  )
+}
+
+function Relatorios({
+  clientes,
+  interacoes,
+  orcamentos,
+  importacoes,
+  conflitos,
+  usuarios,
+  tarefas,
+  oportunidades,
+  vendasItens,
+  servicosItens,
+}: {
+  clientes: Cliente[]
+  interacoes: Interacao[]
+  orcamentos: Orcamento[]
+  importacoes: Importacao[]
+  conflitos: ImportacaoConflito[]
+  usuarios: Vendedor[]
+  tarefas: Tarefa[]
+  oportunidades: Oportunidade[]
+  vendasItens: VendaItem[]
+  servicosItens: ServicoItem[]
+}) {
+  const orcamentosGanhos = orcamentos.filter((orcamento) => orcamento.status === 'ganho').length
+  const taxaConversao = orcamentos.length ? Math.round((orcamentosGanhos / orcamentos.length) * 100) : 0
+  const valorAberto = orcamentos
+    .filter((orcamento) => ['aberto', 'enviado', 'negociando'].includes(orcamento.status))
+    .reduce((total, orcamento) => total + orcamento.valorTotal, 0)
+  const clientesRisco = clientes.filter((cliente) => daysSince(cliente.ultimaCompraEm) > 180).length
+  const conflitosPendentes = conflitos.filter((conflito) => !conflito.resolvido).length
+  const tarefasVencidas = tarefas.filter((tarefa) => tarefa.status === 'aberta' && daysSince(tarefa.dataVencimento) > 0).length
+  const oportunidadesBloqueadas = oportunidades.filter((oportunidade) => oportunidade.bloqueada).length
+  const medidas = rankBy(vendasItens, (venda) => venda.medida ?? venda.produtoNome)
+  const servicos = rankBy(servicosItens, (servico) => servico.servicoNome)
+
+  const vendedorRows = usuarios
+    .filter((vendedor) => vendedor.role !== 'operacao')
+    .map((vendedor) => {
+      const clientesVendedor = clientes.filter((cliente) => cliente.vendedorId === vendedor.id)
+      const contatos = interacoes.filter((interacao) => interacao.vendedorId === vendedor.id)
+      const clientesEmRisco = clientesVendedor.filter((cliente) => daysSince(cliente.ultimaCompraEm) > 180).length
+      const tarefasAtrasadas = tarefas.filter(
+        (tarefa) => tarefa.vendedorId === vendedor.id && tarefa.status === 'aberta' && daysSince(tarefa.dataVencimento) > 0,
+      ).length
+      const pipeline = orcamentos
+        .filter((orcamento) => orcamento.vendedorId === vendedor.id)
+        .reduce((total, orcamento) => total + orcamento.valorTotal, 0)
+      const coberturaContato = clientesVendedor.length
+        ? Math.round((clientesVendedor.filter((cliente) => daysSince(cliente.ultimoContatoEm) <= 60).length / clientesVendedor.length) * 100)
+        : 0
+      const saude = Math.max(0, Math.min(100, coberturaContato - tarefasAtrasadas * 8 - clientesEmRisco * 5))
+
+      return {
+        vendedor: vendedor.nome,
+        clientes: clientesVendedor.length,
+        contatos: contatos.length,
+        clientesEmRisco,
+        tarefasAtrasadas,
+        pipeline,
+        saude,
+      }
+    })
+    .sort((a, b) => a.saude - b.saude)
+  const planoGerencial = [
+    tarefasVencidas > 0 ? `Revisar ${tarefasVencidas} tarefas vencidas antes de novas campanhas.` : '',
+    conflitosPendentes > 0 ? `Resolver ${conflitosPendentes} conflitos de importacao pendentes.` : '',
+    clientesRisco > 0 ? `Priorizar contato com ${clientesRisco} clientes sem compra ha mais de 180 dias.` : '',
+    oportunidadesBloqueadas > 0 ? `Desbloquear ${oportunidadesBloqueadas} oportunidades impedidas por status ou falta de dados.` : '',
+  ].filter(Boolean)
+
+  return (
+    <section className="grid-layout">
+      <div className="metric-grid">
+        <Metric icon={WalletCards} label="Pipeline aberto" value={money(valorAberto)} tone="blue" />
+        <Metric icon={CheckCircle2} label="Conversao orcamentos" value={`${taxaConversao}%`} tone="green" />
+        <Metric icon={AlertTriangle} label="Clientes em risco" value={clientesRisco.toString()} tone="red" />
+        <Metric icon={FileUp} label="Conflitos pendentes" value={conflitosPendentes.toString()} tone="amber" />
+        <Metric icon={CalendarClock} label="Tarefas vencidas" value={tarefasVencidas.toString()} tone="red" />
+        <Metric icon={ShieldCheck} label="Oport. bloqueadas" value={oportunidadesBloqueadas.toString()} tone="blue" />
+      </div>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Produtividade comercial</h2>
+            <p>Resumo por vendedor para acompanhamento gerencial.</p>
+          </div>
+          <BarChart3 size={18} />
+        </div>
+        <div className="table">
+          <div className="table-head report">
+            <span>Vendedor</span>
+            <span>Clientes</span>
+            <span>Contatos</span>
+            <span>Risco</span>
+            <span>Atrasos</span>
+            <span>Pipeline</span>
+            <span>Saude</span>
+          </div>
+          {vendedorRows.map((row) => (
+            <div className="table-row report" key={row.vendedor}>
+              <span><strong>{row.vendedor}</strong></span>
+              <span>{row.clientes}</span>
+              <span>{row.contatos}</span>
+              <span>{row.clientesEmRisco}</span>
+              <span>{row.tarefasAtrasadas}</span>
+              <span>{money(row.pipeline)}</span>
+              <span className={row.saude >= 75 ? 'status-pill ok' : row.saude >= 45 ? 'status-pill warn' : 'status-pill danger'}>
+                {row.saude}%
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Plano gerencial</h2>
+            <p>Fila executiva gerada pelos indicadores atuais.</p>
+          </div>
+          <Gauge size={18} />
+        </div>
+        <div className="recommendation-list">
+          {(planoGerencial.length ? planoGerencial : ['Operacao sem gargalos criticos no momento.']).map((item) => (
+            <div key={item}>
+              <CheckCircle2 size={15} />
+              <span>{item}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Importacoes</h2>
+            <p>Volume processado e registros em revisao.</p>
+          </div>
+          <FileUp size={18} />
+        </div>
+        <div className="status-list">
+          <div className="status-row"><span>Arquivos registrados</span><strong>{importacoes.length}</strong></div>
+          <div className="status-row">
+            <span>Itens amostrados/processados</span>
+            <strong>{importacoes.reduce((total, importacao) => total + importacao.totalItens, 0)}</strong>
+          </div>
+          <div className="status-row">
+            <span>Clientes criados</span>
+            <strong>{importacoes.reduce((total, importacao) => total + importacao.clientesCriados, 0)}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Carteira</h2>
+            <p>Qualidade e cobertura dos dados comerciais.</p>
+          </div>
+          <UsersRound size={18} />
+        </div>
+        <div className="status-list">
+          <div className="status-row">
+            <span>Sem vendedor</span>
+            <strong>{clientes.filter((cliente) => !cliente.vendedorId).length}</strong>
+          </div>
+          <div className="status-row">
+            <span>Sem WhatsApp</span>
+            <strong>{clientes.filter((cliente) => !cliente.whatsapp).length}</strong>
+          </div>
+          <div className="status-row">
+            <span>Sem contato recente</span>
+            <strong>{clientes.filter((cliente) => daysSince(cliente.ultimoContatoEm) > 60).length}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Medidas mais vendidas</h2>
+            <p>Base para campanhas por recompra.</p>
+          </div>
+          <Truck size={18} />
+        </div>
+        <div className="status-list">
+          {medidas.slice(0, 5).map((item) => (
+            <div className="status-row" key={item.label}>
+              <span>{item.label}</span>
+              <strong>{item.count}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Servicos recorrentes</h2>
+            <p>Base para venda cruzada de pneus e manutencao.</p>
+          </div>
+          <ClipboardList size={18} />
+        </div>
+        <div className="status-list">
+          {servicos.slice(0, 5).map((item) => (
+            <div className="status-row" key={item.label}>
+              <span>{item.label}</span>
+              <strong>{item.count}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+    </section>
+  )
+}
+
+function rankBy<T>(items: T[], getLabel: (item: T) => string) {
+  const counts = new Map<string, number>()
+  items.forEach((item) => {
+    const label = getLabel(item) || 'Nao informado'
+    counts.set(label, (counts.get(label) ?? 0) + 1)
+  })
+
+  return [...counts.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count)
+}
+
+function Usuarios({
+  clientes,
+  usuarios,
+  onAssignClient,
+}: {
+  clientes: Cliente[]
+  usuarios: Vendedor[]
+  onAssignClient: (clienteId: string, vendedorId: string) => void
+}) {
+  const [activeUserId, setActiveUserId] = useState(usuarios[0]?.id ?? seedVendedores[0].id)
+  const activeUser = usuarios.find((vendedor) => vendedor.id === activeUserId) ?? usuarios[0] ?? seedVendedores[0]
+  const clientesSemVendedor = clientes.filter((cliente) => !cliente.vendedorId)
+  const vendedores = usuarios.filter((usuario) => usuario.role === 'vendedor')
+  const cargaVendedores = vendedores
+    .map((vendedor) => {
+      const carteira = clientes.filter((cliente) => cliente.vendedorId === vendedor.id)
+      const risco = carteira.filter((cliente) => daysSince(cliente.ultimaCompraEm) > 180).length
+      return {
+        ...vendedor,
+        carteira: carteira.length,
+        risco,
+      }
+    })
+    .sort((a, b) => a.carteira - b.carteira || a.risco - b.risco)
+  const vendedorSugerido = cargaVendedores[0]
+
+  return (
+    <section className="grid-layout">
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Perfis de acesso</h2>
+            <p>Base preparada para Supabase Auth, RLS e permissao por carteira.</p>
+          </div>
+          <ShieldCheck size={18} />
+        </div>
+        <div className="user-grid">
+          {usuarios.map((usuario) => {
+            const carteira = clientes.filter((cliente) => cliente.vendedorId === usuario.id)
+
+            return (
+              <button
+                className={activeUserId === usuario.id ? 'user-card active' : 'user-card'}
+                key={usuario.id}
+                onClick={() => setActiveUserId(usuario.id)}
+                type="button"
+              >
+                <span className="avatar">{usuario.nome.slice(0, 1)}</span>
+                <strong>{usuario.nome}</strong>
+                <small>{usuario.email}</small>
+                <span className="status-pill">{usuario.role}</span>
+                <span>{carteira.length} clientes na carteira</span>
+              </button>
+            )
+          })}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Permissoes do perfil</h2>
+            <p>{activeUser.nome}</p>
+          </div>
+          <UserRound size={18} />
+        </div>
+        <div className="permission-list">
+          {permissionsFor(activeUser.role).map((permission) => (
+            <div className="permission-row" key={permission.label}>
+              <CheckCircle2 size={16} />
+              <span>
+                <strong>{permission.label}</strong>
+                <small>{permission.description}</small>
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Carteira atribuida</h2>
+            <p>Clientes visiveis para o usuario selecionado.</p>
+          </div>
+          <UsersRound size={18} />
+        </div>
+        <div className="status-list">
+          {clientes
+            .filter((cliente) => cliente.vendedorId === activeUser.id)
+            .map((cliente) => (
+              <div className="status-row" key={cliente.id}>
+                <span>{cliente.nome}</span>
+                <strong>{cliente.status}</strong>
+              </div>
+            ))}
+          {clientes.filter((cliente) => cliente.vendedorId === activeUser.id).length === 0 && (
+            <div className="status-row">
+              <span>Nenhum cliente atribuido</span>
+              <strong>0</strong>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Distribuicao pendente</h2>
+            <p>{clientesSemVendedor.length} clientes sem responsavel comercial.</p>
+          </div>
+          <ClipboardList size={18} />
+        </div>
+        <div className="assignment-advice">
+          <div>
+            <strong>{vendedorSugerido ? `Sugerido: ${vendedorSugerido.nome}` : 'Sem vendedor disponivel'}</strong>
+            <span>
+              {vendedorSugerido
+                ? `${vendedorSugerido.carteira} clientes na carteira e ${vendedorSugerido.risco} em risco.`
+                : 'Cadastre um vendedor antes de distribuir clientes.'}
+            </span>
+          </div>
+          <div className="status-list compact-status">
+            {cargaVendedores.map((vendedor) => (
+              <div className="status-row" key={vendedor.id}>
+                <span>{vendedor.nome}</span>
+                <strong>{vendedor.carteira} carteira</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="table">
+          <div className="table-head assign">
+            <span>Cliente</span>
+            <span>Cidade</span>
+            <span>Tipo</span>
+            <span>Vendedor</span>
+          </div>
+          {clientesSemVendedor.map((cliente) => (
+            <div className="table-row assign" key={cliente.id}>
+              <span><strong>{cliente.nome}</strong></span>
+              <span>{cliente.cidade}/{cliente.uf}</span>
+              <span>{cliente.tipoCliente}</span>
+              <span>
+                <select
+                  className="assign-select"
+                  defaultValue=""
+                  onChange={(event) => {
+                    if (event.target.value) onAssignClient(cliente.id, event.target.value)
+                  }}
+                >
+                  <option value="">Selecionar</option>
+                  {usuarios
+                    .filter((vendedor) => vendedor.role === 'vendedor')
+                    .map((vendedor) => (
+                      <option key={vendedor.id} value={vendedor.id}>{vendedor.nome}</option>
+                    ))}
+                </select>
+              </span>
+            </div>
+          ))}
+          {clientesSemVendedor.length === 0 && (
+            <div className="empty-state">Todos os clientes demonstrativos ja possuem vendedor responsavel.</div>
+          )}
+        </div>
+      </section>
+    </section>
+  )
+}
+
+function Auditoria({ alteracoes }: { alteracoes: ClienteAlteracao[] }) {
+  const [field, setField] = useState('todos')
+  const fields = ['todos', ...Array.from(new Set(alteracoes.map((alteracao) => alteracao.campo)))]
+  const filtered = field === 'todos' ? alteracoes : alteracoes.filter((alteracao) => alteracao.campo === field)
+
+  return (
+    <section className="grid-layout">
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Alteracoes sensiveis</h2>
+            <p>Telefone, WhatsApp, responsavel, vendedor e status ficam registrados para LGPD e gestao.</p>
+          </div>
+          <select className="assign-select audit-filter" value={field} onChange={(event) => setField(event.target.value)}>
+            {fields.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </div>
+        <div className="table">
+          <div className="table-head audit">
+            <span>Data</span>
+            <span>Cliente</span>
+            <span>Campo</span>
+            <span>Antes</span>
+            <span>Depois</span>
+            <span>Usuario</span>
+          </div>
+          {filtered.map((alteracao) => (
+            <div className="table-row audit" key={alteracao.id}>
+              <span>{dateLabel(alteracao.criadoEm)}</span>
+              <span><strong>{alteracao.clienteNome}</strong><small>{alteracao.origem}</small></span>
+              <span>{alteracao.campo}</span>
+              <span>{alteracao.valorAnterior || 'Vazio'}</span>
+              <span>{alteracao.valorNovo || 'Vazio'}</span>
+              <span>{alteracao.usuarioNome}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+    </section>
+  )
+}
+
+function permissionsFor(role: string) {
+  if (role === 'admin') {
+    return [
+      { label: 'Ver todos os clientes', description: 'Acesso gerencial a toda a base.' },
+      { label: 'Importar arquivos', description: 'Pode registrar XML, planilha semanal e conflitos.' },
+      { label: 'Distribuir carteira', description: 'Pode alterar vendedor responsavel.' },
+      { label: 'Gerenciar campanhas', description: 'Pode criar campanhas e acompanhar envios.' },
+    ]
+  }
+
+  return [
+    { label: 'Ver propria carteira', description: 'Acesso limitado aos clientes atribuidos.' },
+    { label: 'Registrar contatos', description: 'Pode criar interacoes e proximas acoes.' },
+    { label: 'Criar orcamentos', description: 'Pode abrir e atualizar os proprios orcamentos.' },
+    { label: 'Usar WhatsApp', description: 'Pode abrir mensagens personalizadas via wa.me.' },
+  ]
+}
+
+function PriorityTable({
+  clientes,
+  onSelect,
+  showActions,
+}: {
+  clientes: Array<Cliente & { score?: number; motivo?: string; proximaMelhorAcao?: string }>
+  onSelect?: (cliente: Cliente) => void
+  showActions?: boolean
+}) {
+  return (
+    <div className="table">
+      <div className="table-head priority">
+        <span>Cliente</span>
+        <span>Motivo</span>
+        <span>Proxima acao</span>
+        <span>Score</span>
+        {showActions && <span>Acoes</span>}
+      </div>
+      {clientes.map((cliente) => (
+        <div className="table-row priority" key={cliente.id}>
+          <span>
+            <strong>{cliente.nome}</strong>
+            <small>{cliente.cidade}/{cliente.uf} · {cliente.produtoPrincipal ?? 'Sem produto principal'}</small>
+          </span>
+          <span>{cliente.motivo ?? opportunityReason(cliente, cliente.score ?? 0)}</span>
+          <span>{cliente.proximaMelhorAcao ?? bestNextAction(cliente)}</span>
+          <span className="score">{cliente.score ?? 0}</span>
+          {showActions && (
+            <span className="row-actions">
+              <button type="button" title="Abrir ficha" onClick={() => onSelect?.(cliente)}><UserRound size={16} /></button>
+              <a title="WhatsApp" href={cliente.whatsapp ? `https://wa.me/${cliente.whatsapp}` : '#'}><MessageCircle size={16} /></a>
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function Metric({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: typeof UsersRound
+  label: string
+  value: string
+  tone: string
+}) {
+  return (
+    <section className={`metric ${tone}`}>
+      <Icon size={20} />
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </section>
+  )
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="info">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  )
+}
+
+export default App
