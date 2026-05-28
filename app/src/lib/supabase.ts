@@ -6,12 +6,17 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undef
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
 
 let cachedClient: SupabaseClient | null = null
+let cachedClientPromise: Promise<SupabaseClient> | null = null
 
 export async function getSupabase() {
   if (!isSupabaseConfigured) return null
   if (cachedClient) return cachedClient
+  if (cachedClientPromise) return cachedClientPromise
 
-  const { createClient } = await import('@supabase/supabase-js')
-  cachedClient = createClient(supabaseUrl!, supabaseAnonKey!)
-  return cachedClient
+  cachedClientPromise = import('@supabase/supabase-js').then(({ createClient }) => {
+    cachedClient = createClient(supabaseUrl!, supabaseAnonKey!)
+    return cachedClient
+  })
+
+  return cachedClientPromise
 }

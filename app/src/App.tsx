@@ -188,6 +188,12 @@ function App() {
     let isMounted = true
 
     async function loadData() {
+      if (isCheckingSession) return
+      if (isSupabaseConfigured && !session) {
+        setUsuarios(authUsuarios)
+        return
+      }
+
       setIsLoadingData(true)
       setDataError('')
 
@@ -247,7 +253,7 @@ function App() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [isCheckingSession, session])
 
   const scopedClientes = useMemo(() => {
     if (!session || session.role === 'admin') return clientes
