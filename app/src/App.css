@@ -636,6 +636,21 @@ h3 {
   min-height: 560px;
 }
 
+.pagination-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 12px;
+  color: #5f6d69;
+  font-size: 13px;
+}
+
+.pagination-row .button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .client-card {
   position: sticky;
   top: 20px;

@@ -306,6 +306,7 @@ function App() {
     return haystack.includes(query.toLowerCase())
   })
   const carteiraClientes = filterClientes(scoredClientes, carteiraFiltro, scopedOrcamentos)
+  const hasActiveClientFilter = clienteFiltro !== 'todos' || Boolean(query.trim())
   const oportunidades = useMemo(() => buildOportunidades(scopedClientes, scopedOrcamentos), [scopedClientes, scopedOrcamentos])
 
   if (isCheckingSession) {
@@ -384,8 +385,13 @@ function App() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar cliente, cidade, tag"
+              placeholder="Buscar cliente, cidade, vendedor, origem"
             />
+            {query && (
+              <button className="icon-button" type="button" onClick={() => setQuery('')} title="Limpar busca">
+                x
+              </button>
+            )}
           </div>
         </header>
 
@@ -394,7 +400,20 @@ function App() {
             {isSupabaseConfigured ? 'Supabase configurado' : 'Modo local com dados demonstrativos'}
             {' · '}
             {session.role === 'admin' ? `${clientes.length} clientes totais` : `${scopedClientes.length} clientes da sua carteira`}
+            {view === 'clientes' && hasActiveClientFilter ? ` · ${filteredClientes.length} visiveis com filtro` : ''}
           </span>
+          {view === 'clientes' && hasActiveClientFilter && (
+            <button
+              className="button"
+              type="button"
+              onClick={() => {
+                setQuery('')
+                setClienteFiltro('todos')
+              }}
+            >
+              Limpar filtros
+            </button>
+          )}
           {isLoadingData && <strong>Carregando...</strong>}
           {dataError && <strong>{dataError}</strong>}
         </div>
@@ -885,13 +904,23 @@ function Clientes({
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
   onAddBudget: (orcamento: OrcamentoInput) => Promise<Orcamento>
 }) {
+  const pageSize = 50
+  const [page, setPage] = useState(1)
+  const totalPages = Math.max(1, Math.ceil(clientes.length / pageSize))
+  const safePage = Math.min(page, totalPages)
+  const visibleClientes = clientes.slice((safePage - 1) * pageSize, safePage * pageSize)
+
+  useEffect(() => {
+    setPage(1)
+  }, [clientes.length, filtro])
+
   return (
     <section className="client-layout">
       <div className="panel table-panel">
         <div className="panel-header">
           <div>
             <h2>Clientes</h2>
-            <p>{clientes.length} registros na visao atual.</p>
+            <p>{clientes.length} registros na visao atual. Exibindo {visibleClientes.length} por pagina.</p>
           </div>
           <FilterControl clientes={clientes} orcamentos={orcamentos} value={filtro} onChange={onFilterChange} />
         </div>
@@ -902,7 +931,7 @@ function Clientes({
             <span>Vendedor</span>
             <span>Score</span>
           </div>
-          {clientes.map((cliente) => (
+          {visibleClientes.map((cliente) => (
             <button className="table-row four clickable" key={cliente.id} onClick={() => onSelect(cliente)} type="button">
               <span>
                 <strong>{cliente.nome}</strong>
@@ -913,6 +942,15 @@ function Clientes({
               <span className="score">{cliente.score}</span>
             </button>
           ))}
+        </div>
+        <div className="pagination-row">
+          <button className="button" type="button" disabled={safePage <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+            Anterior
+          </button>
+          <span>Pagina {safePage} de {totalPages}</span>
+          <button className="button" type="button" disabled={safePage >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>
+            Proxima
+          </button>
         </div>
       </div>
       <FichaCliente

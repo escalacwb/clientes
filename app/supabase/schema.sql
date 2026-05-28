@@ -191,6 +191,51 @@ create table public.orcamento_itens (
   observacao text
 );
 
+create table public.produtos (
+  id uuid primary key default gen_random_uuid(),
+  codigo text not null unique,
+  descricao text not null,
+  marca text,
+  modelo text,
+  medida text,
+  categoria text,
+  origem text,
+  ativo boolean not null default true,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+
+create table public.produto_aliases (
+  id uuid primary key default gen_random_uuid(),
+  produto_id uuid not null references public.produtos(id),
+  alias text not null,
+  origem text,
+  criado_em timestamptz not null default now(),
+  unique (produto_id, alias)
+);
+
+create table public.listas_preco (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null unique,
+  vigencia_inicio date,
+  vigencia_fim date,
+  ativo boolean not null default true,
+  criado_em timestamptz not null default now()
+);
+
+create table public.produto_precos (
+  id uuid primary key default gen_random_uuid(),
+  produto_id uuid not null references public.produtos(id),
+  lista_preco_id uuid not null references public.listas_preco(id),
+  valor numeric(14, 2) not null,
+  desconto_maximo numeric(8, 2),
+  moeda text not null default 'BRL',
+  vigencia_inicio date,
+  vigencia_fim date,
+  criado_em timestamptz not null default now(),
+  unique (produto_id, lista_preco_id, vigencia_inicio)
+);
+
 create table public.campanhas (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
@@ -695,6 +740,10 @@ alter table public.interacoes enable row level security;
 alter table public.tarefas enable row level security;
 alter table public.orcamentos enable row level security;
 alter table public.orcamento_itens enable row level security;
+alter table public.produtos enable row level security;
+alter table public.produto_aliases enable row level security;
+alter table public.listas_preco enable row level security;
+alter table public.produto_precos enable row level security;
 alter table public.campanhas enable row level security;
 alter table public.campanha_envios enable row level security;
 alter table public.importacoes enable row level security;
@@ -871,6 +920,42 @@ with check (
       and o.vendedor_id = public.current_app_user_id()
   )
 );
+
+create policy produtos_read_authenticated
+on public.produtos for select
+using (auth.role() = 'authenticated');
+
+create policy produto_aliases_read_authenticated
+on public.produto_aliases for select
+using (auth.role() = 'authenticated');
+
+create policy listas_preco_read_authenticated
+on public.listas_preco for select
+using (auth.role() = 'authenticated');
+
+create policy produto_precos_read_authenticated
+on public.produto_precos for select
+using (auth.role() = 'authenticated');
+
+create policy admin_manage_produtos
+on public.produtos for all
+using (public.current_user_is_admin())
+with check (public.current_user_is_admin());
+
+create policy admin_manage_produto_aliases
+on public.produto_aliases for all
+using (public.current_user_is_admin())
+with check (public.current_user_is_admin());
+
+create policy admin_manage_listas_preco
+on public.listas_preco for all
+using (public.current_user_is_admin())
+with check (public.current_user_is_admin());
+
+create policy admin_manage_produto_precos
+on public.produto_precos for all
+using (public.current_user_is_admin())
+with check (public.current_user_is_admin());
 
 create policy campanha_envios_read_own_or_admin
 on public.campanha_envios for select

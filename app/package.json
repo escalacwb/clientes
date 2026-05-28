@@ -17,6 +17,7 @@
     "dry-run:workbook": "node scripts/import-workbook-dry-run.mjs ../sell_out_final_com_vendas_e_servicos.xlsx",
     "export:workbook-json": "node scripts/export-workbook-json.mjs ../sell_out_final_com_vendas_e_servicos.xlsx",
     "import:workbook:supabase": "node scripts/import-workbook-to-supabase.mjs ../sell_out_final_com_vendas_e_servicos.xlsx",
+    "import:catalog:supabase": "node scripts/import-catalog-to-supabase.mjs",
     "supabase:create-auth-users": "node scripts/create-supabase-auth-users.mjs",
     "supabase:test-login": "node scripts/test-app-supabase-login.mjs",
     "inspect:xml": "node scripts/inspect-xml.mjs"
