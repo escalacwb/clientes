@@ -351,6 +351,29 @@ Prioridade: media.
 5. Criar automacao de follow-up de orcamento.
 6. Criar relatorio por vendedor com atividades e propostas.
 
+## Execucao da queue
+
+### 2026-05-28 - Clientes paginados
+
+Status: concluido.
+
+Entregue:
+- `listClientesPage` passou a aplicar `range` e `count` no Supabase.
+- Tela Clientes passou a carregar 50 registros por pagina.
+- Busca global na tela Clientes agora consulta o Supabase e volta para a pagina 1.
+- Filtros principais de clientes foram traduzidos para query no banco: origem, acao hoje, sem compra, sem contato, sem WhatsApp, sem vendedor, orcamento aberto e alto potencial.
+- Banner da tela usa total vindo do banco, nao o tamanho da pagina carregada.
+
+Validacao local:
+- Login como Wagner Fonseca.
+- Clientes carregou pagina 1 com 50 registros.
+- Botao Proxima carregou pagina 2.
+- Busca por `SANTA` retornou 137 clientes em 3 paginas.
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Criar agregados/views para Dashboard, Carteira, Campanhas e Relatorios, porque essas telas ainda usam a pagina atual de clientes quando o app esta em modo paginado.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

@@ -53,7 +53,7 @@ import { listClienteAlteracoes } from './repositories/auditoriaRepository'
 import { upsertCampanhaEnvio } from './repositories/campanhasRepository'
 import { listCatalogoItens } from './repositories/catalogoRepository'
 import { assignClienteVendedor } from './repositories/clientesRepository'
-import { listClientes } from './repositories/clientesRepository'
+import { listClientesPage } from './repositories/clientesRepository'
 import { updateClienteComercial } from './repositories/clientesRepository'
 import { listConflitos, resolveConflito } from './repositories/conflitosRepository'
 import { listClienteServicosItens, listClienteVendasItens } from './repositories/historicoRepository'
@@ -135,10 +135,13 @@ const authUsuarios: Vendedor[] = [
 ]
 
 function App() {
+  const clientePageSize = 50
   const [session, setSession] = useState<SessaoUsuario | null>(null)
   const [isCheckingSession, setIsCheckingSession] = useState(true)
   const [view, setView] = useState(() => localStorage.getItem('capital-crm:last-view') ?? 'dashboard')
   const [clientes, setClientes] = useState<Cliente[]>(isSupabaseConfigured ? [] : seedClientes)
+  const [clientesTotal, setClientesTotal] = useState(isSupabaseConfigured ? 0 : seedClientes.length)
+  const [clientesPage, setClientesPage] = useState(1)
   const [selectedClientId, setSelectedClientId] = useState(isSupabaseConfigured ? '' : seedClientes[0].id)
   const [query, setQuery] = useState('')
   const [clienteFiltro, setClienteFiltro] = useState<CarteiraFiltro>(
@@ -161,6 +164,7 @@ function App() {
   const [catalogo, setCatalogo] = useState<CatalogoItem[]>([])
   const [isLoadingData, setIsLoadingData] = useState(isSupabaseConfigured)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [isLoadingClientes, setIsLoadingClientes] = useState(isSupabaseConfigured)
   const [dataError, setDataError] = useState('')
 
   useEffect(() => {
@@ -206,7 +210,6 @@ function App() {
 
       try {
         const [
-          loadedClientes,
           loadedInteracoes,
           loadedOrcamentos,
           loadedImportacoes,
@@ -218,7 +221,6 @@ function App() {
           loadedMesclagens,
           loadedCatalogo,
         ] = await Promise.all([
-          listClientes(),
           listInteracoes(),
           listOrcamentos(),
           listImportacoes(),
@@ -232,7 +234,6 @@ function App() {
         ])
 
         if (!isMounted) return
-        setClientes(loadedClientes)
         setInteracoes(loadedInteracoes)
         setOrcamentos(loadedOrcamentos)
         setImportacoes(loadedImportacoes)
@@ -243,7 +244,6 @@ function App() {
         setPossiveisDuplicados(loadedPossiveisDuplicados)
         setMesclagens(loadedMesclagens)
         setCatalogo(loadedCatalogo)
-        setSelectedClientId((current) => loadedClientes.some((cliente) => cliente.id === current) ? current : loadedClientes[0]?.id)
       } catch (exception) {
         if (!isMounted) return
         setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar os dados.')
@@ -258,6 +258,48 @@ function App() {
       isMounted = false
     }
   }, [isCheckingSession, session])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadClientes() {
+      if (isCheckingSession) return
+      if (isSupabaseConfigured && !session) {
+        setClientes([])
+        setClientesTotal(0)
+        setIsLoadingClientes(false)
+        return
+      }
+
+      setIsLoadingClientes(true)
+      try {
+        const result = await listClientesPage({
+          page: clientesPage,
+          pageSize: clientePageSize,
+          query,
+          filtro: clienteFiltro,
+          vendedorId: session?.role === 'vendedor' ? session.id : undefined,
+        })
+        if (!isMounted) return
+        setClientes(result.clientes)
+        setClientesTotal(result.total)
+        setSelectedClientId((current) =>
+          result.clientes.some((cliente) => cliente.id === current) ? current : result.clientes[0]?.id ?? '',
+        )
+      } catch (exception) {
+        if (isMounted) setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar os clientes.')
+      } finally {
+        if (isMounted) setIsLoadingClientes(false)
+      }
+    }
+
+    const handle = window.setTimeout(loadClientes, query.trim() ? 250 : 0)
+
+    return () => {
+      isMounted = false
+      window.clearTimeout(handle)
+    }
+  }, [clienteFiltro, clientesPage, isCheckingSession, query, session])
 
   useEffect(() => {
     let isMounted = true
@@ -335,10 +377,12 @@ function App() {
     [scopedClientes, scopedOrcamentos],
   )
 
-  const filteredClientes = filterClientes(scoredClientes, clienteFiltro, scopedOrcamentos).filter((cliente) => {
-    const haystack = `${cliente.nome} ${cliente.cidade} ${cliente.tipoCliente} ${cliente.vendedorNome ?? ''} ${origemLabel(cliente.origemBase)} ${cliente.tags.join(' ')}`.toLowerCase()
-    return haystack.includes(query.toLowerCase())
-  })
+  const filteredClientes = isSupabaseConfigured
+    ? scoredClientes
+    : filterClientes(scoredClientes, clienteFiltro, scopedOrcamentos).filter((cliente) => {
+        const haystack = `${cliente.nome} ${cliente.cidade} ${cliente.tipoCliente} ${cliente.vendedorNome ?? ''} ${origemLabel(cliente.origemBase)} ${cliente.tags.join(' ')}`.toLowerCase()
+        return haystack.includes(query.toLowerCase())
+      })
   const carteiraClientes = filterClientes(scoredClientes, carteiraFiltro, scopedOrcamentos)
   const hasActiveClientFilter = clienteFiltro !== 'todos' || Boolean(query.trim())
   const oportunidades = useMemo(() => buildOportunidades(scopedClientes, scopedOrcamentos), [scopedClientes, scopedOrcamentos])
@@ -359,7 +403,7 @@ function App() {
     }} />
   }
 
-  if (isSupabaseConfigured && isLoadingData && clientes.length === 0) {
+  if (isSupabaseConfigured && (isLoadingData || isLoadingClientes) && clientes.length === 0) {
     return (
       <main className="login-screen">
         <section className="login-panel">
@@ -379,7 +423,7 @@ function App() {
   }
 
   const visibleNav = nav.filter((item) => session.role === 'admin' || !adminOnlyViews.has(item.id))
-  const canUseScopedClientViews = session.role === 'admin' || scopedClientes.length > 0
+  const canUseScopedClientViews = session.role === 'admin' || isSupabaseConfigured || scopedClientes.length > 0
 
   return (
     <div className="app-shell">
@@ -437,11 +481,17 @@ function App() {
             <Search size={18} />
             <input
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value)
+                setClientesPage(1)
+              }}
               placeholder="Buscar cliente, cidade, vendedor, origem"
             />
             {query && (
-              <button className="icon-button" type="button" onClick={() => setQuery('')} title="Limpar busca">
+              <button className="icon-button" type="button" onClick={() => {
+                setQuery('')
+                setClientesPage(1)
+              }} title="Limpar busca">
                 x
               </button>
             )}
@@ -452,8 +502,8 @@ function App() {
           <span>
             {isSupabaseConfigured ? 'Supabase configurado' : 'Modo local com dados demonstrativos'}
             {' · '}
-            {session.role === 'admin' ? `${clientes.length} clientes totais` : `${scopedClientes.length} clientes da sua carteira`}
-            {view === 'clientes' && hasActiveClientFilter ? ` · ${filteredClientes.length} visiveis com filtro` : ''}
+            {session.role === 'admin' ? `${clientesTotal} clientes totais` : `${clientesTotal} clientes na sua visao`}
+            {view === 'clientes' && hasActiveClientFilter ? ` · ${clientesTotal} encontrados com filtro` : ''}
           </span>
           {view === 'clientes' && hasActiveClientFilter && (
             <button
@@ -462,12 +512,14 @@ function App() {
               onClick={() => {
                 setQuery('')
                 setClienteFiltro('todos')
+                setClientesPage(1)
               }}
             >
               Limpar filtros
             </button>
           )}
           {isLoadingData && <strong>Carregando...</strong>}
+          {isLoadingClientes && <strong>Carregando clientes...</strong>}
           {isLoadingHistory && <strong>Carregando historico do cliente...</strong>}
           {dataError && <strong>{dataError}</strong>}
         </div>
@@ -496,8 +548,16 @@ function App() {
             vendasItens={scopedVendasItens}
             servicosItens={scopedServicosItens}
             catalogo={catalogo}
+            page={clientesPage}
+            pageSize={clientePageSize}
+            total={clientesTotal}
+            isLoading={isLoadingClientes}
             filtro={clienteFiltro}
-            onFilterChange={setClienteFiltro}
+            onFilterChange={(nextFiltro) => {
+              setClienteFiltro(nextFiltro)
+              setClientesPage(1)
+            }}
+            onPageChange={setClientesPage}
             onSelect={(cliente) => setSelectedClientId(cliente.id)}
             onOpenFullProfile={(cliente) => {
               setSelectedClientId(cliente.id)
@@ -955,8 +1015,13 @@ function Clientes({
   vendasItens,
   servicosItens,
   catalogo,
+  page,
+  pageSize,
+  total,
+  isLoading,
   filtro,
   onFilterChange,
+  onPageChange,
   onSelect,
   onOpenFullProfile,
   onUpdateClient,
@@ -970,23 +1035,22 @@ function Clientes({
   vendasItens: VendaItem[]
   servicosItens: ServicoItem[]
   catalogo: CatalogoItem[]
+  page: number
+  pageSize: number
+  total: number
+  isLoading: boolean
   filtro: CarteiraFiltro
   onFilterChange: (filtro: CarteiraFiltro) => void
+  onPageChange: (page: number) => void
   onSelect: (cliente: Cliente) => void
   onOpenFullProfile: (cliente: Cliente) => void
   onUpdateClient: (clienteId: string, patch: Partial<Cliente>) => void
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
   onAddBudget: (orcamento: OrcamentoInput) => Promise<Orcamento>
 }) {
-  const pageSize = 50
-  const [page, setPage] = useState(1)
-  const totalPages = Math.max(1, Math.ceil(clientes.length / pageSize))
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const safePage = Math.min(page, totalPages)
-  const visibleClientes = clientes.slice((safePage - 1) * pageSize, safePage * pageSize)
-
-  useEffect(() => {
-    setPage(1)
-  }, [clientes.length, filtro])
+  const visibleClientes = clientes
 
   return (
     <section className="client-layout">
@@ -994,7 +1058,7 @@ function Clientes({
         <div className="panel-header">
           <div>
             <h2>Clientes</h2>
-            <p>{clientes.length} registros na visao atual. Exibindo {visibleClientes.length} por pagina.</p>
+            <p>{total} registros encontrados. Exibindo ate {pageSize} por pagina.</p>
           </div>
           <FilterControl clientes={clientes} orcamentos={orcamentos} value={filtro} onChange={onFilterChange} />
         </div>
@@ -1017,28 +1081,36 @@ function Clientes({
             </button>
           ))}
         </div>
+        {isLoading && <div className="empty-state compact">Carregando pagina de clientes...</div>}
+        {!isLoading && visibleClientes.length === 0 && <div className="empty-state">Nenhum cliente encontrado nesta visao.</div>}
         <div className="pagination-row">
-          <button className="button" type="button" disabled={safePage <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+          <button className="button" type="button" disabled={safePage <= 1 || isLoading} onClick={() => onPageChange(Math.max(1, safePage - 1))}>
             Anterior
           </button>
           <span>Pagina {safePage} de {totalPages}</span>
-          <button className="button" type="button" disabled={safePage >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>
+          <button className="button" type="button" disabled={safePage >= totalPages || isLoading} onClick={() => onPageChange(Math.min(totalPages, safePage + 1))}>
             Proxima
           </button>
         </div>
       </div>
-      <FichaCliente
-        cliente={selectedClient}
-        interacoes={interacoes}
-        orcamentos={orcamentos}
-        vendasItens={vendasItens}
-        servicosItens={servicosItens}
-        catalogo={catalogo}
-        onOpenFullProfile={() => onOpenFullProfile(selectedClient)}
-        onUpdateClient={onUpdateClient}
-        onAddInteraction={onAddInteraction}
-        onAddBudget={onAddBudget}
-      />
+      {visibleClientes.length > 0 ? (
+        <FichaCliente
+          cliente={selectedClient}
+          interacoes={interacoes}
+          orcamentos={orcamentos}
+          vendasItens={vendasItens}
+          servicosItens={servicosItens}
+          catalogo={catalogo}
+          onOpenFullProfile={() => onOpenFullProfile(selectedClient)}
+          onUpdateClient={onUpdateClient}
+          onAddInteraction={onAddInteraction}
+          onAddBudget={onAddBudget}
+        />
+      ) : (
+        <aside className="panel client-card">
+          <div className="empty-state">Selecione outro filtro ou busca para abrir a ficha do cliente.</div>
+        </aside>
+      )}
     </section>
   )
 }

@@ -1,6 +1,6 @@
 import { clientes as mockClientes } from '../data/mockData'
 import { getSupabase } from '../lib/supabase'
-import type { Cliente } from '../types'
+import type { CarteiraFiltro, Cliente } from '../types'
 
 type ClienteRow = {
   id: string
@@ -33,6 +33,15 @@ type ClienteRow = {
   users?: { nome: string | null } | null
 }
 
+interface ClienteQueryBuilder {
+  not: (column: string, operator: string, value: unknown) => this
+  lte: (column: string, value: unknown) => this
+  or: (filters: string) => this
+  is: (column: string, value: unknown) => this
+  in: (column: string, values: unknown[]) => this
+  gte: (column: string, value: unknown) => this
+}
+
 export async function listClientes(): Promise<Cliente[]> {
   const supabase = await getSupabase()
   if (!supabase) return mockClientes
@@ -54,6 +63,7 @@ export async function listClientesPage(input: {
   pageSize: number
   query?: string
   origemBase?: Cliente['origemBase'] | 'todos'
+  filtro?: CarteiraFiltro
   vendedorId?: string
 }): Promise<{ clientes: Cliente[]; total: number }> {
   const supabase = await getSupabase()
@@ -72,8 +82,10 @@ export async function listClientesPage(input: {
     .select('*,users(nome)', { count: 'exact' })
     .is('excluido_em', null)
 
-  if (input.origemBase && input.origemBase !== 'todos') query = query.eq('origem_base', input.origemBase)
+  const origemBase = input.origemBase ?? origemBaseFromFiltro(input.filtro)
+  if (origemBase && origemBase !== 'todos') query = query.eq('origem_base', origemBase)
   if (input.vendedorId) query = query.eq('vendedor_id', input.vendedorId)
+  query = applyClienteFiltro(query, input.filtro)
   if (input.query?.trim()) {
     const term = `%${input.query.trim()}%`
     query = query.or(`nome.ilike.${term},cidade.ilike.${term},cpf_cnpj.ilike.${term},codigo_erp.ilike.${term}`)
@@ -190,10 +202,46 @@ async function fetchAllPages<T>(
   }
 }
 
-function filterMockClientes(clientes: Cliente[], input: { query?: string; origemBase?: Cliente['origemBase'] | 'todos'; vendedorId?: string }) {
+function origemBaseFromFiltro(filtro?: CarteiraFiltro): Cliente['origemBase'] | 'todos' | undefined {
+  if (filtro === 'origem-capital') return 'capital_truck'
+  if (filtro === 'origem-rodobens') return 'rodobens'
+  if (filtro === 'origem-desconhecida') return 'desconhecida'
+  return undefined
+}
+
+function applyClienteFiltro<T extends ClienteQueryBuilder>(query: T, filtro?: CarteiraFiltro): T {
+  const today = '2026-05-28'
+  const ninetyDaysAgo = '2026-02-27'
+  const sixtyDaysAgo = '2026-03-29'
+
+  switch (filtro) {
+    case 'acao-hoje':
+      return query.not('proxima_acao_em', 'is', null).lte('proxima_acao_em', today)
+    case 'sem-compra-90':
+      return query.or(`ultima_compra_em.is.null,ultima_compra_em.lt.${ninetyDaysAgo}`)
+    case 'sem-contato-60':
+      return query.or(`ultimo_contato_em.is.null,ultimo_contato_em.lt.${sixtyDaysAgo}`)
+    case 'sem-whatsapp':
+      return query.or('whatsapp_principal.is.null,whatsapp_principal.eq.')
+    case 'sem-vendedor':
+      return query.is('vendedor_id', null)
+    case 'orcamento-aberto':
+      return query.in('status_comercial', ['orcamento_aberto'])
+    case 'alto-potencial':
+      return query.gte('score_oportunidade', 60)
+    default:
+      return query
+  }
+}
+
+function filterMockClientes(
+  clientes: Cliente[],
+  input: { query?: string; origemBase?: Cliente['origemBase'] | 'todos'; filtro?: CarteiraFiltro; vendedorId?: string },
+) {
   const term = input.query?.trim().toLowerCase()
   return clientes.filter((cliente) => {
-    if (input.origemBase && input.origemBase !== 'todos' && cliente.origemBase !== input.origemBase) return false
+    const origemBase = input.origemBase ?? origemBaseFromFiltro(input.filtro)
+    if (origemBase && origemBase !== 'todos' && cliente.origemBase !== origemBase) return false
     if (input.vendedorId && cliente.vendedorId !== input.vendedorId) return false
     if (!term) return true
     return `${cliente.nome} ${cliente.cidade} ${cliente.cpfCnpj ?? ''} ${cliente.codigoErp}`.toLowerCase().includes(term)
