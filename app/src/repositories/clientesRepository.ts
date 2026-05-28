@@ -49,6 +49,48 @@ export async function listClientes(): Promise<Cliente[]> {
   return data.map(mapCliente)
 }
 
+export async function listClientesPage(input: {
+  page: number
+  pageSize: number
+  query?: string
+  origemBase?: Cliente['origemBase'] | 'todos'
+  vendedorId?: string
+}): Promise<{ clientes: Cliente[]; total: number }> {
+  const supabase = await getSupabase()
+  if (!supabase) {
+    const filtered = filterMockClientes(mockClientes, input)
+    return {
+      clientes: filtered.slice((input.page - 1) * input.pageSize, input.page * input.pageSize),
+      total: filtered.length,
+    }
+  }
+
+  const from = (input.page - 1) * input.pageSize
+  const to = from + input.pageSize - 1
+  let query = supabase
+    .from('clientes')
+    .select('*,users(nome)', { count: 'exact' })
+    .is('excluido_em', null)
+
+  if (input.origemBase && input.origemBase !== 'todos') query = query.eq('origem_base', input.origemBase)
+  if (input.vendedorId) query = query.eq('vendedor_id', input.vendedorId)
+  if (input.query?.trim()) {
+    const term = `%${input.query.trim()}%`
+    query = query.or(`nome.ilike.${term},cidade.ilike.${term},cpf_cnpj.ilike.${term},codigo_erp.ilike.${term}`)
+  }
+
+  const { data, error, count } = await query
+    .order('nome', { ascending: true })
+    .range(from, to)
+
+  if (error) throw error
+
+  return {
+    clientes: (data as ClienteRow[]).map(mapCliente),
+    total: count ?? 0,
+  }
+}
+
 export async function assignClienteVendedor(clienteId: string, vendedorId: string): Promise<void> {
   const supabase = await getSupabase()
   if (!supabase) return
@@ -146,4 +188,14 @@ async function fetchAllPages<T>(
     rows.push(...page)
     if (page.length < pageSize) return rows
   }
+}
+
+function filterMockClientes(clientes: Cliente[], input: { query?: string; origemBase?: Cliente['origemBase'] | 'todos'; vendedorId?: string }) {
+  const term = input.query?.trim().toLowerCase()
+  return clientes.filter((cliente) => {
+    if (input.origemBase && input.origemBase !== 'todos' && cliente.origemBase !== input.origemBase) return false
+    if (input.vendedorId && cliente.vendedorId !== input.vendedorId) return false
+    if (!term) return true
+    return `${cliente.nome} ${cliente.cidade} ${cliente.cpfCnpj ?? ''} ${cliente.codigoErp}`.toLowerCase().includes(term)
+  })
 }

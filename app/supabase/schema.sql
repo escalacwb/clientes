@@ -299,6 +299,9 @@ create table public.cliente_mesclagens (
 create index clientes_vendedor_idx on public.clientes(vendedor_id);
 create index clientes_cpf_cnpj_idx on public.clientes(cpf_cnpj);
 create index clientes_whatsapp_idx on public.clientes(whatsapp_principal);
+create index clientes_origem_base_idx on public.clientes(origem_base);
+create index clientes_nome_idx on public.clientes(nome);
+create index clientes_ultima_compra_idx on public.clientes(ultima_compra_em desc);
 create index vendas_cliente_data_idx on public.vendas_itens(cliente_id, data_venda desc);
 create index servicos_cliente_data_idx on public.servicos_itens(cliente_id, data_servico desc);
 create index interacoes_cliente_data_idx on public.interacoes(cliente_id, data_interacao desc);
