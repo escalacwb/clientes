@@ -40,30 +40,45 @@ export async function listVendasItens(): Promise<VendaItem[]> {
   const supabase = await getSupabase()
   if (!supabase) return mockVendas
 
-  const { data, error } = await supabase
-    .from('vendas_itens')
-    .select('*')
-    .order('data_venda', { ascending: false })
-    .limit(1000)
+  const data = await fetchAllPages<VendaRow>((from, to) =>
+    supabase
+      .from('vendas_itens')
+      .select('*')
+      .order('data_venda', { ascending: false })
+      .range(from, to),
+  )
 
-  if (error) throw error
-
-  return (data as VendaRow[]).map(mapVenda)
+  return data.map(mapVenda)
 }
 
 export async function listServicosItens(): Promise<ServicoItem[]> {
   const supabase = await getSupabase()
   if (!supabase) return mockServicos
 
-  const { data, error } = await supabase
-    .from('servicos_itens')
-    .select('*')
-    .order('data_servico', { ascending: false })
-    .limit(1000)
+  const data = await fetchAllPages<ServicoRow>((from, to) =>
+    supabase
+      .from('servicos_itens')
+      .select('*')
+      .order('data_servico', { ascending: false })
+      .range(from, to),
+  )
 
-  if (error) throw error
+  return data.map(mapServico)
+}
 
-  return (data as ServicoRow[]).map(mapServico)
+async function fetchAllPages<T>(
+  queryPage: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: unknown }>,
+): Promise<T[]> {
+  const pageSize = 1000
+  const rows: T[] = []
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await queryPage(from, from + pageSize - 1)
+    if (error) throw error
+    const page = (data ?? []) as T[]
+    rows.push(...page)
+    if (page.length < pageSize) return rows
+  }
 }
 
 function mapVenda(row: VendaRow): VendaItem {

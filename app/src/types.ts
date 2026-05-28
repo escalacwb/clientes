@@ -26,6 +26,8 @@ export type Cliente = {
   vendedorNome?: string
   status: ClienteStatus
   origem: string
+  origemBase?: 'capital_truck' | 'rodobens' | 'desconhecida'
+  origemDetalhe?: string
   primeiraCompraEm?: string
   ultimaCompraEm?: string
   ultimoServicoEm?: string
@@ -207,6 +209,9 @@ export type ServicoItem = {
 
 export type CarteiraFiltro =
   | 'todos'
+  | 'origem-capital'
+  | 'origem-rodobens'
+  | 'origem-desconhecida'
   | 'acao-hoje'
   | 'sem-compra-90'
   | 'sem-contato-60'

@@ -44,6 +44,8 @@ create table public.clientes (
   vendedor_id uuid references public.users(id),
   status_comercial cliente_status not null default 'novo',
   origem text,
+  origem_base text not null default 'desconhecida' check (origem_base in ('capital_truck', 'rodobens', 'desconhecida')),
+  origem_detalhe text,
   primeira_compra_em date,
   ultima_compra_em date,
   ultimo_servico_em date,

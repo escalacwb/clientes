@@ -15,8 +15,11 @@ type ClienteRow = {
   whatsapp_principal: string | null
   email: string | null
   responsavel_nome: string | null
+  vendedor_id: string | null
   status_comercial: string
   origem: string | null
+  origem_base: Cliente['origemBase'] | null
+  origem_detalhe: string | null
   primeira_compra_em: string | null
   ultima_compra_em: string | null
   ultimo_servico_em: string | null
@@ -27,21 +30,23 @@ type ClienteRow = {
   score_oportunidade: number | null
   tags: string[] | null
   observacoes_comerciais: string | null
+  users?: { nome: string | null } | null
 }
 
 export async function listClientes(): Promise<Cliente[]> {
   const supabase = await getSupabase()
   if (!supabase) return mockClientes
 
-  const { data, error } = await supabase
-    .from('clientes')
-    .select('*')
-    .is('excluido_em', null)
-    .order('nome', { ascending: true })
+  const data = await fetchAllPages<ClienteRow>((from, to) =>
+    supabase
+      .from('clientes')
+      .select('*,users(nome)')
+      .is('excluido_em', null)
+      .order('nome', { ascending: true })
+      .range(from, to),
+  )
 
-  if (error) throw error
-
-  return (data as ClienteRow[]).map(mapCliente)
+  return data.map(mapCliente)
 }
 
 export async function assignClienteVendedor(clienteId: string, vendedorId: string): Promise<void> {
@@ -110,8 +115,12 @@ function mapCliente(row: ClienteRow): Cliente {
     whatsapp: row.whatsapp_principal ?? undefined,
     email: row.email ?? undefined,
     responsavel: row.responsavel_nome ?? undefined,
+    vendedorId: row.vendedor_id ?? undefined,
+    vendedorNome: row.users?.nome ?? undefined,
     status: 'Novo',
     origem: row.origem ?? 'Supabase',
+    origemBase: row.origem_base ?? 'desconhecida',
+    origemDetalhe: row.origem_detalhe ?? undefined,
     primeiraCompraEm: row.primeira_compra_em ?? undefined,
     ultimaCompraEm: row.ultima_compra_em ?? undefined,
     ultimoServicoEm: row.ultimo_servico_em ?? undefined,
@@ -121,5 +130,20 @@ function mapCliente(row: ClienteRow): Cliente {
     totalServicos: row.total_servicos ?? 0,
     tags: row.tags ?? [],
     observacoes: row.observacoes_comerciais ?? undefined,
+  }
+}
+
+async function fetchAllPages<T>(
+  queryPage: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: unknown }>,
+): Promise<T[]> {
+  const pageSize = 1000
+  const rows: T[] = []
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await queryPage(from, from + pageSize - 1)
+    if (error) throw error
+    const page = (data ?? []) as T[]
+    rows.push(...page)
+    if (page.length < pageSize) return rows
   }
 }

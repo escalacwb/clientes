@@ -15,6 +15,8 @@ export function mapCliente(row) {
     bairro: text(row.Bairro),
     vendedor_nome: text(row['Vendedor cadastro']),
     tipo_cliente: text(row['Tipo de cliente cadastro']),
+    origem_base: inferOrigemBase(row),
+    origem_detalhe: joinOriginDetail(row),
     primeira_compra_em: toIsoDate(row['Primeira venda ERP']),
     ultima_compra_em: toIsoDate(row['Última venda ERP']),
     ultimo_servico_em: toIsoDate(row['Último serviço']),
@@ -45,6 +47,7 @@ export function mapVenda(row) {
     valor_unitario: number(row['Valor unitário']),
     valor_total: valorTotal,
     vendedor_nome: text(row['Vendedor ERP']),
+    unidade: text(row.Empresa || row.REVENDA),
     chave_unica: ['venda', nota, codigoCliente, produtoCodigo, data, quantidade, valorTotal].join('|'),
   }
 }
@@ -96,6 +99,33 @@ function inferTags(row) {
   if (servicos.includes('balance')) tags.push('Balanceamento')
   if (!normalizePhone(row['Telefone Cliente'])) tags.push('Contato incompleto')
   return tags
+}
+
+function inferOrigemBase(row) {
+  const haystack = [
+    row['Origem cliente'],
+    row['Status cliente'],
+    row.Empresa,
+    row.REVENDA,
+    row['Arquivo origem'],
+    row['Método do vínculo/observação'],
+    row['Observação do vínculo'],
+  ].map(text).join(' ').toLowerCase()
+
+  if (haystack.includes('rodobens')) return 'rodobens'
+  if (haystack.includes('capital truck') || haystack.includes('capital service') || haystack.includes('sell-out')) return 'capital_truck'
+  return 'desconhecida'
+}
+
+function joinOriginDetail(row) {
+  return [
+    row['Origem cliente'],
+    row['Status cliente'],
+    row.Empresa,
+    row.REVENDA,
+    row['Arquivo origem'],
+    row['Método do vínculo/observação'],
+  ].map(text).filter(Boolean).join(' | ')
 }
 
 function joinAddress(row) {

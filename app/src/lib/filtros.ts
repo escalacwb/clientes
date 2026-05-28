@@ -3,6 +3,9 @@ import type { CarteiraFiltro, Cliente, Orcamento } from '../types'
 
 export const carteiraFiltros: Array<{ id: CarteiraFiltro; label: string }> = [
   { id: 'todos', label: 'Todos' },
+  { id: 'origem-capital', label: 'Capital Truck' },
+  { id: 'origem-rodobens', label: 'Rodobens' },
+  { id: 'origem-desconhecida', label: 'Origem pendente' },
   { id: 'acao-hoje', label: 'Acao hoje' },
   { id: 'sem-compra-90', label: '+90 dias sem compra' },
   { id: 'sem-contato-60', label: '+60 dias sem contato' },
@@ -23,6 +26,12 @@ export function filterClientes<T extends Cliente>(
     )
 
     switch (filtro) {
+      case 'origem-capital':
+        return cliente.origemBase === 'capital_truck'
+      case 'origem-rodobens':
+        return cliente.origemBase === 'rodobens'
+      case 'origem-desconhecida':
+        return !cliente.origemBase || cliente.origemBase === 'desconhecida'
       case 'acao-hoje':
         return Boolean(cliente.proximaAcaoEm && daysSince(cliente.proximaAcaoEm) >= 0)
       case 'sem-compra-90':

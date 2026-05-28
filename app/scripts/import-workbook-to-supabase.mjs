@@ -146,6 +146,8 @@ async function upsertClientes(clienteRows, vendedores) {
       vendedor_id: vendedores.get(normalizeVendorName(cliente.vendedor_nome)) ?? null,
       status_comercial: inferStatus(cliente),
       origem: cliente.origem || 'base inicial',
+      origem_base: cliente.origem_base || 'desconhecida',
+      origem_detalhe: cliente.origem_detalhe || null,
       primeira_compra_em: cliente.primeira_compra_em || null,
       ultima_compra_em: cliente.ultima_compra_em || null,
       ultimo_servico_em: cliente.ultimo_servico_em || null,
@@ -202,6 +204,7 @@ async function upsertVendas(vendaRows, clienteIndex, importacaoId) {
     valor_unitario: venda.valor_unitario ?? 0,
     valor_total: venda.valor_total ?? 0,
     vendedor_nome: normalizeVendorName(venda.vendedor_nome) || null,
+    unidade: venda.unidade || null,
     importacao_id: importacaoId,
     chave_unica: venda.chave_unica,
   }))

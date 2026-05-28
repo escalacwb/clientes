@@ -302,7 +302,7 @@ function App() {
   )
 
   const filteredClientes = filterClientes(scoredClientes, clienteFiltro, scopedOrcamentos).filter((cliente) => {
-    const haystack = `${cliente.nome} ${cliente.cidade} ${cliente.tipoCliente} ${cliente.tags.join(' ')}`.toLowerCase()
+    const haystack = `${cliente.nome} ${cliente.cidade} ${cliente.tipoCliente} ${cliente.vendedorNome ?? ''} ${origemLabel(cliente.origemBase)} ${cliente.tags.join(' ')}`.toLowerCase()
     return haystack.includes(query.toLowerCase())
   })
   const carteiraClientes = filterClientes(scoredClientes, carteiraFiltro, scopedOrcamentos)
@@ -906,7 +906,7 @@ function Clientes({
             <button className="table-row four clickable" key={cliente.id} onClick={() => onSelect(cliente)} type="button">
               <span>
                 <strong>{cliente.nome}</strong>
-                <small>{cliente.tipoCliente}</small>
+                <small>{cliente.tipoCliente} · {origemLabel(cliente.origemBase)}</small>
               </span>
               <span>{cliente.cidade}/{cliente.uf}</span>
               <span>{cliente.vendedorNome ?? 'Sem vendedor'}</span>
@@ -1356,6 +1356,8 @@ function FichaCliente({
   const [showForm, setShowForm] = useState(false)
   const [showEditForm, setShowEditForm] = useState(false)
   const [showBudgetForm, setShowBudgetForm] = useState(false)
+  const [showFullProfile, setShowFullProfile] = useState(false)
+  const [historySeller, setHistorySeller] = useState('todos')
   const [formError, setFormError] = useState('')
   const [form, setForm] = useState({
     canal: 'WhatsApp',
@@ -1383,6 +1385,18 @@ function FichaCliente({
   const clienteOrcamentos = orcamentos.filter((orcamento) => orcamento.clienteId === cliente.id)
   const clienteVendas = vendasItens.filter((venda) => venda.clienteId === cliente.id)
   const clienteServicos = servicosItens.filter((servico) => servico.clienteId === cliente.id)
+  const historicalSellers = Array.from(new Set([
+    ...clienteVendas.map((venda) => venda.vendedorNome).filter(Boolean),
+    ...clienteServicos.map((servico) => servico.vendedorNome).filter(Boolean),
+  ] as string[])).sort((a, b) => a.localeCompare(b))
+  const filteredVendas = historySeller === 'todos'
+    ? clienteVendas
+    : clienteVendas.filter((venda) => venda.vendedorNome === historySeller)
+  const filteredServicos = historySeller === 'todos'
+    ? clienteServicos
+    : clienteServicos.filter((servico) => servico.vendedorNome === historySeller)
+  const totalHistorico = filteredVendas.reduce((total, venda) => total + venda.valorTotal, 0) +
+    filteredServicos.reduce((total, servico) => total + servico.valorTotal, 0)
   const openBudget = clienteOrcamentos.find((orcamento) => ['aberto', 'enviado', 'negociando'].includes(orcamento.status))
   const commercialAlerts = [
     openBudget ? `Orcamento ${openBudget.status} de ${money(openBudget.valorTotal)} com validade ${dateLabel(openBudget.validade)}.` : '',
@@ -1465,7 +1479,7 @@ function FichaCliente({
       <div className="client-hero">
         <span className="status-pill">{cliente.status}</span>
         <h2>{cliente.nome}</h2>
-        <p>{cliente.cidade}/{cliente.uf} · {cliente.tipoCliente}</p>
+        <p>{cliente.cidade}/{cliente.uf} · {cliente.tipoCliente} · {origemLabel(cliente.origemBase)}</p>
       </div>
 
       {formError && <div className="alert">{formError}</div>}
@@ -1504,6 +1518,9 @@ function FichaCliente({
         </button>
         <button className="button" type="button" onClick={() => setShowBudgetForm((current) => !current)}>
           <WalletCards size={16} /> Orcamento
+        </button>
+        <button className="button" type="button" onClick={() => setShowFullProfile((current) => !current)}>
+          <ClipboardList size={16} /> Ficha 360
         </button>
         <button className="button" type="button" onClick={() => {
           setEditForm({
@@ -1729,15 +1746,41 @@ function FichaCliente({
         <Info label="Ultimo servico" value={dateLabel(cliente.ultimoServicoEm)} />
         <Info label="Total comprado" value={money(cliente.totalComprado)} />
         <Info label="Servicos" value={money(cliente.totalServicos)} />
+        <Info label="Origem" value={origemLabel(cliente.origemBase)} />
+        <Info label="Vendedor" value={cliente.vendedorNome ?? 'Sem vendedor'} />
       </div>
 
       <div className="tags">
         {cliente.tags.map((tag) => <span key={tag}>{tag}</span>)}
       </div>
 
+      {showFullProfile && (
+        <div className="history-section">
+          <div className="panel-header compact">
+            <div>
+              <h3>Ficha 360</h3>
+              <p>{filteredVendas.length} vendas · {filteredServicos.length} servicos · {money(totalHistorico)}</p>
+            </div>
+            <label className="mini-select">
+              <UserRound size={15} />
+              <select value={historySeller} onChange={(event) => setHistorySeller(event.target.value)}>
+                <option value="todos">Todos vendedores</option>
+                {historicalSellers.map((seller) => <option key={seller} value={seller}>{seller}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="info-grid">
+            <Info label="CPF/CNPJ" value={cliente.cpfCnpj || 'Nao informado'} />
+            <Info label="Codigo ERP" value={cliente.codigoErp || 'Nao informado'} />
+            <Info label="Telefone" value={cliente.telefone || 'Nao informado'} />
+            <Info label="Email" value={cliente.email || 'Nao informado'} />
+          </div>
+        </div>
+      )}
+
       <div className="history-section">
-        <h3>Vendas</h3>
-        {clienteVendas.slice(0, 4).map((venda) => (
+        <h3>{showFullProfile ? 'Todas as vendas' : 'Vendas'}</h3>
+        {(showFullProfile ? filteredVendas : clienteVendas.slice(0, 4)).map((venda) => (
           <div className="history-row" key={venda.id}>
             <span>
               <strong>{venda.produtoNome}</strong>
@@ -1750,8 +1793,8 @@ function FichaCliente({
       </div>
 
       <div className="history-section">
-        <h3>Servicos</h3>
-        {clienteServicos.slice(0, 4).map((servico) => (
+        <h3>{showFullProfile ? 'Todos os servicos' : 'Servicos'}</h3>
+        {(showFullProfile ? filteredServicos : clienteServicos.slice(0, 4)).map((servico) => (
           <div className="history-row" key={servico.id}>
             <span>
               <strong>{servico.servicoNome}</strong>
@@ -1789,6 +1832,15 @@ function FichaCliente({
       </div>
     </aside>
   )
+}
+
+function origemLabel(origemBase?: Cliente['origemBase']) {
+  const labels: Record<NonNullable<Cliente['origemBase']>, string> = {
+    capital_truck: 'Capital Truck',
+    rodobens: 'Rodobens',
+    desconhecida: 'Origem pendente',
+  }
+  return origemBase ? labels[origemBase] : labels.desconhecida
 }
 
 function Importacoes({
