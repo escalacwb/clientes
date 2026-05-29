@@ -380,6 +380,61 @@ h3 {
   color: #64736f;
 }
 
+.routine-queue {
+  border: 1px solid #e0e6df;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+
+.routine-queue-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.routine-queue-header h2 {
+  margin: 0;
+}
+
+.routine-queue-header p {
+  color: #64736f;
+  margin: 3px 0 0;
+}
+
+.routine-card {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) 44px minmax(260px, auto);
+  gap: 12px;
+  align-items: center;
+  border-top: 1px solid #eef1ee;
+  padding: 10px 0;
+}
+
+.routine-card span {
+  display: grid;
+  gap: 3px;
+}
+
+.routine-card small {
+  color: #64736f;
+}
+
+.routine-card b {
+  color: #0f766e;
+  text-align: center;
+}
+
+.routine-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .agenda-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1805,6 +1860,7 @@ h3 {
   .metric-grid,
   .agenda-board,
   .task-insight,
+  .routine-card,
   .import-quality,
   .conflict-summary,
   .merge-summary,
@@ -1848,6 +1904,10 @@ h3 {
 
   .task-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .routine-actions {
+    justify-content: flex-start;
   }
 }
 

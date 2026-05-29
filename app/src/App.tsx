@@ -803,6 +803,19 @@ function App() {
             clientes={scopedClientes}
             usuarios={usuarios}
             tarefas={scopedTarefas}
+            orcamentos={scopedOrcamentos}
+            onOpenClient={(clienteId) => {
+              setSelectedClientId(clienteId)
+              setView('cliente360')
+            }}
+            onOpenBudgetEditor={(clienteId) => {
+              const cliente = scopedClientes.find((item) => item.id === clienteId)
+              if (cliente) {
+                setSelectedClientId(cliente.id)
+                setQuoteSourceView('tarefas')
+                setView('orcamento-editor')
+              }
+            }}
             onCreate={async (task) => {
               const created = await createTarefa(task)
               const cliente = clientes.find((item) => item.id === created.clienteId)
@@ -1562,12 +1575,18 @@ function Tarefas({
   clientes,
   usuarios,
   tarefas,
+  orcamentos,
+  onOpenClient,
+  onOpenBudgetEditor,
   onCreate,
   onComplete,
 }: {
   clientes: Cliente[]
   usuarios: Vendedor[]
   tarefas: Tarefa[]
+  orcamentos: Orcamento[]
+  onOpenClient: (clienteId: string) => void
+  onOpenBudgetEditor: (clienteId: string) => void
   onCreate: (task: TarefaInput) => Promise<Tarefa>
   onComplete: (id: string) => void
 }) {
@@ -1575,6 +1594,7 @@ function Tarefas({
   const [originFilter, setOriginFilter] = useState('todas')
   const [ownerFilter, setOwnerFilter] = useState('todos')
   const [showCreate, setShowCreate] = useState(false)
+  const [createdSuggestions, setCreatedSuggestions] = useState<string[]>([])
   const [form, setForm] = useState({
     clienteId: clientes[0]?.id ?? '',
     vendedorId: '',
@@ -1585,6 +1605,7 @@ function Tarefas({
   })
   const [error, setError] = useState('')
   const abertas = tarefas.filter((tarefa) => tarefa.status === 'aberta')
+  const suggestionQueue = buildRoutineSuggestions(clientes, orcamentos, abertas)
   const vendedores = usuarios.filter((usuario) => usuario.role === 'vendedor')
   const workload = vendedores
     .map((vendedor) => {
@@ -1602,6 +1623,20 @@ function Tarefas({
     .sort((a, b) => b.vencidas - a.vencidas || b.prioridadeMedia - a.prioridadeMedia)
   const overloaded = workload[0]
   const agendaBuckets = [
+    {
+      id: 'orcamentos',
+      label: 'Orcamentos',
+      hint: 'vencidos ou vencendo',
+      tarefas: suggestionQueue.filter((item) => item.tipo.startsWith('orcamento')),
+      onClick: () => setOriginFilter('orcamento'),
+    },
+    {
+      id: 'rodobens',
+      label: 'Rodobens',
+      hint: 'primeiro contato',
+      tarefas: suggestionQueue.filter((item) => item.tipo === 'rodobens'),
+      onClick: () => setOriginFilter('rodobens'),
+    },
     {
       id: 'vencidas',
       label: 'Vencidas',
@@ -1643,6 +1678,8 @@ function Tarefas({
     .filter((tarefa) => {
       if (originFilter === 'todas') return true
       if (originFilter === 'oportunidade') return tarefa.origem.startsWith('oportunidade')
+      if (originFilter === 'orcamento') return tarefa.origem.startsWith('orcamento')
+      if (originFilter === 'rodobens') return tarefa.origem.startsWith('rodobens')
       return tarefa.origem === originFilter
     })
     .filter((tarefa) => ownerFilter === 'todos' || tarefa.vendedorId === ownerFilter)
@@ -1666,6 +1703,7 @@ function Tarefas({
               <option value="importacao">Importacao</option>
               <option value="campanha">Campanha</option>
               <option value="oportunidade">Oportunidade</option>
+              <option value="rodobens">Rodobens</option>
             </select>
           </label>
           <label className="mini-select">
@@ -1767,6 +1805,65 @@ function Tarefas({
         </form>
       )}
       {error && <div className="alert">{error}</div>}
+      <div className="routine-queue">
+        <div className="routine-queue-header">
+          <div>
+            <h2>Fila inteligente</h2>
+            <p>Acionamentos sugeridos a partir de orcamentos, Rodobens e clientes em risco.</p>
+          </div>
+          <strong>{suggestionQueue.length} acoes</strong>
+        </div>
+        {suggestionQueue.slice(0, 8).map((suggestion) => {
+          const wasCreated = createdSuggestions.includes(suggestion.id)
+          return (
+            <article className="routine-card" key={suggestion.id}>
+              <span>
+                <strong>{suggestion.titulo}</strong>
+                <small>{suggestion.clienteNome} - {suggestion.motivo}</small>
+              </span>
+              <b>{suggestion.prioridade}</b>
+              <div className="routine-actions">
+                <button className="button" onClick={() => onOpenClient(suggestion.clienteId)} type="button">
+                  Ficha
+                </button>
+                {suggestion.tipo.startsWith('orcamento') && (
+                  <button className="button" onClick={() => onOpenBudgetEditor(suggestion.clienteId)} type="button">
+                    Orcamento
+                  </button>
+                )}
+                {wasCreated ? (
+                  <span className="status-pill">tarefa criada</span>
+                ) : (
+                  <button
+                    className="button primary"
+                    type="button"
+                    onClick={async () => {
+                      setError('')
+                      try {
+                        await onCreate({
+                          clienteId: suggestion.clienteId,
+                          vendedorId: suggestion.vendedorId,
+                          titulo: suggestion.titulo,
+                          descricao: suggestion.motivo,
+                          dataVencimento: suggestion.dataVencimento,
+                          prioridade: suggestion.prioridade,
+                          origem: suggestion.origem,
+                        })
+                        setCreatedSuggestions((current) => [...current, suggestion.id])
+                      } catch (exception) {
+                        setError(exception instanceof Error ? exception.message : 'Nao foi possivel criar a tarefa sugerida.')
+                      }
+                    }}
+                  >
+                    Criar tarefa
+                  </button>
+                )}
+              </div>
+            </article>
+          )
+        })}
+        {suggestionQueue.length === 0 && <div className="empty-state">Nenhuma acao automatica pendente.</div>}
+      </div>
       <div className="task-insight">
         <span>
           <strong>{overloaded ? `Maior atencao: ${overloaded.nome}` : 'Sem carga atribuida'}</strong>
@@ -1831,6 +1928,98 @@ function Tarefas({
       </div>
     </section>
   )
+}
+
+type RoutineSuggestion = {
+  id: string
+  tipo: 'orcamento_vencido' | 'orcamento_vencendo' | 'rodobens' | 'cliente_risco'
+  clienteId: string
+  clienteNome: string
+  vendedorId?: string
+  titulo: string
+  motivo: string
+  dataVencimento: string
+  prioridade: number
+  origem: string
+}
+
+function buildRoutineSuggestions(clientes: Cliente[], orcamentos: Orcamento[], tarefasAbertas: Tarefa[]): RoutineSuggestion[] {
+  const today = new Date().toISOString().slice(0, 10)
+  const hasOpenTask = (clienteId: string, origem: string) =>
+    tarefasAbertas.some((tarefa) => tarefa.clienteId === clienteId && tarefa.origem === origem)
+  const clienteById = new Map(clientes.map((cliente) => [cliente.id, cliente]))
+  const suggestions: RoutineSuggestion[] = []
+
+  for (const orcamento of orcamentos) {
+    const cliente = clienteById.get(orcamento.clienteId)
+    if (!cliente || !['aberto', 'aguardando_aprovacao', 'enviado', 'negociando'].includes(orcamento.status)) continue
+
+    const dias = daysSince(orcamento.validade)
+    if (dias > 0 && !hasOpenTask(cliente.id, 'orcamento:vencido')) {
+      suggestions.push({
+        id: `orcamento-vencido-${orcamento.id}`,
+        tipo: 'orcamento_vencido',
+        clienteId: cliente.id,
+        clienteNome: cliente.nome,
+        vendedorId: orcamento.vendedorId ?? cliente.vendedorId,
+        titulo: 'Retomar orcamento vencido',
+        motivo: `${money(orcamento.valorTotal)} vencido em ${dateLabel(orcamento.validade)}.`,
+        dataVencimento: today,
+        prioridade: 95,
+        origem: 'orcamento:vencido',
+      })
+    } else if (dias <= 0 && dias >= -3 && !hasOpenTask(cliente.id, 'orcamento:vencendo')) {
+      suggestions.push({
+        id: `orcamento-vencendo-${orcamento.id}`,
+        tipo: 'orcamento_vencendo',
+        clienteId: cliente.id,
+        clienteNome: cliente.nome,
+        vendedorId: orcamento.vendedorId ?? cliente.vendedorId,
+        titulo: 'Follow-up de orcamento vencendo',
+        motivo: `${money(orcamento.valorTotal)} com validade ${dateLabel(orcamento.validade)}.`,
+        dataVencimento: today,
+        prioridade: 85,
+        origem: 'orcamento:vencendo',
+      })
+    }
+  }
+
+  for (const cliente of clientes) {
+    if (cliente.status === 'Nao contatar') continue
+    if (cliente.origemBase === 'rodobens' && daysSince(cliente.ultimoContatoEm) > 30 && !hasOpenTask(cliente.id, 'rodobens:primeiro_contato')) {
+      suggestions.push({
+        id: `rodobens-${cliente.id}`,
+        tipo: 'rodobens',
+        clienteId: cliente.id,
+        clienteNome: cliente.nome,
+        vendedorId: cliente.vendedorId,
+        titulo: 'Primeiro contato Rodobens',
+        motivo: `${cliente.cidade || 'Cidade nao informada'} - lead ainda precisa qualificacao.`,
+        dataVencimento: today,
+        prioridade: 82,
+        origem: 'rodobens:primeiro_contato',
+      })
+    }
+
+    if (daysSince(cliente.ultimaCompraEm) > 180 && !hasOpenTask(cliente.id, 'oportunidade:cliente_risco')) {
+      suggestions.push({
+        id: `risco-${cliente.id}`,
+        tipo: 'cliente_risco',
+        clienteId: cliente.id,
+        clienteNome: cliente.nome,
+        vendedorId: cliente.vendedorId,
+        titulo: 'Reativar cliente em risco',
+        motivo: `Sem compra desde ${dateLabel(cliente.ultimaCompraEm)}. Total historico ${money(cliente.totalComprado + cliente.totalServicos)}.`,
+        dataVencimento: today,
+        prioridade: Math.min(90, 60 + Math.round((cliente.totalComprado + cliente.totalServicos) / 50000)),
+        origem: 'oportunidade:cliente_risco',
+      })
+    }
+  }
+
+  return suggestions
+    .sort((a, b) => b.prioridade - a.prioridade || a.clienteNome.localeCompare(b.clienteNome))
+    .slice(0, 40)
 }
 
 function FichaCliente({

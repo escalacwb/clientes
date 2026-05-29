@@ -564,6 +564,24 @@ Validacao:
 Proximo passo tecnico:
 - Vincular o orcamento criado pela campanha ao envio/campanha para medir receita atribuida automaticamente.
 
+### 2026-05-28 - Fila inteligente de rotina comercial
+
+Status: concluido.
+
+Entregue:
+- Tela de tarefas ganhou uma fila inteligente antes da lista manual.
+- Sugere acoes para orcamentos vencidos, orcamentos vencendo, primeiro contato Rodobens e clientes em risco sem compra.
+- Evita sugestao quando ja existe tarefa aberta da mesma origem para o cliente.
+- Cada sugestao permite abrir ficha, abrir orcamento quando fizer sentido e criar tarefa com um clique.
+- Agenda passou a contar tambem blocos de orcamentos e Rodobens.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Mover a fila inteligente para queries/views no Supabase, para enxergar toda a base sem depender da pagina atual de clientes.
+- Criar visao gerente por vendedor com SLA, atraso e conversao de tarefa em orcamento/venda.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:
