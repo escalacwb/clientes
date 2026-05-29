@@ -11,7 +11,7 @@ type ConflitoRow = {
   resolvido: boolean
 }
 
-export async function listConflitos(): Promise<ImportacaoConflito[]> {
+export async function listConflitos(limit = 200): Promise<ImportacaoConflito[]> {
   const supabase = await getSupabase()
   if (!supabase) return mockConflitos
 
@@ -19,6 +19,7 @@ export async function listConflitos(): Promise<ImportacaoConflito[]> {
     .from('importacao_conflitos')
     .select('*')
     .order('resolvido', { ascending: true })
+    .limit(limit)
 
   if (error) throw error
 

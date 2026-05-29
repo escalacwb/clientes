@@ -94,9 +94,9 @@ Ja entregue:
 - Tarefas paginadas/filtradas no Supabase por status, origem e vendedor.
 - Carga inicial de tarefas limitada a contexto recente.
 - Campanhas com resumo por view agregada, sem nested payload de envios.
+- Relatorios priorizam views agregadas; cargas auxiliares iniciais de interacoes/importacoes/conflitos foram limitadas.
 
 Proximas entregas:
-- Relatorios sempre por views agregadas.
 - Estados de loading vazios, sem fallback falso.
 
 Pronto quando:

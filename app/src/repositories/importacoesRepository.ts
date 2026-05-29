@@ -46,7 +46,7 @@ export type ImportacaoArquivoResumo = {
   processadoEm?: string
 }
 
-export async function listImportacoes(): Promise<Importacao[]> {
+export async function listImportacoes(limit = 100): Promise<Importacao[]> {
   const supabase = await getSupabase()
   if (!supabase) return mockImportacoes
 
@@ -54,6 +54,7 @@ export async function listImportacoes(): Promise<Importacao[]> {
     .from('importacoes')
     .select('*')
     .order('data_importacao', { ascending: false })
+    .limit(limit)
 
   if (error) throw error
 

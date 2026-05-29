@@ -15,7 +15,7 @@ type InteracaoRow = {
   data_proxima_acao: string | null
 }
 
-export async function listInteracoes(): Promise<Interacao[]> {
+export async function listInteracoes(limit = 200): Promise<Interacao[]> {
   const supabase = await getSupabase()
   if (!supabase) return mockInteracoes
 
@@ -23,6 +23,7 @@ export async function listInteracoes(): Promise<Interacao[]> {
     .from('interacoes')
     .select('*')
     .order('data_interacao', { ascending: false })
+    .limit(limit)
 
   if (error) throw error
 

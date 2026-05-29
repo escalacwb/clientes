@@ -616,6 +616,22 @@ Validacao:
 Proximo passo tecnico:
 - Revisar relatorios para garantir que telas gerenciais usem views agregadas e nao arrays carregados no browser.
 
+### 2026-05-28 - Cargas auxiliares limitadas para relatorios
+
+Status: concluido.
+
+Entregue:
+- Relatorios seguem priorizando `vw_dashboard_resumo`, `vw_vendedores_resumo` e rankings agregados.
+- Carga inicial de interacoes limitada aos 200 registros mais recentes.
+- Carga inicial de importacoes limitada aos 100 registros mais recentes.
+- Carga inicial de conflitos limitada aos 200 registros mais relevantes.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Revisar estados de loading por tela para garantir vazio/carregando claro, sem fallback falso.
+
 ### 2026-05-28 - Campanhas com construtor de publico
 
 Status: concluido.
