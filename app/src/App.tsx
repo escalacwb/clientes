@@ -5635,6 +5635,7 @@ function Campanhas({
   const [campaignError, setCampaignError] = useState('')
   const [selectedCampaignClientIds, setSelectedCampaignClientIds] = useState<string[]>([])
   const [isBulkCampaignUpdating, setIsBulkCampaignUpdating] = useState(false)
+  const [isCreatingCampaignTasks, setIsCreatingCampaignTasks] = useState(false)
   const appliedInitialCampanhaIdRef = useRef('')
   const segmento = campanhaSegmentos.find((item) => item.id === segmentoId) ?? campanhaSegmentos[0]
   const activeCampaignResumo = campanhasResumo.find((resumo) => resumo.campanhaId === activeCampanhaId)
@@ -5834,7 +5835,7 @@ function Campanhas({
           descricao: 'Cliente respondeu campanha e deve receber cotacao formal.',
           dataVencimento: new Date().toISOString().slice(0, 10),
           prioridade: 90,
-          origem: 'campanha',
+          origem: `campanha:${envio.campanhaId}:orcamento`,
         })
       }
       if (status === 'nao_contatar') {
@@ -5864,6 +5865,36 @@ function Campanhas({
       setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar a campanha em lote.')
     } finally {
       setIsBulkCampaignUpdating(false)
+    }
+  }
+
+  async function createSelectedCampaignTasks() {
+    const selectedClientes = filteredClientes.filter((cliente) => selectedCampaignClientIds.includes(cliente.id))
+    if (selectedClientes.length === 0) return
+
+    setIsCreatingCampaignTasks(true)
+    setCampaignError('')
+    try {
+      const campanhaKey = activeCampanhaId || segmento.campanhaId
+      const dueDate = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+      for (const cliente of selectedClientes) {
+        const status = statuses[cliente.id] ?? 'pendente'
+        await onAddTask({
+          clienteId: cliente.id,
+          vendedorId: cliente.vendedorId,
+          titulo: campaignTaskTitle(status),
+          descricao: `Follow-up da campanha ${saveName || segmento.campanhaNome}. Status atual: ${campaignStatusLabel(status)}.`,
+          dataVencimento: dueDate,
+          prioridade: campaignTaskPriority(status),
+          origem: `campanha:${campanhaKey}:followup:${status}`,
+        })
+      }
+      setSelectedCampaignClientIds([])
+      setCampaignError(`${selectedClientes.length} tarefas de follow-up criadas ou atualizadas.`)
+    } catch (exception) {
+      setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel criar tarefas de follow-up.')
+    } finally {
+      setIsCreatingCampaignTasks(false)
     }
   }
 
@@ -6103,6 +6134,14 @@ function Campanhas({
           >
             Sem resposta
           </button>
+          <button
+            className="button"
+            type="button"
+            disabled={selectedCampaignClientIds.length === 0 || isCreatingCampaignTasks}
+            onClick={createSelectedCampaignTasks}
+          >
+            {isCreatingCampaignTasks ? 'Criando...' : 'Criar tarefas'}
+          </button>
           <span className="status-pill">{selectedCampaignClientIds.length} selecionados</span>
         </div>
       )}
@@ -6214,6 +6253,27 @@ function campaignSummary(status: CampanhaEnvioStatus, mensagem: string) {
     nao_contatar: 'Cliente marcado como nao contatar pela campanha.',
   }
   return `${labels[status]} Mensagem: ${mensagem}`
+}
+
+function campaignTaskTitle(status: CampanhaEnvioStatus) {
+  const titles: Record<CampanhaEnvioStatus, string> = {
+    pendente: 'Enviar campanha WhatsApp',
+    enviado: 'Follow-up de campanha enviada',
+    respondeu: 'Responder cliente da campanha',
+    nao_respondeu: 'Retentar contato da campanha',
+    virou_orcamento: 'Formalizar orcamento da campanha',
+    ganhou: 'Confirmar pos-venda da campanha',
+    perdido: 'Registrar motivo de perda da campanha',
+    nao_contatar: 'Revisar bloqueio de contato',
+  }
+  return titles[status]
+}
+
+function campaignTaskPriority(status: CampanhaEnvioStatus) {
+  if (status === 'respondeu' || status === 'virou_orcamento') return 95
+  if (status === 'pendente' || status === 'enviado') return 80
+  if (status === 'nao_respondeu') return 70
+  return 50
 }
 
 function conversionRate(conversions: number, total: number) {

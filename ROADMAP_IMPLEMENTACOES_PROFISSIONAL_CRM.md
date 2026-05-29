@@ -1339,6 +1339,24 @@ Validacao:
 Proximo passo tecnico:
 - Criar uma experiencia de follow-up de campanha mais gerencial: fila por status, SLA de resposta, criar orcamento/tarefa em lote e relatorio por vendedor.
 
+### 2026-05-29 - Follow-up em lote de campanhas
+
+Status: concluido.
+
+Entregue:
+- Tela de Campanhas ganhou acao em lote `Criar tarefas` para os contatos selecionados.
+- As tarefas geradas respeitam o status atual do cliente na campanha: pendente, enviado, respondeu, sem resposta, virou orcamento, ganho, perdido ou nao contatar.
+- Prioridade passa a ser calculada pelo status: respostas e orcamentos ficam no topo da fila.
+- Origem da tarefa inclui a campanha e o status, permitindo deduplicacao por cliente/campanha/status sem misturar campanhas diferentes.
+- Tarefa automatica de `virou_orcamento` tambem passou a carregar o ID real da campanha na origem.
+
+Validacao:
+- Build passou com `npm run build`.
+- Playwright local abriu Campanhas, filtrou o segmento Rodobens com 2 clientes e confirmou os botoes `Selecionar pagina` e `Criar tarefas`.
+
+Proximo passo tecnico:
+- Evoluir relatorio por vendedor dentro de campanhas: enviados, respostas, tarefas abertas, orcamentos e receita atribuida por responsavel.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:
