@@ -54,6 +54,7 @@ import { isSupabaseConfigured } from './lib/supabase'
 import { buildOportunidades } from './lib/oportunidades'
 import { carteiraFiltros, filterClientes } from './lib/filtros'
 import { getCurrentSession, signInWithPassword, signOut } from './repositories/authRepository'
+import { analyzeWhatsAppContact } from './repositories/aiRepository'
 import { listClienteAlteracoes } from './repositories/auditoriaRepository'
 import {
   campanhaSegmentos,
@@ -6857,6 +6858,7 @@ function Cliente360({
   const [nextActionDate, setNextActionDate] = useState('')
   const [whatsappHistoryPaste, setWhatsappHistoryPaste] = useState('')
   const [interpretationFeedback, setInterpretationFeedback] = useState('')
+  const [isAnalyzingWithAI, setIsAnalyzingWithAI] = useState(false)
   const [isSavingContact, setIsSavingContact] = useState(false)
   const [contactFeedback, setContactFeedback] = useState('')
   const [isEditingClient, setIsEditingClient] = useState(false)
@@ -6998,6 +7000,44 @@ function Cliente360({
     setInterpretationFeedback('Conversa interpretada. Revise os campos antes de salvar no historico.')
   }
 
+  async function applyWhatsAppAIAnalysis() {
+    if (!whatsappHistoryPaste.trim()) {
+      setInterpretationFeedback('Cole a conversa antes de analisar com IA.')
+      return
+    }
+
+    setIsAnalyzingWithAI(true)
+    setInterpretationFeedback('')
+    try {
+      const analysis = await analyzeWhatsAppContact({
+        conversation: whatsappHistoryPaste,
+        clienteNome: cliente.nome,
+      })
+      setContactChannel('WhatsApp')
+      setContactReason(analysis.reason)
+      setContactResult(analysis.result)
+      setContactTemperature(analysis.temperature)
+      setContactNote(formatAIContactSummary(analysis))
+      setContactNextActionText(analysis.nextAction)
+      setNextActionDate(analysis.nextAction ? addDays(new Date().toISOString().slice(0, 10), analysis.nextActionDays) : '')
+      setInterpretationFeedback(`IA analisou a conversa com ${Math.round(analysis.confidence * 100)}% de confianca. Revise antes de salvar.`)
+    } catch (exception) {
+      const fallback = interpretWhatsAppConversation(whatsappHistoryPaste, cliente.nome)
+      setContactChannel('WhatsApp')
+      setContactReason(fallback.reason)
+      setContactResult(fallback.result)
+      setContactTemperature(fallback.temperature)
+      setContactNote(fallback.summary)
+      setContactNextActionText(fallback.nextAction)
+      setNextActionDate(fallback.nextAction ? addDays(new Date().toISOString().slice(0, 10), fallback.nextActionDays) : '')
+      setInterpretationFeedback(exception instanceof Error
+        ? `IA indisponivel: ${exception.message}. Usei a interpretacao local como fallback.`
+        : 'IA indisponivel. Usei a interpretacao local como fallback.')
+    } finally {
+      setIsAnalyzingWithAI(false)
+    }
+  }
+
   async function saveClientDraft() {
     setIsSavingClient(true)
     setClientFeedback('')
@@ -7136,8 +7176,11 @@ function Cliente360({
               />
             </label>
             <div className="client360-save-bar">
+              <button className="button primary" type="button" disabled={isAnalyzingWithAI} onClick={() => void applyWhatsAppAIAnalysis()}>
+                {isAnalyzingWithAI ? 'Analisando...' : 'Analisar com IA'}
+              </button>
               <button className="button primary" type="button" onClick={applyWhatsAppInterpretation}>
-                Interpretar conversa
+                Interpretar local
               </button>
               <button className="button" type="button" disabled={!whatsappHistoryPaste.trim()} onClick={() => {
                 setWhatsappHistoryPaste('')
@@ -7688,6 +7731,18 @@ function buildContactSummary(input: {
     `Temperatura: ${input.temperature}.`,
     input.note.trim() ? `Resumo: ${input.note.trim()}` : '',
     input.nextAction.trim() ? `Proxima acao: ${input.nextAction.trim()}` : '',
+  ]
+  return lines.filter(Boolean).join('\n')
+}
+
+function formatAIContactSummary(analysis: Awaited<ReturnType<typeof analyzeWhatsAppContact>>) {
+  const lines = [
+    analysis.summary,
+    analysis.negotiationStatus ? `Status da negociacao: ${analysis.negotiationStatus}.` : '',
+    analysis.detectedProducts.length ? `Produtos/servicos citados: ${analysis.detectedProducts.join(', ')}.` : '',
+    analysis.detectedVehicles.length ? `Veiculos/KM citados: ${analysis.detectedVehicles.join(', ')}.` : '',
+    analysis.paymentTerms.length ? `Pagamento citado: ${analysis.paymentTerms.join(', ')}.` : '',
+    analysis.objections.length ? `Objecoes/travas: ${analysis.objections.join(', ')}.` : '',
   ]
   return lines.filter(Boolean).join('\n')
 }

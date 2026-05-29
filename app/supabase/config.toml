@@ -137,6 +137,9 @@ max_catalogs = 2
 [functions.import-reference-files]
 verify_jwt = false
 
+[functions.analyze-whatsapp-contact]
+verify_jwt = true
+
 # Analytics Buckets is available to Supabase Pro plan.
 # [storage.analytics.buckets.my-warehouse]
 
