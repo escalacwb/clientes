@@ -113,8 +113,44 @@ Deno.serve(async (request) => {
     const form = await request.formData()
     const files = form.getAll('files').filter((item): item is File => item instanceof File)
     if (!files.length) return json({ error: 'Nenhum arquivo enviado.' }, 400)
+    const mode = String(form.get('mode') ?? 'daily')
 
     const parsed = await parseFiles(files)
+    if (mode === 'catalogo-precos') {
+      const catalogRows = [...parsed.precosProdutos, ...parsed.precosServicos]
+      if (!catalogRows.length) return json({ error: 'Nenhum produto ou servico com preco foi reconhecido.' }, 400)
+
+      const importacao = await createCatalogImportacao(service, parsed, catalogRows)
+      const arquivos = await registerFiles(service, importacao.id, parsed)
+      const catalogo = await upsertCatalogo(service, catalogRows, arquivos)
+
+      await service
+        .from('importacoes')
+        .update({
+          total_linhas: catalogRows.length,
+          clientes_encontrados: 0,
+          clientes_criados: 0,
+          conflitos: 0,
+          itens_criados: catalogo.precosNovos + catalogo.precosAlterados,
+          itens_ignorados: catalogo.precosInalterados,
+          status: 'processada',
+        })
+        .eq('id', importacao.id)
+
+      return json({
+        ok: true,
+        importacaoId: importacao.id,
+        clientes: 0,
+        veiculos: 0,
+        ordens: 0,
+        vendas: { created: 0, ignored: 0, conflitos: 0 },
+        servicos: { created: 0, ignored: 0, conflitos: 0 },
+        catalogo,
+        movimentosComVeiculo: 0,
+        movimentosSemVeiculo: 0,
+      })
+    }
+
     const missing = ['carrosatendidos', 'listaclientessistema', 'vendasprodutos', 'vendasservicos']
       .filter((kind) => !parsed.files.has(kind as ReferenceKind))
     if (missing.length) return json({ error: `Arquivos obrigatorios ausentes: ${missing.join(', ')}.` }, 400)
@@ -253,8 +289,8 @@ function identifyFile(fileName: string): ReferenceKind | null {
     ['listaclientessistema', ['listaclientessistema']],
     ['vendasprodutos', ['vendasprodutos']],
     ['vendasservicos', ['vendasservicos']],
-    ['precoprodutos', ['precoprodutos']],
-    ['precoservicos', ['precoservicos', 'precosservicos']],
+    ['precoprodutos', ['precoprodutos', 'listaeprecoprodutos', 'listaprecoprodutos']],
+    ['precoservicos', ['precoservicos', 'precosservicos', 'listaeprecoservicos', 'listaeprecoservicos', 'listaprecoservicos']],
   ]
   return aliases.find(([, names]) => names.some((name) => normalized.includes(normalizeKey(name))))?.[0] ?? null
 }
@@ -423,6 +459,27 @@ async function createImportacao(service: ReturnType<typeof createClient>, parsed
       arquivo_nome: 'pacote importacao diaria',
       total_linhas: parsed.clientes.length + parsed.carros.length + movimentos.length,
       clientes_encontrados: parsed.clientes.length,
+      status: 'processando',
+    })
+    .select('id')
+    .single()
+  if (error) throw error
+  return data as { id: string }
+}
+
+async function createCatalogImportacao(service: ReturnType<typeof createClient>, parsed: Awaited<ReturnType<typeof parseFiles>>, catalogRows: CatalogRow[]) {
+  const fileNames = [...parsed.files.values()].map((file) => file.name).join(' + ') || 'catalogo-precos'
+  const { data, error } = await service
+    .from('importacoes')
+    .insert({
+      tipo: 'catalogo-precos',
+      arquivo_nome: fileNames,
+      total_linhas: catalogRows.length,
+      clientes_encontrados: 0,
+      clientes_criados: 0,
+      conflitos: 0,
+      itens_criados: 0,
+      itens_ignorados: 0,
       status: 'processando',
     })
     .select('id')

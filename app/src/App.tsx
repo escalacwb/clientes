@@ -47,7 +47,7 @@ import {
 } from './lib/crm'
 import { previewXmlFiles, type XmlImportPreview } from './lib/xmlImport'
 import { previewWorkbookFiles, type WorkbookImportPreview } from './lib/workbookPreview'
-import { previewReferenceImportFiles, type ReferenceImportPreview } from './lib/referenceImportPreview'
+import { previewCatalogPriceFiles, previewReferenceImportFiles, type ReferenceImportPreview } from './lib/referenceImportPreview'
 import { isSupabaseConfigured } from './lib/supabase'
 import { buildOportunidades } from './lib/oportunidades'
 import { carteiraFiltros, filterClientes } from './lib/filtros'
@@ -125,6 +125,7 @@ import { listInteracoes } from './repositories/interacoesRepository'
 import { createImportacaoPreview } from './repositories/importacoesRepository'
 import { finalizeImportacaoDiaria } from './repositories/importacoesRepository'
 import { getImportacaoQualidadeResumo } from './repositories/importacoesRepository'
+import { importCatalogPriceFiles } from './repositories/importacoesRepository'
 import { importReferenceFiles } from './repositories/importacoesRepository'
 import { listImportacaoArquivos, type ImportacaoArquivoResumo, type ImportacaoQualidadeResumo } from './repositories/importacoesRepository'
 import { listImportacoes } from './repositories/importacoesRepository'
@@ -7500,10 +7501,14 @@ function Importacoes({
   const [workbookPreviews, setWorkbookPreviews] = useState<WorkbookImportPreview[]>([])
   const [referencePreview, setReferencePreview] = useState<ReferenceImportPreview | null>(null)
   const [referenceFiles, setReferenceFiles] = useState<File[]>([])
+  const [catalogPricePreview, setCatalogPricePreview] = useState<ReferenceImportPreview | null>(null)
+  const [catalogPriceFiles, setCatalogPriceFiles] = useState<File[]>([])
   const [isReading, setIsReading] = useState(false)
   const [isReadingWorkbook, setIsReadingWorkbook] = useState(false)
   const [isReadingReference, setIsReadingReference] = useState(false)
   const [isImportingReference, setIsImportingReference] = useState(false)
+  const [isReadingCatalogPrices, setIsReadingCatalogPrices] = useState(false)
+  const [isImportingCatalogPrices, setIsImportingCatalogPrices] = useState(false)
   const [isFinalizingImport, setIsFinalizingImport] = useState(false)
   const [referenceImportResult, setReferenceImportResult] = useState('')
   const [error, setError] = useState('')
@@ -7575,6 +7580,23 @@ function Importacoes({
     }
   }
 
+  async function handleCatalogPriceFiles(files: FileList | null) {
+    if (!files?.length) return
+    setIsReadingCatalogPrices(true)
+    setError('')
+    setReferenceImportResult('')
+
+    try {
+      const selectedFiles = Array.from(files)
+      setCatalogPriceFiles(selectedFiles)
+      setCatalogPricePreview(await previewCatalogPriceFiles(selectedFiles))
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel validar a lista de precos.')
+    } finally {
+      setIsReadingCatalogPrices(false)
+    }
+  }
+
   async function registerPreview(preview: XmlImportPreview) {
     setError('')
 
@@ -7629,6 +7651,24 @@ function Importacoes({
     }
   }
 
+  async function registerCatalogPricePreview(preview: ReferenceImportPreview) {
+    setError('')
+
+    try {
+      const created = await createImportacaoPreview({
+        tipo: 'catalogo-precos',
+        arquivoNome: preview.arquivoNome,
+        totalItens: preview.itensDetectados,
+        clientesEncontrados: 0,
+        conflitos: preview.avisos.length,
+      })
+      onAddImportacao(created)
+      setRegisteredFiles((current) => [...current, preview.arquivoNome])
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel registrar a previa de catalogo.')
+    }
+  }
+
   async function runReferenceImport() {
     if (!referencePreview?.ready || referenceFiles.length === 0) return
     setIsImportingReference(true)
@@ -7655,6 +7695,30 @@ function Importacoes({
       setError(exception instanceof Error ? exception.message : 'Nao foi possivel concluir a importacao diaria.')
     } finally {
       setIsImportingReference(false)
+    }
+  }
+
+  async function runCatalogPriceImport() {
+    if (!catalogPricePreview?.ready || catalogPriceFiles.length === 0) return
+    setIsImportingCatalogPrices(true)
+    setError('')
+    setReferenceImportResult('')
+
+    try {
+      const result = await importCatalogPriceFiles(catalogPriceFiles)
+      const catalogoResumo = result.catalogo
+        ? `Catalogo atualizado: ${result.catalogo.itens} itens, ${result.catalogo.precosNovos ?? 0} precos novos, ${result.catalogo.precosAlterados ?? 0} alterados, ${result.catalogo.precosInalterados ?? 0} inalterados.`
+        : 'Catalogo atualizado.'
+      setReferenceImportResult(catalogoResumo)
+      const updated = await listImportacoes()
+      const created = updated.find((item) => item.id === result.importacaoId)
+      if (created) onAddImportacao(created)
+      setArquivosResumo(await listImportacaoArquivos())
+      setQualidadeResumo(await getImportacaoQualidadeResumo())
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel concluir a importacao de catalogo.')
+    } finally {
+      setIsImportingCatalogPrices(false)
     }
   }
 
@@ -7769,6 +7833,77 @@ function Importacoes({
           </label>
         </div>
         {error && <div className="alert">{error}</div>}
+        <div className="reference-import-box">
+          <div className="reference-import-copy">
+            <h2>Atualizar catalogo e precos</h2>
+            <p>Importe somente lista de produtos e/ou servicos, sem precisar enviar os arquivos diarios obrigatorios.</p>
+          </div>
+          <label className="file-button">
+            <FileUp size={16} />
+            {isReadingCatalogPrices ? 'Validando...' : 'Selecionar listas'}
+            <input type="file" accept=".xls,.xlsx,.csv" multiple onChange={(event) => handleCatalogPriceFiles(event.target.files)} />
+          </label>
+        </div>
+        {catalogPricePreview && (
+          <div className="preview-card reference-preview">
+            <div className="panel-header">
+              <div>
+                <h2>{catalogPricePreview.ready ? 'Listas prontas para importar' : 'Listas incompletas'}</h2>
+                <p>
+                  {catalogPricePreview.files.filter((file) => file.status === 'ok').length} listas reconhecidas -
+                  {' '}{catalogPricePreview.itensDetectados} produtos/servicos com preco
+                </p>
+              </div>
+              <button
+                className="button primary"
+                disabled={!catalogPricePreview.ready || registeredFiles.includes(catalogPricePreview.arquivoNome)}
+                onClick={() => registerCatalogPricePreview(catalogPricePreview)}
+                type="button"
+              >
+                {registeredFiles.includes(catalogPricePreview.arquivoNome) ? 'Previa registrada' : 'Registrar previa'}
+              </button>
+              <button
+                className="button"
+                disabled={!catalogPricePreview.ready || isImportingCatalogPrices}
+                onClick={runCatalogPriceImport}
+                type="button"
+              >
+                {isImportingCatalogPrices ? 'Importando...' : 'Atualizar catalogo'}
+              </button>
+            </div>
+            <div className={`readiness ${catalogPricePreview.ready ? 'ok' : 'danger'}`}>
+              <strong>{catalogPricePreview.ready ? 'Catalogo reconhecido' : 'Nenhum preco reconhecido'}</strong>
+              <span>Novos precos serao comparados com o ultimo historico antes de gravar.</span>
+            </div>
+            {catalogPricePreview.avisos.length > 0 && (
+              <div className="warning-list">
+                {catalogPricePreview.avisos.map((aviso) => <span key={aviso}>{aviso}</span>)}
+              </div>
+            )}
+            <div className="table compact">
+              <div className="table-head reference-file">
+                <span>Lista</span>
+                <span>Status</span>
+                <span>Linhas</span>
+                <span>Clientes</span>
+                <span>Ordens</span>
+                <span>Itens</span>
+                <span>Placas/KM</span>
+              </div>
+              {catalogPricePreview.files.map((file) => (
+                <div className="table-row reference-file" key={file.kind}>
+                  <span>{file.label}</span>
+                  <span>{file.status === 'ok' ? file.fileName : 'Opcional ausente'}</span>
+                  <span>{file.totalRows}</span>
+                  <span>{file.clientes}</span>
+                  <span>{file.ordens}</span>
+                  <span>{file.itens}</span>
+                  <span>{file.placas}/{file.kms}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="reference-import-box">
           <div className="reference-import-copy">
             <h2>Importacao diaria Capital</h2>

@@ -190,7 +190,7 @@ export type CatalogoRegraDesconto = {
 
 export type Importacao = {
   id: string
-  tipo: 'base-inicial' | 'xml-diario' | 'clientes-semanal' | 'referencias-diarias'
+  tipo: 'base-inicial' | 'xml-diario' | 'clientes-semanal' | 'referencias-diarias' | 'catalogo-precos'
   arquivoNome: string
   dataImportacao: string
   totalItens: number

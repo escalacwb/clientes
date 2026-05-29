@@ -40,8 +40,8 @@ const expectedFiles: Array<{ kind: ReferenceFileKind; label: string; required: b
   { kind: 'listaclientessistema', label: 'Lista clientes sistema', required: true, aliases: ['listaclientessistema'] },
   { kind: 'vendasprodutos', label: 'Vendas produtos', required: true, aliases: ['vendasprodutos'] },
   { kind: 'vendasservicos', label: 'Vendas servicos', required: true, aliases: ['vendasservicos'] },
-  { kind: 'precoprodutos', label: 'Preco produtos', required: false, aliases: ['precoprodutos'] },
-  { kind: 'precoservicos', label: 'Preco servicos', required: false, aliases: ['precoservicos', 'precosservicos'] },
+  { kind: 'precoprodutos', label: 'Preco produtos', required: false, aliases: ['precoprodutos', 'listaeprecoprodutos', 'listaprecoprodutos'] },
+  { kind: 'precoservicos', label: 'Preco servicos', required: false, aliases: ['precoservicos', 'precosservicos', 'listaeprecoservicos', 'listaeprecoservicos', 'listaprecoservicos'] },
 ]
 
 export async function previewReferenceImportFiles(files: FileList | File[]): Promise<ReferenceImportPreview> {
@@ -81,6 +81,34 @@ export async function previewReferenceImportFiles(files: FileList | File[]): Pro
     placasDetectadas: sum(previews, 'placas'),
     kmsDetectados: sum(previews, 'kms'),
     files: previews,
+    unexpectedFiles,
+    avisos,
+  }
+}
+
+export async function previewCatalogPriceFiles(files: FileList | File[]): Promise<ReferenceImportPreview> {
+  const preview = await previewReferenceImportFiles(files)
+  const catalogFiles = preview.files.filter((file) => file.kind === 'precoprodutos' || file.kind === 'precoservicos')
+  const selectedCatalogFiles = catalogFiles.filter((file) => file.status === 'ok')
+  const itensDetectados = selectedCatalogFiles.reduce((sum, file) => sum + file.itens, 0)
+  const unexpectedFiles = preview.unexpectedFiles
+  const avisos = [
+    ...unexpectedFiles.map((fileName) => `Arquivo ignorado por nome fora do padrao: ${fileName}.`),
+    ...selectedCatalogFiles.flatMap((file) => file.avisos),
+    ...(selectedCatalogFiles.length === 0 ? ['Selecione lista de produtos e/ou lista de servicos.'] : []),
+    ...(selectedCatalogFiles.length > 0 && itensDetectados === 0 ? ['Nenhum produto ou servico com preco foi reconhecido.'] : []),
+  ]
+
+  return {
+    arquivoNome: selectedCatalogFiles.map((file) => file.fileName).filter(Boolean).join(' + ') || 'catalogo-precos',
+    ready: selectedCatalogFiles.length > 0 && itensDetectados > 0,
+    totalRows: selectedCatalogFiles.reduce((sum, file) => sum + file.totalRows, 0),
+    clientesDetectados: 0,
+    ordensDetectadas: 0,
+    itensDetectados,
+    placasDetectadas: 0,
+    kmsDetectados: 0,
+    files: catalogFiles,
     unexpectedFiles,
     avisos,
   }

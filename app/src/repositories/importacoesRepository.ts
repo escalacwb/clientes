@@ -148,6 +148,24 @@ export async function importReferenceFiles(files: FileList | File[]): Promise<Re
   return data as ReferenceImportResult
 }
 
+export async function importCatalogPriceFiles(files: FileList | File[]): Promise<ReferenceImportResult> {
+  const supabase = await getSupabase()
+  if (!supabase) throw new Error('Supabase nao configurado para importacao real.')
+
+  const formData = new FormData()
+  formData.append('mode', 'catalogo-precos')
+  Array.from(files).forEach((file) => formData.append('files', file))
+
+  const { data, error } = await supabase.functions.invoke('import-reference-files', {
+    body: formData,
+  })
+
+  if (error) throw error
+  if (!data?.ok) throw new Error(data?.error ?? 'Nao foi possivel importar catalogo e precos.')
+
+  return data as ReferenceImportResult
+}
+
 export async function finalizeImportacaoDiaria(): Promise<NonNullable<ReferenceImportResult['postProcess']>> {
   const supabase = await getSupabase()
   if (!supabase) throw new Error('Supabase nao configurado para finalizar importacao.')

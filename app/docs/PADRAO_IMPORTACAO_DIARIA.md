@@ -16,9 +16,30 @@ Opcionais, usados apenas quando houver alteracao:
 - `precoprodutos.xls`
 - `precoservicos.xls`
 
+Tambem sao aceitos na importacao separada de catalogo/precos:
+
+- `listaeprecoprodutos.xls`
+- `listaeprecoservicos.xls`
+
 Uso futuro:
 
 - `lancamentosvendasmichelin.xlsx`
+
+## Entidades extraidas
+
+## Importacao separada de catalogo/precos
+
+A tela `Importacoes > Atualizar catalogo e precos` aceita somente listas de produtos e/ou servicos.
+Ela nao exige os quatro arquivos diarios obrigatorios.
+
+O fluxo grava:
+
+- novos itens em `catalogo_itens`;
+- historico incremental em `catalogo_precos`;
+- arquivo processado em `importacao_arquivos`;
+- resumo em `importacoes` com tipo `catalogo-precos`.
+
+Ao reimportar lista igual, os itens sao reconhecidos e precos inalterados entram como ignorados/inalterados.
 
 ## Entidades extraidas
 
