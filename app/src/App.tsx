@@ -65,7 +65,16 @@ import {
   type CampanhaSegmentoId,
   attributeCampanhaRevenueByOrcamento,
 } from './repositories/campanhasRepository'
-import { listCatalogoItens, listCatalogoPage, listCatalogoPrecos, type CatalogoPrecoHistorico, type CatalogoTipoFilter } from './repositories/catalogoRepository'
+import {
+  listCatalogoItens,
+  listCatalogoPage,
+  listCatalogoPrecos,
+  listCatalogoSugestoes,
+  type CatalogoAtivoFilter,
+  type CatalogoPrecoHistorico,
+  type CatalogoSugestao,
+  type CatalogoTipoFilter,
+} from './repositories/catalogoRepository'
 import {
   assignClientesVendedorByFilter,
   listRodobensFunilResumo,
@@ -261,6 +270,7 @@ function App() {
   const [catalogoPage, setCatalogoPage] = useState(1)
   const [catalogoQuery, setCatalogoQuery] = useState('')
   const [catalogoTipoFilter, setCatalogoTipoFilter] = useState<CatalogoTipoFilter>('todos')
+  const [catalogoAtivoFilter, setCatalogoAtivoFilter] = useState<CatalogoAtivoFilter>('ativos')
   const [dashboardResumo, setDashboardResumo] = useState<DashboardResumo | undefined>()
   const [vendedoresResumo, setVendedoresResumo] = useState<VendedorResumo[]>([])
   const [vendedoresHistoricosResumo, setVendedoresHistoricosResumo] = useState<VendedorHistoricoResumo[]>([])
@@ -586,6 +596,7 @@ function App() {
           pageSize: 50,
           query: catalogoQuery,
           tipo: catalogoTipoFilter,
+          ativo: catalogoAtivoFilter,
         })
         if (!isMounted) return
         setCatalogoLista(result.itens)
@@ -603,7 +614,7 @@ function App() {
       isMounted = false
       window.clearTimeout(handle)
     }
-  }, [catalogo, catalogoPage, catalogoQuery, catalogoTipoFilter, isCheckingSession, session, view])
+  }, [catalogo, catalogoAtivoFilter, catalogoPage, catalogoQuery, catalogoTipoFilter, isCheckingSession, session, view])
 
   useEffect(() => {
     let isMounted = true
@@ -1338,6 +1349,7 @@ function App() {
             pageSize={50}
             query={catalogoQuery}
             tipoFilter={catalogoTipoFilter}
+            ativoFilter={catalogoAtivoFilter}
             isLoading={isLoadingCatalogo}
             onQueryChange={(nextQuery) => {
               setCatalogoQuery(nextQuery)
@@ -1345,6 +1357,10 @@ function App() {
             }}
             onTipoFilterChange={(filter) => {
               setCatalogoTipoFilter(filter)
+              setCatalogoPage(1)
+            }}
+            onAtivoFilterChange={(filter) => {
+              setCatalogoAtivoFilter(filter)
               setCatalogoPage(1)
             }}
             onPageChange={setCatalogoPage}
@@ -2118,9 +2134,11 @@ function Catalogo({
   pageSize,
   query,
   tipoFilter,
+  ativoFilter,
   isLoading,
   onQueryChange,
   onTipoFilterChange,
+  onAtivoFilterChange,
   onPageChange,
 }: {
   itens: CatalogoItem[]
@@ -2129,9 +2147,11 @@ function Catalogo({
   pageSize: number
   query: string
   tipoFilter: CatalogoTipoFilter
+  ativoFilter: CatalogoAtivoFilter
   isLoading: boolean
   onQueryChange: (query: string) => void
   onTipoFilterChange: (filter: CatalogoTipoFilter) => void
+  onAtivoFilterChange: (filter: CatalogoAtivoFilter) => void
   onPageChange: (page: number) => void
 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
@@ -2140,6 +2160,7 @@ function Catalogo({
   const semPreco = itens.filter((item) => item.preco <= 0).length
   const [selectedItem, setSelectedItem] = useState<CatalogoItem | undefined>()
   const [priceHistory, setPriceHistory] = useState<CatalogoPrecoHistorico[]>([])
+  const [suggestions, setSuggestions] = useState<CatalogoSugestao[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [historyError, setHistoryError] = useState('')
 
@@ -2148,10 +2169,16 @@ function Catalogo({
     setIsLoadingHistory(true)
     setHistoryError('')
     try {
-      setPriceHistory(await listCatalogoPrecos(item.id))
+      const [precos, sugestoes] = await Promise.all([
+        listCatalogoPrecos(item.id),
+        listCatalogoSugestoes(item.id),
+      ])
+      setPriceHistory(precos)
+      setSuggestions(sugestoes)
     } catch (exception) {
       setHistoryError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar historico de precos.')
       setPriceHistory([])
+      setSuggestions([])
     } finally {
       setIsLoadingHistory(false)
     }
@@ -2175,6 +2202,14 @@ function Catalogo({
         <label>
           Buscar
           <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Codigo, medida, descricao, marca ou grupo" />
+        </label>
+        <label>
+          Status
+          <select value={ativoFilter} onChange={(event) => onAtivoFilterChange(event.target.value as CatalogoAtivoFilter)}>
+            <option value="ativos">Ativos</option>
+            <option value="inativos">Inativos</option>
+            <option value="todos">Todos</option>
+          </select>
         </label>
       </div>
 
@@ -2205,7 +2240,7 @@ function Catalogo({
             <strong>{money(item.preco)}</strong>
             <span>
               {item.descontoMaximo !== undefined ? `Desc. max ${item.descontoMaximo}%` : 'Sem limite'}
-              <small>{item.estoque !== undefined ? `Estoque ${item.estoque}` : 'Sem estoque'}</small>
+              <small>{item.ativo ? 'Ativo' : 'Inativo'} - {item.estoque !== undefined ? `Estoque ${item.estoque}` : 'Sem estoque'}</small>
             </span>
             <button className="button compact-button" type="button" onClick={() => openPriceHistory(item)}>Historico</button>
           </div>
@@ -2230,6 +2265,19 @@ function Catalogo({
           </div>
           {historyError && <div className="alert">{historyError}</div>}
           {isLoadingHistory && <div className="empty-state">Carregando historico...</div>}
+          {!isLoadingHistory && suggestions.length > 0 && (
+            <div className="catalog-suggestions">
+              <strong>Sugestoes complementares</strong>
+              <div>
+                {suggestions.map((sugestao) => (
+                  <span className="status-pill" key={sugestao.catalogoItemId}>
+                    {sugestao.descricao}
+                    <small>{sugestao.ocorrencias} ocorrencias em {sugestao.clientes} clientes</small>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="table">
             <div className="table-head catalog-price-row">
               <span>Vigencia</span>

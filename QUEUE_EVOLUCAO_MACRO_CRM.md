@@ -203,7 +203,7 @@ Pronto quando:
 
 ### Q09 - Catalogo profissional
 
-Status: Parcial.
+Status: Concluido.
 
 Objetivo:
 Gerir produtos, servicos, precos, vigencia e regras comerciais.
@@ -214,8 +214,6 @@ Ja entregue:
 - Paginacao no Supabase para consultar catalogo sem carregar tudo na tela.
 - Exibicao de preco atual, desconto maximo e estoque quando disponiveis.
 - Historico de vigencia/precos por item, com origem da importacao quando disponivel.
-
-Proximas entregas:
 - Produtos/servicos inativos.
 - Sugestoes complementares.
 

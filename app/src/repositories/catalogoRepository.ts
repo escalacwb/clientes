@@ -10,6 +10,7 @@ type CatalogoRow = {
   grupo: string | null
   subgrupo: string | null
   marca: string | null
+  ativo: boolean
 }
 
 type PrecoRow = {
@@ -25,6 +26,7 @@ type PrecoRow = {
 }
 
 export type CatalogoTipoFilter = 'todos' | CatalogoItem['tipo']
+export type CatalogoAtivoFilter = 'ativos' | 'inativos' | 'todos'
 
 export type CatalogoPrecoHistorico = {
   id: string
@@ -37,6 +39,24 @@ export type CatalogoPrecoHistorico = {
   arquivoNome?: string
 }
 
+export type CatalogoSugestao = {
+  catalogoItemId: string
+  tipo: CatalogoItem['tipo']
+  codigo: string
+  descricao: string
+  ocorrencias: number
+  clientes: number
+}
+
+type CatalogoSugestaoRow = {
+  catalogo_item_id: string
+  tipo: CatalogoItem['tipo']
+  codigo: string
+  descricao: string
+  ocorrencias: number
+  clientes: number
+}
+
 export async function listCatalogoItens(): Promise<CatalogoItem[]> {
   const supabase = await getSupabase()
   if (!supabase) return []
@@ -44,7 +64,7 @@ export async function listCatalogoItens(): Promise<CatalogoItem[]> {
   const [{ data: itens, error: itensError }, { data: precos, error: precosError }] = await Promise.all([
     supabase
       .from('catalogo_itens')
-      .select('id,tipo,codigo,descricao,unidade,grupo,subgrupo,marca')
+      .select('id,tipo,codigo,descricao,unidade,grupo,subgrupo,marca,ativo')
       .eq('ativo', true)
       .order('tipo', { ascending: true })
       .order('descricao', { ascending: true }),
@@ -73,6 +93,7 @@ export async function listCatalogoItens(): Promise<CatalogoItem[]> {
       grupo: item.grupo ?? undefined,
       subgrupo: item.subgrupo ?? undefined,
       marca: item.marca ?? undefined,
+      ativo: item.ativo,
       preco: preco?.valor ?? 0,
       descontoMaximo: preco?.desconto_maximo ?? undefined,
       estoque: preco?.estoque ?? undefined,
@@ -85,6 +106,7 @@ export async function listCatalogoPage(input: {
   pageSize: number
   query?: string
   tipo?: CatalogoTipoFilter
+  ativo?: CatalogoAtivoFilter
 }): Promise<{ itens: CatalogoItem[]; total: number }> {
   const supabase = await getSupabase()
   if (!supabase) return { itens: [], total: 0 }
@@ -93,10 +115,11 @@ export async function listCatalogoPage(input: {
   const to = from + input.pageSize - 1
   let query = supabase
     .from('catalogo_itens')
-    .select('id,tipo,codigo,descricao,unidade,grupo,subgrupo,marca', { count: 'exact' })
-    .eq('ativo', true)
+    .select('id,tipo,codigo,descricao,unidade,grupo,subgrupo,marca,ativo', { count: 'exact' })
 
   if (input.tipo && input.tipo !== 'todos') query = query.eq('tipo', input.tipo)
+  if (!input.ativo || input.ativo === 'ativos') query = query.eq('ativo', true)
+  if (input.ativo === 'inativos') query = query.eq('ativo', false)
   const term = input.query?.trim()
   if (term) {
     const pattern = `%${term.replaceAll('%', '')}%`
@@ -116,6 +139,24 @@ export async function listCatalogoPage(input: {
     itens: rows.map((item) => mapCatalogoItem(item, prices.get(item.id))),
     total: count ?? 0,
   }
+}
+
+export async function listCatalogoSugestoes(catalogoItemId: string): Promise<CatalogoSugestao[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .rpc('catalogo_sugestoes_complementares', { item_id: catalogoItemId, limite: 8 })
+
+  if (error) throw error
+  return (data as CatalogoSugestaoRow[] | null ?? []).map((row) => ({
+    catalogoItemId: row.catalogo_item_id,
+    tipo: row.tipo,
+    codigo: row.codigo,
+    descricao: row.descricao,
+    ocorrencias: Number(row.ocorrencias ?? 0),
+    clientes: Number(row.clientes ?? 0),
+  }))
 }
 
 export async function listCatalogoPrecos(catalogoItemId: string): Promise<CatalogoPrecoHistorico[]> {
@@ -173,6 +214,7 @@ function mapCatalogoItem(item: CatalogoRow, preco?: PrecoRow): CatalogoItem {
     grupo: item.grupo ?? undefined,
     subgrupo: item.subgrupo ?? undefined,
     marca: item.marca ?? undefined,
+    ativo: item.ativo,
     preco: preco?.valor ?? 0,
     descontoMaximo: preco?.desconto_maximo ?? undefined,
     estoque: preco?.estoque ?? undefined,

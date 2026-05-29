@@ -1060,6 +1060,24 @@ Validacao:
 Proximo passo tecnico:
 - Adicionar seletor assistido de produtos/servicos do catalogo e janela minima entre campanhas por cliente.
 
+### 2026-05-28 - Catalogo com status e sugestoes complementares
+
+Status: concluido.
+
+Entregue:
+- Catalogo agora permite filtrar itens ativos, inativos ou todos.
+- Tipo `CatalogoItem` passou a carregar o status `ativo` vindo do Supabase.
+- Criada funcao `catalogo_sugestoes_complementares(item_id, limite)` para recomendar itens comprados em conjunto por clientes reais.
+- Historico de preco do item passou a mostrar sugestoes complementares, com ocorrencias e quantidade de clientes.
+
+Validacao:
+- SQL aplicado com `node scripts/run-sql-file.mjs supabase/queries/catalogo_profissional.sql`.
+- Build passou com `npm run build`.
+- Consulta direta validou sugestoes reais para pneu `000020017`, retornando alinhamento, balanceamento, montagem, troca de pneu e cambagem.
+
+Proximo passo tecnico:
+- Usar as sugestoes complementares diretamente no editor de orcamento e nas campanhas por produto.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

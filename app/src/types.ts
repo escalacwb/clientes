@@ -151,6 +151,7 @@ export type CatalogoItem = {
   grupo?: string
   subgrupo?: string
   marca?: string
+  ativo: boolean
   preco: number
   descontoMaximo?: number
   estoque?: number
