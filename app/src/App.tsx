@@ -59,6 +59,7 @@ import {
   campanhaSegmentos,
   createCampanhaFromClienteIds,
   createCampanhaSalva,
+  deleteCampanha,
   listClienteCampanhaEnvios,
   listCampanhaSegmento,
   listCampanhaInbox,
@@ -137,6 +138,7 @@ import { listImportacoes } from './repositories/importacoesRepository'
 import { runFollowupAutomations } from './repositories/importacoesRepository'
 import { createMesclagem, listMesclagens, listPossiveisDuplicados } from './repositories/mesclagensRepository'
 import { createOrcamento } from './repositories/orcamentosRepository'
+import { deleteOrcamento } from './repositories/orcamentosRepository'
 import { listOrcamentos } from './repositories/orcamentosRepository'
 import { listOrcamentosPage, type OrcamentoListFilter } from './repositories/orcamentosRepository'
 import { listOrcamentoAprovacoes } from './repositories/orcamentosRepository'
@@ -1562,6 +1564,14 @@ function App() {
                 ? { ...orcamento, status, motivoPerda, aprovadoPor: status === 'enviado' ? session.id : orcamento.aprovadoPor, aprovadoEm: status === 'enviado' ? new Date().toISOString() : orcamento.aprovadoEm }
                 : orcamento))
             }}
+            onDeleteBudget={async (orcamentoId) => {
+              await deleteOrcamento(orcamentoId)
+              setOrcamentos((current) => current.filter((orcamento) => orcamento.id !== orcamentoId))
+              setOrcamentosTotal((current) => Math.max(0, current - 1))
+              setCampanhaInboxItems((current) => current.map((item) => item.orcamentoId === orcamentoId
+                ? { ...item, orcamentoId: undefined, virouOrcamento: false }
+                : item))
+            }}
             onCompleteTask={async (tarefaId) => {
               await completeTarefa(tarefaId)
               setTarefas((current) => current.map((tarefa) => tarefa.id === tarefaId ? { ...tarefa, status: 'concluida', concluidaEm: new Date().toISOString() } : tarefa))
@@ -2003,6 +2013,11 @@ function App() {
               setQuoteOriginContext(originContext)
               setView('orcamento-editor')
             }}
+            onDeleteCampaign={async (campanhaId) => {
+              await deleteCampanha(campanhaId)
+              setCampanhaInboxItems((current) => current.filter((item) => item.campanhaId !== campanhaId))
+              setCampaignToOpenId((current) => (current === campanhaId ? '' : current))
+            }}
             onAddInteraction={async (interacao) => {
               const created = await createInteracao(interacao)
               setInteracoes((current) => [created, ...current])
@@ -2143,8 +2158,16 @@ function App() {
                         aprovadoEm: status === 'enviado' ? new Date().toISOString() : orcamento.aprovadoEm,
                       }
                     : orcamento,
-                ),
+                  ),
               )
+            }}
+            onDelete={async (id) => {
+              await deleteOrcamento(id)
+              setOrcamentos((current) => current.filter((orcamento) => orcamento.id !== id))
+              setOrcamentosTotal((current) => Math.max(0, current - 1))
+              setCampanhaInboxItems((current) => current.map((item) => item.orcamentoId === id
+                ? { ...item, orcamentoId: undefined, virouOrcamento: false }
+                : item))
             }}
           />
         )}
@@ -2179,6 +2202,16 @@ function App() {
                     : orcamento,
                 ),
               )
+            }}
+            onDelete={async () => {
+              await deleteOrcamento(selectedOrcamento.id)
+              setOrcamentos((current) => current.filter((orcamento) => orcamento.id !== selectedOrcamento.id))
+              setOrcamentosTotal((current) => Math.max(0, current - 1))
+              setCampanhaInboxItems((current) => current.map((item) => item.orcamentoId === selectedOrcamento.id
+                ? { ...item, orcamentoId: undefined, virouOrcamento: false }
+                : item))
+              setSelectedOrcamentoId('')
+              setView('orcamentos')
             }}
           />
         )}
@@ -6780,6 +6813,7 @@ function Cliente360({
   onAddInteraction,
   onOpenBudget,
   onUpdateBudgetStatus,
+  onDeleteBudget,
   onCompleteTask,
   onUpdateCampaignStatus,
   onCreateTask,
@@ -6799,6 +6833,7 @@ function Cliente360({
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
   onOpenBudget: (orcamentoId: string) => void
   onUpdateBudgetStatus: (orcamentoId: string, status: Orcamento['status'], motivoPerda?: string) => Promise<void>
+  onDeleteBudget: (orcamentoId: string) => Promise<void>
   onCompleteTask: (tarefaId: string) => Promise<void>
   onUpdateCampaignStatus: (envio: CampanhaEnvio, status: CampanhaEnvioStatus) => Promise<void>
   onCreateTask: () => Promise<Tarefa>
@@ -7353,6 +7388,18 @@ function Cliente360({
                   )}
                   <button className="button compact-button" type="button" disabled={busyActionId === `budget-${orcamento.id}-enviado`} onClick={() => runAction(`budget-${orcamento.id}-enviado`, () => onUpdateBudgetStatus(orcamento.id, 'enviado'))}>Enviado</button>
                   <button className="button compact-button" type="button" disabled={busyActionId === `budget-${orcamento.id}-ganho`} onClick={() => runAction(`budget-${orcamento.id}-ganho`, () => onUpdateBudgetStatus(orcamento.id, 'ganho'))}>Ganho</button>
+                  <button
+                    className="button compact-button danger"
+                    type="button"
+                    disabled={busyActionId === `budget-${orcamento.id}-delete`}
+                    onClick={() => {
+                      if (window.confirm(`Excluir a proposta ${orcamento.id.slice(0, 8)} deste cliente?`)) {
+                        void runAction(`budget-${orcamento.id}-delete`, () => onDeleteBudget(orcamento.id))
+                      }
+                    }}
+                  >
+                    Excluir
+                  </button>
                 </div>
               </div>
             ))}
@@ -8603,6 +8650,7 @@ function Campanhas({
   onCreateInboxTask,
   onUpdateInboxStatus,
   onOpenBudgetEditor,
+  onDeleteCampaign,
   onAddInteraction,
   onAddTask,
 }: {
@@ -8620,6 +8668,7 @@ function Campanhas({
   onCreateInboxTask: (item: CampanhaInboxItem) => Promise<Tarefa>
   onUpdateInboxStatus: (item: CampanhaInboxItem, status: CampanhaEnvioStatus) => Promise<void>
   onOpenBudgetEditor: (cliente: Cliente, originContext: QuoteOriginContext) => void
+  onDeleteCampaign: (campanhaId: string) => Promise<void>
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
   onAddTask: (task: TarefaInput) => Promise<Tarefa>
 }) {
@@ -8874,6 +8923,31 @@ function Campanhas({
       await refreshCampaignResumo()
     } catch (exception) {
       setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel salvar a campanha.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function deleteCurrentCampaign() {
+    if (!activeCampanhaId) return
+    const campaignName = campanhasSalvas.find((campanha) => campanha.id === activeCampanhaId)?.nome ?? saveName
+    const confirmed = window.confirm(`Excluir a campanha "${campaignName || activeCampanhaId.slice(0, 8)}"? Os envios e tarefas gerados por ela tambem serao removidos.`)
+    if (!confirmed) return
+
+    setIsSaving(true)
+    setCampaignError('')
+    try {
+      await onDeleteCampaign(activeCampanhaId)
+      setCampanhasSalvas((current) => current.filter((campanha) => campanha.id !== activeCampanhaId))
+      setCampanhasResumo((current) => current.filter((resumo) => resumo.campanhaId !== activeCampanhaId))
+      setSelectedCampaignClientIds([])
+      setStatuses({})
+      setElegibilidade({})
+      setActiveCampanhaId('')
+      setSaveName('')
+      setCampaignClipboardMessage('')
+    } catch (exception) {
+      setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel excluir a campanha.')
     } finally {
       setIsSaving(false)
     }
@@ -9371,10 +9445,19 @@ function Campanhas({
         {campaignClipboardMessage && <small className="score">{campaignClipboardMessage}</small>}
       </div>
       <div className="campaign-save-bar">
-        <span>{activeCampanhaId ? 'Campanha salva selecionada.' : 'Ajuste filtros e mensagem antes de salvar para reutilizar.'}</span>
-        <button className="button primary" disabled={isSaving} onClick={saveCurrentCampaign} type="button">
+        <span>
+          {activeCampanhaId
+            ? 'Campanha salva selecionada. Ela continua disponivel no seletor "Campanha nova" depois do reload.'
+            : 'Para acessar esta campanha depois do reload, informe um nome e clique em Salvar campanha.'}
+        </span>
+        <button className="button primary" disabled={isSaving || Boolean(activeCampanhaId)} onClick={saveCurrentCampaign} type="button">
           {isSaving ? 'Salvando...' : 'Salvar campanha'}
         </button>
+        {activeCampanhaId && (
+          <button className="button danger" disabled={isSaving} onClick={deleteCurrentCampaign} type="button">
+            Excluir campanha
+          </button>
+        )}
       </div>
       <div className="campaign-report">
         <div className="campaign-report-header">
@@ -9950,6 +10033,7 @@ function Orcamentos({
   onCreateLooseBudget,
   onRevise,
   onStatusChange,
+  onDelete,
 }: {
   clientes: Cliente[]
   orcamentos: Orcamento[]
@@ -9968,6 +10052,7 @@ function Orcamentos({
   onCreateLooseBudget: (cliente: Cliente) => void
   onRevise: (id: string, orcamento: OrcamentoInput) => Promise<Orcamento>
   onStatusChange: (id: string, status: Orcamento['status'], motivoPerda?: string) => void
+  onDelete: (id: string) => Promise<void>
 }) {
   const [lossReasons, setLossReasons] = useState<Record<string, string>>({})
   const [approvalRejectReasons, setApprovalRejectReasons] = useState<Record<string, string>>({})
@@ -9982,6 +10067,8 @@ function Orcamentos({
   const [looseBudgetTotal, setLooseBudgetTotal] = useState(0)
   const [isSearchingLooseBudget, setIsSearchingLooseBudget] = useState(false)
   const [looseBudgetError, setLooseBudgetError] = useState('')
+  const [deletingBudgetId, setDeletingBudgetId] = useState('')
+  const [budgetActionError, setBudgetActionError] = useState('')
   const openStatuses: Orcamento['status'][] = ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando']
   const valorAberto = orcamentos
     .filter((orcamento) => openStatuses.includes(orcamento.status))
@@ -10049,6 +10136,24 @@ function Orcamentos({
       setVersionsError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar as versoes.')
     } finally {
       setVersionsLoading(false)
+    }
+  }
+
+  async function handleDeleteBudget(orcamento: Orcamento) {
+    const clienteNome = clientes.find((item) => item.id === orcamento.clienteId)?.nome ?? orcamento.clienteNome ?? 'cliente'
+    const confirmed = window.confirm(`Excluir a proposta ${orcamento.id.slice(0, 8)} de ${clienteNome}? Esta acao remove itens, versoes e controles vinculados.`)
+    if (!confirmed) return
+
+    setDeletingBudgetId(orcamento.id)
+    setBudgetActionError('')
+    try {
+      await onDelete(orcamento.id)
+      if (versionTarget?.id === orcamento.id) setVersionTarget(null)
+      if (revisionTarget?.id === orcamento.id) setRevisionTarget(null)
+    } catch (exception) {
+      setBudgetActionError(exception instanceof Error ? exception.message : 'Nao foi possivel excluir a proposta.')
+    } finally {
+      setDeletingBudgetId('')
     }
   }
 
@@ -10138,6 +10243,7 @@ function Orcamentos({
         <Info label="Negociando" value={negociando.toString()} />
         <Info label="Ganhos" value={ganhos.toString()} />
       </div>
+      {budgetActionError && <div className="alert">{budgetActionError}</div>}
       <div className="table">
         <div className="table-head five">
           <span>Cliente</span>
@@ -10173,6 +10279,14 @@ function Orcamentos({
                 <div className="budget-row-actions">
                   <button className="button primary" type="button" onClick={() => onOpenDetail(orcamento)}>
                     Abrir
+                  </button>
+                  <button
+                    className="button danger"
+                    type="button"
+                    disabled={deletingBudgetId === orcamento.id}
+                    onClick={() => void handleDeleteBudget(orcamento)}
+                  >
+                    {deletingBudgetId === orcamento.id ? 'Excluindo...' : 'Excluir'}
                   </button>
                   <select
                     className="assign-select"
@@ -10343,6 +10457,7 @@ function OrcamentoWorkspace({
   onBack,
   onRevise,
   onStatusChange,
+  onDelete,
 }: {
   orcamento: Orcamento
   cliente: Cliente
@@ -10352,6 +10467,7 @@ function OrcamentoWorkspace({
   onBack: () => void
   onRevise: (id: string, orcamento: OrcamentoInput) => Promise<Orcamento>
   onStatusChange: (status: Orcamento['status'], motivoPerda?: string) => Promise<void>
+  onDelete: () => Promise<void>
 }) {
   const [activeTab, setActiveTab] = useState<'resumo' | 'itens' | 'mensagem' | 'aprovacao' | 'versoes'>('resumo')
   const [versions, setVersions] = useState<OrcamentoVersao[]>([])
@@ -10362,6 +10478,7 @@ function OrcamentoWorkspace({
   const [lossReason, setLossReason] = useState('')
   const [approvalRejectReason, setApprovalRejectReason] = useState('')
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
+  const [isDeletingBudget, setIsDeletingBudget] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [error, setError] = useState('')
   const proposalPreviewRef = useRef<HTMLDivElement | null>(null)
@@ -10458,6 +10575,20 @@ function OrcamentoWorkspace({
     setFeedback('Mensagem copiada.')
   }
 
+  async function deleteCurrentBudget() {
+    const confirmed = window.confirm(`Excluir a proposta ${orcamento.id.slice(0, 8)} de ${cliente.nome}? Esta acao remove itens, versoes e controles vinculados.`)
+    if (!confirmed) return
+
+    setIsDeletingBudget(true)
+    setError('')
+    try {
+      await onDelete()
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel excluir a proposta.')
+      setIsDeletingBudget(false)
+    }
+  }
+
   function downloadCurrentPdf() {
     if (activeTab !== 'resumo' || !proposalPreviewRef.current) {
       setActiveTab('resumo')
@@ -10480,6 +10611,9 @@ function OrcamentoWorkspace({
         <div className="toolbar-actions">
           <button className="button" type="button" onClick={onBack}>Voltar</button>
           <button className="button" type="button" onClick={downloadCurrentPdf}>Baixar PDF</button>
+          <button className="button danger" type="button" disabled={isDeletingBudget} onClick={() => void deleteCurrentBudget()}>
+            {isDeletingBudget ? 'Excluindo...' : 'Excluir'}
+          </button>
           <a className={!waUrl ? 'button disabled' : 'button primary'} href={waUrl} target="_blank" rel="noreferrer">
             <MessageCircle size={16} /> Enviar WA.ME
           </a>

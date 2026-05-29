@@ -426,6 +426,27 @@ export async function updateOrcamentoStatus(
   }
 }
 
+export async function deleteOrcamento(id: string): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase) return
+
+  const steps = [
+    supabase.from('campanha_envios').update({ orcamento_id: null, virou_orcamento: false }).eq('orcamento_id', id),
+    supabase.from('interacoes').update({ orcamento_id: null }).eq('orcamento_id', id),
+    supabase.from('oportunidades').delete().eq('orcamento_id', id),
+    supabase.from('orcamento_itens').delete().eq('orcamento_id', id),
+    supabase.from('orcamento_condicoes').delete().eq('orcamento_id', id),
+    supabase.from('orcamento_aprovacoes').delete().eq('orcamento_id', id),
+    supabase.from('orcamento_versoes').delete().eq('orcamento_id', id),
+    supabase.from('orcamentos').delete().eq('id', id),
+  ]
+
+  for (const step of steps) {
+    const { error } = await step
+    if (error) throw error
+  }
+}
+
 async function createOrcamentoAprovacao(
   orcamentoId: string,
   acao: OrcamentoAprovacao['acao'],

@@ -378,6 +378,23 @@ export async function createCampanhaSalva(input: {
   return mapCampanha(data as CampanhaRow)
 }
 
+export async function deleteCampanha(campanhaId: string): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase) return
+
+  const steps = [
+    supabase.from('campanha_envios').delete().eq('campanha_id', campanhaId),
+    supabase.from('oportunidades').delete().eq('campanha_id', campanhaId),
+    supabase.from('tarefas').delete().ilike('origem', `campanha:${campanhaId}%`),
+    supabase.from('campanhas').delete().eq('id', campanhaId),
+  ]
+
+  for (const step of steps) {
+    const { error } = await step
+    if (error) throw error
+  }
+}
+
 export async function createCampanhaFromClienteIds(input: {
   nome: string
   descricao?: string
