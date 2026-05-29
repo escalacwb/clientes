@@ -70,9 +70,9 @@ Ja entregue:
 - Campanha salva e marcada como `virou_orcamento` quando gera proposta.
 - Snapshot inicial de versao da proposta com itens, total, condicao, origem e mensagem.
 - Tela para consultar e comparar versoes anteriores da proposta.
+- Revisao/edicao de proposta criando nova versao.
 
 Proximas entregas:
-- Revisao/edicao de proposta criando nova versao.
 - Receita atribuida quando orcamento de campanha vira ganho.
 
 Pronto quando:

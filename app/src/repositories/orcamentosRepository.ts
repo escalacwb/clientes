@@ -145,6 +145,72 @@ export async function createOrcamento(input: OrcamentoInput, itens: OrcamentoIte
   return created
 }
 
+export async function reviseOrcamento(
+  id: string,
+  input: OrcamentoInput,
+  itens: OrcamentoItemInput[] = [],
+): Promise<Orcamento> {
+  const supabase = await getSupabase()
+  if (!supabase) {
+    return {
+      id,
+      data: input.data ?? new Date().toISOString().slice(0, 10),
+      status: input.status ?? 'aberto',
+      ...input,
+      itens: itens.map((item, index) => ({
+        id: `oi-rev-${Date.now()}-${index}`,
+        orcamentoId: id,
+        descricao: item.descricao,
+        tipo: item.tipo,
+        quantidade: item.quantidade,
+        valorUnitario: item.valorUnitario,
+        valorTotal: item.valorTotal ?? item.quantidade * item.valorUnitario,
+        observacao: item.observacao,
+      })),
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('orcamentos')
+    .update({
+      cliente_id: input.clienteId,
+      vendedor_id: input.vendedorId,
+      status: input.status ?? 'aberto',
+      valor_total: input.valorTotal,
+      validade: input.validade,
+      previsao_fechamento: input.previsaoFechamento ?? null,
+      forma_pagamento: input.formaPagamento ?? null,
+      motivo_perda: input.motivoPerda ?? null,
+      aprovacao_motivo: input.aprovacaoMotivo ?? null,
+      aprovado_por: input.aprovadoPor ?? null,
+      aprovado_em: input.aprovadoEm ?? null,
+      observacao: input.observacao ?? null,
+    })
+    .eq('id', id)
+    .select('*')
+    .single()
+
+  if (error) throw error
+
+  const orcamento = mapOrcamento(data as OrcamentoRow)
+  const { error: deleteError } = await supabase
+    .from('orcamento_itens')
+    .delete()
+    .eq('orcamento_id', id)
+
+  if (deleteError) throw deleteError
+
+  const createdItems = itens.length > 0 ? await createOrcamentoItens(id, itens) : []
+  const revised = { ...orcamento, itens: createdItems }
+
+  await createOrcamentoVersao(revised, {
+    mensagem: input.versaoMensagem,
+    origem: input.versaoOrigem,
+  })
+
+  return revised
+}
+
 export async function updateOrcamentoStatus(
   id: string,
   status: Orcamento['status'],

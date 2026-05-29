@@ -89,6 +89,7 @@ import { createMesclagem, listMesclagens, listPossiveisDuplicados } from './repo
 import { createOrcamento } from './repositories/orcamentosRepository'
 import { listOrcamentos } from './repositories/orcamentosRepository'
 import { listOrcamentoVersoes } from './repositories/orcamentosRepository'
+import { reviseOrcamento } from './repositories/orcamentosRepository'
 import { updateOrcamentoStatus } from './repositories/orcamentosRepository'
 import { completeTarefa, createTarefa, listTarefas } from './repositories/tarefasRepository'
 import { listUsuarios } from './repositories/usuariosRepository'
@@ -944,6 +945,12 @@ function App() {
             orcamentos={scopedOrcamentos}
             usuarios={usuarios}
             currentUser={session}
+            catalogo={catalogo}
+            onRevise={async (id, input) => {
+              const revised = await reviseOrcamento(id, input, input.itens)
+              setOrcamentos((current) => current.map((orcamento) => (orcamento.id === id ? revised : orcamento)))
+              return revised
+            }}
             onStatusChange={(id, status, motivoPerda) => {
               updateOrcamentoStatus(id, status, motivoPerda, status === 'enviado' ? session.id : undefined).catch((exception) => {
                 setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o orcamento.')
@@ -4472,18 +4479,23 @@ function Orcamentos({
   orcamentos,
   usuarios,
   currentUser,
+  catalogo,
+  onRevise,
   onStatusChange,
 }: {
   clientes: Cliente[]
   orcamentos: Orcamento[]
   usuarios: Vendedor[]
   currentUser: SessaoUsuario
+  catalogo: CatalogoItem[]
+  onRevise: (id: string, orcamento: OrcamentoInput) => Promise<Orcamento>
   onStatusChange: (id: string, status: Orcamento['status'], motivoPerda?: string) => void
 }) {
   const [lossReasons, setLossReasons] = useState<Record<string, string>>({})
   const [approvalRejectReasons, setApprovalRejectReasons] = useState<Record<string, string>>({})
   const [statusFilter, setStatusFilter] = useState<Orcamento['status'] | 'todos' | 'vencidos'>('todos')
   const [versionTarget, setVersionTarget] = useState<Orcamento | null>(null)
+  const [revisionTarget, setRevisionTarget] = useState<Orcamento | null>(null)
   const [versions, setVersions] = useState<OrcamentoVersao[]>([])
   const [versionsLoading, setVersionsLoading] = useState(false)
   const [versionsError, setVersionsError] = useState('')
@@ -4503,6 +4515,7 @@ function Orcamentos({
   const canApprove = currentUser.role === 'admin'
   const targetClient = versionTarget ? clientes.find((item) => item.id === versionTarget.clienteId) : undefined
   const targetVendor = versionTarget ? usuarios.find((item) => item.id === versionTarget.vendedorId) : undefined
+  const revisionClient = revisionTarget ? clientes.find((item) => item.id === revisionTarget.clienteId) : undefined
   const latestVersion = versions[0]
   const firstVersion = versions[versions.length - 1]
 
@@ -4647,6 +4660,9 @@ function Orcamentos({
                   <button className="button" type="button" onClick={() => openVersionHistory(orcamento)}>
                     Versoes
                   </button>
+                  <button className="button" type="button" onClick={() => setRevisionTarget(orcamento)}>
+                    Revisar
+                  </button>
                 </div>
               </span>
             </div>
@@ -4705,6 +4721,221 @@ function Orcamentos({
           )}
         </section>
       )}
+      {revisionTarget && revisionClient && (
+        <OrcamentoRevisionEditor
+          orcamento={revisionTarget}
+          cliente={revisionClient}
+          catalogo={catalogo}
+          onCancel={() => setRevisionTarget(null)}
+          onSave={async (input) => {
+            const revised = await onRevise(revisionTarget.id, input)
+            setRevisionTarget(null)
+            setVersionTarget(revised)
+            setVersions(await listOrcamentoVersoes(revised.id))
+          }}
+        />
+      )}
+    </section>
+  )
+}
+
+function OrcamentoRevisionEditor({
+  orcamento,
+  cliente,
+  catalogo,
+  onCancel,
+  onSave,
+}: {
+  orcamento: Orcamento
+  cliente: Cliente
+  catalogo: CatalogoItem[]
+  onCancel: () => void
+  onSave: (orcamento: OrcamentoInput) => Promise<void>
+}) {
+  const [validade, setValidade] = useState(orcamento.validade || new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10))
+  const [previsaoFechamento, setPrevisaoFechamento] = useState(orcamento.previsaoFechamento ?? '')
+  const [formaPagamento, setFormaPagamento] = useState(orcamento.formaPagamento ?? 'A vista')
+  const [observacao, setObservacao] = useState(orcamento.observacao ?? '')
+  const [catalogSearch, setCatalogSearch] = useState('')
+  const [items, setItems] = useState<OrcamentoItemInput[]>(
+    orcamento.itens && orcamento.itens.length > 0
+      ? orcamento.itens.map((item) => ({
+          catalogoItemId: item.catalogoItemId,
+          codigo: item.codigo,
+          descricao: item.descricao,
+          tipo: item.tipo,
+          quantidade: item.quantidade,
+          valorUnitario: item.valorUnitario,
+          descontoPercentual: item.descontoPercentual ?? 0,
+          observacao: item.observacao,
+        }))
+      : [{ descricao: '', tipo: 'produto', quantidade: 1, valorUnitario: 0, descontoPercentual: 0 }],
+  )
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const filteredCatalog = catalogo
+    .filter((item) => {
+      const term = catalogSearch.trim().toLowerCase()
+      if (!term) return true
+      return `${item.codigo} ${item.descricao} ${item.tipo} ${item.grupo ?? ''} ${item.marca ?? ''}`.toLowerCase().includes(term)
+    })
+    .slice(0, 120)
+  const validItems = items
+    .filter((item) => item.descricao.trim() && item.quantidade > 0 && item.valorUnitario > 0)
+    .map((item) => ({ ...item, valorTotal: quoteItemTotal(item) }))
+  const total = validItems.reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
+  const approvalWarnings = quoteApprovalWarnings(validItems, catalogo)
+  const quoteMessage = buildQuoteMessage(cliente, validItems, validade, formaPagamento, observacao)
+
+  function updateItem(index: number, patch: Partial<OrcamentoItemInput>) {
+    setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item))
+  }
+
+  function applyCatalogItem(index: number, catalogoItemId: string) {
+    const selected = catalogo.find((item) => item.id === catalogoItemId)
+    if (!selected) {
+      updateItem(index, { catalogoItemId: undefined, codigo: undefined })
+      return
+    }
+    updateItem(index, {
+      catalogoItemId: selected.id,
+      codigo: selected.codigo,
+      tipo: selected.tipo,
+      descricao: selected.descricao,
+      valorUnitario: selected.preco,
+      descontoPercentual: 0,
+    })
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (validItems.length === 0 || total <= 0) {
+      setError('Adicione pelo menos um item com valor para revisar a proposta.')
+      return
+    }
+
+    setError('')
+    setIsSaving(true)
+    const needsApproval = approvalWarnings.length > 0
+    const revisionNote = `Revisao da proposta ${orcamento.id.slice(0, 8)} em ${dateLabel(new Date().toISOString())}.`
+    try {
+      await onSave({
+        clienteId: orcamento.clienteId,
+        vendedorId: orcamento.vendedorId,
+        status: needsApproval ? 'aguardando_aprovacao' : 'negociando',
+        valorTotal: total,
+        validade,
+        previsaoFechamento: previsaoFechamento || undefined,
+        formaPagamento,
+        aprovacaoMotivo: needsApproval ? approvalWarnings.join(' ') : undefined,
+        motivoPerda: undefined,
+        aprovadoPor: undefined,
+        aprovadoEm: undefined,
+        observacao: [observacao.trim(), revisionNote].filter(Boolean).join('\n\n'),
+        itens: validItems,
+        versaoMensagem: quoteMessage,
+        versaoOrigem: 'revisao de proposta',
+      })
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel revisar a proposta.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <section className="quote-version-panel quote-revision-panel">
+      <div className="panel-header">
+        <div>
+          <h3>Revisar proposta {orcamento.id.slice(0, 8)}</h3>
+          <p>{cliente.nome} - versao nova sera registrada ao salvar.</p>
+        </div>
+        <button className="button" type="button" onClick={onCancel}>Cancelar</button>
+      </div>
+      {error && <div className="alert">{error}</div>}
+      {approvalWarnings.length > 0 && (
+        <div className="readiness warning">
+          <strong>Requer aprovacao comercial</strong>
+          {approvalWarnings.map((warning) => <span key={warning}>{warning}</span>)}
+        </div>
+      )}
+      <form className="quote-layout" onSubmit={submit}>
+        <section className="quote-main">
+          <div className="quote-controls">
+            <label>
+              Validade
+              <input type="date" value={validade} onChange={(event) => setValidade(event.target.value)} required />
+            </label>
+            <label>
+              Prev. fechamento
+              <input type="date" value={previsaoFechamento} onChange={(event) => setPrevisaoFechamento(event.target.value)} />
+            </label>
+            <label>
+              Condicao
+              <input value={formaPagamento} onChange={(event) => setFormaPagamento(event.target.value)} />
+            </label>
+          </div>
+          <label className="quote-search">
+            Buscar catalogo
+            <input value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Codigo, medida, produto, servico ou marca" />
+          </label>
+          <div className="quote-items">
+            <div className="quote-item-head">
+              <span>Catalogo</span>
+              <span>Descricao</span>
+              <span>Qtd.</span>
+              <span>Unitario</span>
+              <span>Desc.</span>
+              <span>Total</span>
+            </div>
+            {items.map((item, index) => (
+              <div className="quote-item-row" key={index}>
+                <select value={item.catalogoItemId ?? ''} onChange={(event) => applyCatalogItem(index, event.target.value)}>
+                  <option value="">Selecionar</option>
+                  {filteredCatalog.map((catalogItem) => (
+                    <option key={catalogItem.id} value={catalogItem.id}>
+                      {catalogItem.tipo} | {catalogItem.codigo} | {catalogItem.descricao} | {money(catalogItem.preco)}
+                    </option>
+                  ))}
+                </select>
+                <input value={item.descricao} onChange={(event) => updateItem(index, { descricao: event.target.value })} placeholder="Descricao" />
+                <input type="number" min="0" step="0.01" value={item.quantidade} onChange={(event) => updateItem(index, { quantidade: Number(event.target.value) })} />
+                <input type="number" min="0" step="0.01" value={item.valorUnitario} onChange={(event) => updateItem(index, { valorUnitario: Number(event.target.value) })} />
+                <input type="number" min="0" max="100" step="0.01" value={item.descontoPercentual ?? 0} onChange={(event) => updateItem(index, { descontoPercentual: Number(event.target.value) })} />
+                <strong>{money(quoteItemTotal(item))}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="quote-actions">
+            <button className="button" type="button" onClick={() => setItems((current) => [...current, { descricao: '', tipo: 'produto', quantidade: 1, valorUnitario: 0, descontoPercentual: 0 }])}>
+              Adicionar item
+            </button>
+            <button className="button" type="button" disabled={items.length <= 1} onClick={() => setItems((current) => current.slice(0, -1))}>
+              Remover ultima linha
+            </button>
+          </div>
+          <label className="quote-observation">
+            Observacoes e termos
+            <textarea value={observacao} onChange={(event) => setObservacao(event.target.value)} />
+          </label>
+        </section>
+        <aside className="quote-summary-panel">
+          <div className="info-grid quote-kpis">
+            <Info label="Total anterior" value={money(orcamento.valorTotal)} />
+            <Info label="Novo total" value={money(total)} />
+            <Info label="Diferenca" value={money(total - orcamento.valorTotal)} />
+            <Info label="Aprovacao" value={approvalWarnings.length > 0 ? 'Necessaria' : 'Dentro do limite'} />
+          </div>
+          <label>
+            Mensagem WhatsApp revisada
+            <textarea readOnly value={quoteMessage} />
+          </label>
+          <button className="button primary" type="submit" disabled={isSaving}>
+            {isSaving ? 'Salvando...' : 'Salvar nova versao'}
+          </button>
+        </aside>
+      </form>
     </section>
   )
 }

@@ -529,6 +529,23 @@ Validacao:
 Proximo passo tecnico:
 - Criar fluxo de revisar proposta existente salvando uma nova versao antes de alterar itens/condicoes.
 
+### 2026-05-28 - Revisao de proposta com nova versao
+
+Status: concluido.
+
+Entregue:
+- Tela de orcamentos ganhou acao `Revisar`.
+- A revisao carrega itens atuais, validade, previsao de fechamento, condicao e observacoes.
+- Ao salvar, o repository atualiza o orcamento, substitui os itens atuais e registra nova versao em `orcamento_versoes`.
+- A proposta revisada volta para `negociando`, ou `aguardando_aprovacao` quando houver desconto acima do limite do catalogo.
+- Apos salvar, o painel abre o historico de versoes para conferir a proposta revisada.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Atribuir receita de campanhas quando uma proposta originada de campanha virar `ganho`.
+
 ### 2026-05-28 - Campanhas com construtor de publico
 
 Status: concluido.
