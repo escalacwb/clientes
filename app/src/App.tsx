@@ -6259,10 +6259,19 @@ function buildQuoteMessage(
       })
       lines.push(`*Opções:* ${quoteAlternativeRangeLabel(alternativeItems)}`)
     }
+    if (hasSeparatedBlocks && paymentScenarios.length > 0) {
+      lines.push('')
+      lines.push('ðŸ’³ *CondiÃ§Ãµes deste bloco*')
+      lines[lines.length - 1] = '💳 *Condições deste bloco*'
+      paymentScenarios.forEach((scenario) => {
+        lines.push(`- ${quoteConditionLabel(scenario.label)}: ${quoteBlockConditionLabel(block, scenario)}`)
+      })
+    }
     lines.push('')
   })
 
-  lines.push('------------------------------')
+  if (!hasSeparatedBlocks) {
+    lines.push('------------------------------')
   lines.push('🧾 *Resumo da proposta*')
   lines.push('')
   if (hasSeparatedBlocks) {
@@ -6295,6 +6304,9 @@ function buildQuoteMessage(
         lines.push(`- ${quoteConditionLabel(scenario.label)}: ${quoteConditionValueLabel(scenario.total, scenario.parcelas)}`)
       })
     }
+  }
+  } else if (hasAlternatives) {
+    lines.push('As alternativas sao opcoes de escolha e nao entram no subtotal principal do bloco.')
   }
   if (observacao?.trim()) lines.push('', '📝 *Observações*', observacao.trim())
   lines.push('', '⚠️ Antes da emissão da ordem de compra, solicite a confirmação de disponibilidade, prazo e condições.')
@@ -6622,22 +6634,23 @@ function QuoteProposalPreview({
                 <span>{mainItems.length > 0 ? 'Subtotal do bloco' : 'Faixa das opcoes'}</span>
                 <strong>{quoteBlockTotalLabel(block)}</strong>
               </div>
+              {hasSeparatedBlocks && condicoes && condicoes.length > 0 && (
+                <div className="proposal-block-conditions">
+                  <strong>Condicoes deste bloco</strong>
+                  {condicoes.map((scenario) => (
+                    <div key={`${block.title}-${scenario.label}`}>
+                      <span>{quoteConditionLabel(scenario.label)}</span>
+                      <b>{quoteBlockConditionLabel(block, scenario)}</b>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           )
         })}
         {itens.length === 0 && <span className="muted">Adicione itens para montar a proposta.</span>}
       </div>
-      {hasSeparatedBlocks ? (
-        <div className="proposal-block-totals">
-          <strong>Totais por bloco</strong>
-          {blocks.map((block, index) => (
-            <div key={`total-${block.title}`}>
-              <span>{quoteDisplayBlockTitle(block, index)}</span>
-              <strong>{quoteBlockTotalLabel(block)}</strong>
-            </div>
-          ))}
-        </div>
-      ) : (
+      {!hasSeparatedBlocks && (
         <div className="proposal-total">
           <span>Total principal</span>
           <strong>{money(total)}</strong>
@@ -6652,23 +6665,11 @@ function QuoteProposalPreview({
           {servicosTotal > 0 && <span>Servicos: {money(servicosTotal)}</span>}
         </div>
       )}
-      {condicoes && condicoes.length > 0 && (
+      {!hasSeparatedBlocks && condicoes && condicoes.length > 0 && (
         <div className="proposal-conditions">
-          {hasSeparatedBlocks
-            ? blocks.map((block, index) => (
-                <section className="proposal-condition-block" key={`condition-${block.title}`}>
-                  <strong>{quoteDisplayBlockTitle(block, index)}</strong>
-                  {condicoes.map((scenario) => (
-                    <div key={`${block.title}-${scenario.label}`}>
-                      <span>{quoteConditionLabel(scenario.label)}</span>
-                      <b>{quoteBlockConditionLabel(block, scenario)}</b>
-                    </div>
-                  ))}
-                </section>
-              ))
-            : condicoes.map((scenario) => (
-                <span key={scenario.label}>{quoteConditionLabel(scenario.label)}: {quoteConditionValueLabel(scenario.total, scenario.parcelas)}</span>
-              ))}
+          {condicoes.map((scenario) => (
+            <span key={scenario.label}>{quoteConditionLabel(scenario.label)}: {quoteConditionValueLabel(scenario.total, scenario.parcelas)}</span>
+          ))}
         </div>
       )}
       {observacao?.trim() && (

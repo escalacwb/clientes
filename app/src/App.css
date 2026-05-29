@@ -2305,6 +2305,7 @@ h3 {
 .proposal-block-totals,
 .proposal-commercial,
 .proposal-breakdown,
+.proposal-block-conditions,
 .proposal-condition-block,
 .proposal-notes,
 .proposal-footer {
@@ -2357,6 +2358,7 @@ h3 {
 .proposal-alternatives div,
 .proposal-total,
 .proposal-subtotal,
+.proposal-block-conditions div,
 .proposal-block-totals div,
 .proposal-condition-block div {
   display: flex;
@@ -2415,6 +2417,20 @@ h3 {
 .proposal-subtotal {
   border-top: 1px solid #e8eee9;
   padding-top: 8px;
+}
+
+.proposal-block-conditions {
+  border-top: 1px solid #e8eee9;
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.proposal-block-conditions > strong {
+  color: #12312f;
+}
+
+.proposal-block-conditions b {
+  color: #12312f;
 }
 
 .proposal-block-totals {
@@ -2626,6 +2642,7 @@ h3 {
 .pdf-export-stage .proposal-lines strong,
 .pdf-export-stage .proposal-alternatives strong,
 .pdf-export-stage .proposal-subtotal strong,
+.pdf-export-stage .proposal-block-conditions b,
 .pdf-export-stage .proposal-block-totals strong,
 .pdf-export-stage .proposal-condition-block b {
   text-align: right;
@@ -2644,6 +2661,7 @@ h3 {
 
 .pdf-export-stage .proposal-subtotal,
 .pdf-export-stage .proposal-total,
+.pdf-export-stage .proposal-block-conditions div,
 .pdf-export-stage .proposal-block-totals div,
 .pdf-export-stage .proposal-condition-block div {
   display: grid;
@@ -2657,6 +2675,19 @@ h3 {
   border-top: 1px solid #dfe7e1;
   margin-top: 6px;
   padding: 8px;
+}
+
+.pdf-export-stage .proposal-block-conditions {
+  background: #ffffff;
+  border-top: 1px solid #dfe7e1;
+  margin-top: 6px;
+  padding-top: 8px;
+}
+
+.pdf-export-stage .proposal-block-conditions > strong {
+  display: block;
+  color: #12312f;
+  margin-bottom: 4px;
 }
 
 .pdf-export-stage .proposal-total strong {
