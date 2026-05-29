@@ -191,9 +191,9 @@ const emptyClient: Cliente = {
 }
 
 type QuoteOriginContext =
-  | { kind: 'campanha'; sourceId?: string; label: string }
-  | { kind: 'tarefa'; sourceId?: string; label: string }
-  | { kind: 'cliente'; sourceId?: string; label: string }
+  | { kind: 'campanha'; sourceId?: string; label: string; initialItems?: OrcamentoItemInput[] }
+  | { kind: 'tarefa'; sourceId?: string; label: string; initialItems?: OrcamentoItemInput[] }
+  | { kind: 'cliente'; sourceId?: string; label: string; initialItems?: OrcamentoItemInput[] }
 
 function App() {
   const clientePageSize = 50
@@ -865,9 +865,9 @@ function App() {
               setClienteTarefas((current) => [created, ...current])
               return created
             }}
-            onCreateQuote={() => {
+            onCreateQuote={(initialItems) => {
               setQuoteSourceView('cliente360')
-              setQuoteOriginContext({ kind: 'cliente', label: 'Ficha 360' })
+              setQuoteOriginContext({ kind: 'cliente', label: 'Ficha 360', initialItems })
               setView('orcamento-editor')
             }}
             onBack={() => setView('clientes')}
@@ -2910,9 +2910,11 @@ function OrcamentoEditor({
   })
   const [observacao, setObservacao] = useState('')
   const [catalogSearch, setCatalogSearch] = useState('')
-  const [items, setItems] = useState<OrcamentoItemInput[]>([
-    { descricao: '', tipo: 'produto', quantidade: 1, valorUnitario: 0, descontoPercentual: 0 },
-  ])
+  const [items, setItems] = useState<OrcamentoItemInput[]>(() =>
+    originContext.initialItems?.length
+      ? originContext.initialItems
+      : [{ descricao: '', tipo: 'produto' as const, quantidade: 1, valorUnitario: 0, descontoPercentual: 0 }],
+  )
   const [isSaving, setIsSaving] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [error, setError] = useState('')
@@ -3239,6 +3241,30 @@ function buildQuoteMessage(
   return lines.join('\n')
 }
 
+function quoteItemFromVenda(venda: VendaItem): OrcamentoItemInput {
+  return {
+    codigo: venda.produtoCodigo,
+    descricao: venda.produtoNome,
+    tipo: 'produto',
+    quantidade: venda.quantidade || 1,
+    valorUnitario: venda.valorUnitario || (venda.valorTotal / Math.max(venda.quantidade || 1, 1)),
+    descontoPercentual: 0,
+    observacao: `Baseado na venda de ${dateLabel(venda.dataVenda)}${venda.nota ? `, nota ${venda.nota}` : ''}.`,
+  }
+}
+
+function quoteItemFromServico(servico: ServicoItem): OrcamentoItemInput {
+  return {
+    codigo: servico.servicoCodigo,
+    descricao: servico.servicoNome,
+    tipo: 'servico',
+    quantidade: servico.quantidade || 1,
+    valorUnitario: servico.valorUnitario || (servico.valorTotal / Math.max(servico.quantidade || 1, 1)),
+    descontoPercentual: 0,
+    observacao: `Baseado no servico de ${dateLabel(servico.dataServico)}${servico.placa ? `, placa ${servico.placa}` : ''}.`,
+  }
+}
+
 function origemLabel(origemBase?: Cliente['origemBase']) {
   const labels: Record<NonNullable<Cliente['origemBase']>, string> = {
     capital_truck: 'Capital Truck',
@@ -3284,7 +3310,7 @@ function Cliente360({
   tarefas: Tarefa[]
   campanhaEnvios: CampanhaEnvio[]
   onCreateTask: () => Promise<Tarefa>
-  onCreateQuote: () => void
+  onCreateQuote: (initialItems?: OrcamentoItemInput[]) => void
   onBack: () => void
 }) {
   const [sellerFilter, setSellerFilter] = useState('todos')
@@ -3359,7 +3385,7 @@ function Cliente360({
           <p>{cliente.cidade}/{cliente.uf} · {cliente.tipoCliente} · {cliente.vendedorNome ?? 'Sem vendedor responsavel'}</p>
         </div>
         <div className="client360-actions">
-          <button className="button primary" type="button" onClick={onCreateQuote}>Criar orcamento</button>
+          <button className="button primary" type="button" onClick={() => onCreateQuote()}>Criar orcamento</button>
           <button className="button" type="button" onClick={handleCreateTask} disabled={isCreatingTask}>
             {isCreatingTask ? 'Criando...' : 'Criar tarefa'}
           </button>
@@ -3527,6 +3553,7 @@ function Cliente360({
             <span>Vendedor</span>
             <span>Veiculo/KM</span>
             <span>Total</span>
+            <span>Acao</span>
           </div>
           {vendasFiltradas.map((venda) => (
             <div className="table-row client360-sale" key={venda.id}>
@@ -3535,6 +3562,7 @@ function Cliente360({
               <span>{venda.vendedorNome ?? 'Sem vendedor'}</span>
               <span>{venda.kmExtraido ? `${venda.kmExtraido.toLocaleString('pt-BR')} km` : venda.veiculoObservacao || venda.nota || venda.pedido || 'Sem veiculo'}</span>
               <strong>{money(venda.valorTotal)}</strong>
+              <button className="button compact-button" type="button" onClick={() => onCreateQuote([quoteItemFromVenda(venda)])}>Orcar</button>
             </div>
           ))}
           {vendasFiltradas.length === 0 && <div className="empty-state">Nenhuma venda neste filtro.</div>}
@@ -3557,6 +3585,7 @@ function Cliente360({
             <span>Veiculo</span>
             <span>Vendedor</span>
             <span>Total</span>
+            <span>Acao</span>
           </div>
           {servicosFiltrados.map((servico) => (
             <div className="table-row client360-service" key={servico.id}>
@@ -3565,6 +3594,7 @@ function Cliente360({
               <span>{servico.placa || 'Sem placa'}<small>{servico.kmExtraido ? `${servico.kmExtraido.toLocaleString('pt-BR')} km` : ''}</small></span>
               <span>{servico.vendedorNome ?? 'Sem vendedor'}</span>
               <strong>{money(servico.valorTotal)}</strong>
+              <button className="button compact-button" type="button" onClick={() => onCreateQuote([quoteItemFromServico(servico)])}>Orcar</button>
             </div>
           ))}
           {servicosFiltrados.length === 0 && <div className="empty-state">Nenhum servico neste filtro.</div>}

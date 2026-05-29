@@ -889,6 +889,22 @@ Validacao:
 Proximo passo tecnico:
 - Criar acoes avancadas por item de historico: repetir compra, gerar orcamento com item anterior e iniciar campanha a partir do cliente.
 
+### 2026-05-28 - Orcamento a partir do historico
+
+Status: concluido.
+
+Entregue:
+- Vendas e servicos dentro da Ficha 360 ganharam acao `Orcar`.
+- Ao clicar em `Orcar`, o editor de proposta abre com o item historico ja preenchido.
+- O item preserva codigo, descricao, tipo, quantidade, valor unitario e observacao de origem.
+- A proposta continua usando o fluxo normal de validade, condicoes, aprovacao, WhatsApp e follow-up.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Permitir selecionar multiplos itens historicos antes de abrir a proposta, para repetir compras completas.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

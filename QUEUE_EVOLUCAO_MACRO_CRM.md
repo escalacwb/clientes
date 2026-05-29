@@ -144,9 +144,10 @@ Ja entregue:
 - Aba de campanhas do cliente.
 - Aba de tarefas/atividades.
 - Acoes contextuais iniciais: criar orcamento e criar tarefa pela ficha.
+- Criar orcamento a partir de venda ou servico anterior ja preenche o item historico na proposta.
 
 Proximas entregas:
-- Acoes contextuais avancadas: repetir compra, criar orcamento de item anterior, criar campanha.
+- Acoes contextuais avancadas: repetir compra com multiplos itens e criar campanha a partir do cliente.
 
 Pronto quando:
 - Um vendedor abre um cliente e entende em 30 segundos o que vender e qual proxima acao.
