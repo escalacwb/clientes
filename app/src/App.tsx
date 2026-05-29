@@ -5661,7 +5661,7 @@ function OrcamentoEditor({
                     [scenario.id]: Number(event.target.value),
                   }))}
                 />
-                <strong>{money(scenario.total)}</strong>
+                <strong>{quoteConditionValueLabel(scenario.total, scenario.parcelas)}</strong>
               </label>
             ))}
           </div>
@@ -5754,6 +5754,7 @@ type QuoteConditionScenario = {
   label: string
   adjustment: number
   total: number
+  parcelas?: number
   enabled?: boolean
 }
 
@@ -5762,7 +5763,8 @@ function quotePaymentScenarios(total: number, adjustments: Record<string, number
     id: label,
     label,
     adjustment,
-    total: total * (1 + adjustment / 100),
+    total: quoteRoundedTotal(total * (1 + adjustment / 100)),
+    parcelas: installmentsFromLabel(label),
   }))
 }
 
@@ -5795,7 +5797,8 @@ function quoteConditionDrafts(
     id,
     label: id,
     adjustment: adjustments[id] ?? 0,
-    total: total * (1 + (adjustments[id] ?? 0) / 100),
+    total: quoteRoundedTotal(total * (1 + (adjustments[id] ?? 0) / 100)),
+    parcelas: installmentsFromLabel(id),
     enabled: Boolean(enabled[id]),
   }))
 
@@ -5804,7 +5807,8 @@ function quoteConditionDrafts(
     id: 'cartao',
     label: `Cartao ${cardInstallments}x`,
     adjustment: cardAdjustment,
-    total: total * (1 + cardAdjustment / 100),
+    total: quoteRoundedTotal(total * (1 + cardAdjustment / 100)),
+    parcelas: cardInstallments,
     enabled: Boolean(enabled.cartao),
   })
 
@@ -5812,14 +5816,16 @@ function quoteConditionDrafts(
     id: 'custom1',
     label: customCondition1.trim() || 'Condicao personalizada 1',
     adjustment: adjustments.custom1 ?? 0,
-    total: total * (1 + (adjustments.custom1 ?? 0) / 100),
+    total: quoteRoundedTotal(total * (1 + (adjustments.custom1 ?? 0) / 100)),
+    parcelas: installmentsFromLabel(customCondition1),
     enabled: Boolean(enabled.custom1),
   })
   base.push({
     id: 'custom2',
     label: customCondition2.trim() || 'Condicao personalizada 2',
     adjustment: adjustments.custom2 ?? 0,
-    total: total * (1 + (adjustments.custom2 ?? 0) / 100),
+    total: quoteRoundedTotal(total * (1 + (adjustments.custom2 ?? 0) / 100)),
+    parcelas: installmentsFromLabel(customCondition2),
     enabled: Boolean(enabled.custom2),
   })
 
@@ -5833,7 +5839,7 @@ function quoteConditionInputs(
     label: scenario.label,
     ajustePercentual: scenario.adjustment,
     valorTotal: scenario.total,
-    parcelas: installmentsFromLabel(scenario.label),
+    parcelas: scenario.parcelas ?? installmentsFromLabel(scenario.label),
     ordem: index,
   }))
 }
@@ -5846,7 +5852,8 @@ function quoteScenariosFromBudget(orcamento: Orcamento) {
         id: condicao.label,
         label: condicao.label,
         adjustment: condicao.ajustePercentual,
-        total: condicao.valorTotal,
+        total: quoteRoundedTotal(condicao.valorTotal),
+        parcelas: condicao.parcelas ?? installmentsFromLabel(condicao.label),
       }))
   }
 
@@ -5863,8 +5870,12 @@ function quoteScenariosFromBudget(orcamento: Orcamento) {
 
 function installmentsFromLabel(label: string) {
   const normalized = label.toLowerCase()
-  if (normalized.includes('90')) return 3
-  if (normalized.includes('60')) return 2
+  const timesMatch = normalized.match(/(\d+)\s*x/)
+  if (timesMatch) return Math.max(Number(timesMatch[1]), 1)
+  if (normalized.includes('/')) {
+    const parts = normalized.split('/').filter((part) => /\d+/.test(part))
+    return Math.max(parts.length, 1)
+  }
   return 1
 }
 
@@ -5946,13 +5957,13 @@ function buildQuoteMessage(
         lines.push('')
         lines.push(`*${quoteDisplayBlockTitle(block, index)}*`)
         paymentScenarios.forEach((scenario) => {
-          lines.push(`- ${quoteConditionLabel(scenario.label)}: ${quoteBlockConditionLabel(block, scenario.adjustment)}`)
+          lines.push(`- ${quoteConditionLabel(scenario.label)}: ${quoteBlockConditionLabel(block, scenario)}`)
         })
       })
     } else {
       lines.push('', '💳 *Condições de pagamento*')
       paymentScenarios.forEach((scenario) => {
-        lines.push(`- ${quoteConditionLabel(scenario.label)}: ${money(scenario.total)}`)
+        lines.push(`- ${quoteConditionLabel(scenario.label)}: ${quoteConditionValueLabel(scenario.total, scenario.parcelas)}`)
       })
     }
   }
@@ -5973,6 +5984,7 @@ function quoteMessageBlockTitle(title: string, kind: NonNullable<OrcamentoItemIn
 function quoteDisplayBlockTitle(block: { title: string }, index: number) {
   const rawTitle = block.title.trim()
   const ordinal = quoteOrdinalBlockLabel(index)
+  const namedTitle = rawTitle.replace(/^bloco\s*\d+\s*[-:–—]?\s*/i, '').trim()
   const normalized = rawTitle
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -5980,7 +5992,7 @@ function quoteDisplayBlockTitle(block: { title: string }, index: number) {
     .trim()
   if (!rawTitle || /^\d+$/.test(normalized) || /^bloco\s*\d+$/.test(normalized)) return ordinal
   if (normalized === 'itens principais' || normalized === 'servicos' || normalized === 'servicos principais') return ordinal
-  return `${ordinal} - ${rawTitle}`
+  return namedTitle || rawTitle
 }
 
 function quoteOrdinalBlockLabel(index: number) {
@@ -6002,6 +6014,26 @@ function quoteOrdinalBlockLabel(index: number) {
 function quoteConditionLabel(label: string) {
   if (label.toLowerCase() === 'a vista') return 'À vista'
   return label
+}
+
+function quoteRoundedTotal(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return 0
+  return Math.round(value / 5) * 5
+}
+
+function moneyWithCents(value: number) {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)
+}
+
+function quoteConditionValueLabel(total: number, parcelas = 1) {
+  const roundedTotal = quoteRoundedTotal(total)
+  if (parcelas <= 1) return money(roundedTotal)
+  return `${money(roundedTotal)} (${parcelas}x de ${moneyWithCents(roundedTotal / parcelas)})`
 }
 
 function quotePdfFileName(clienteNome: string, date?: string) {
@@ -6146,24 +6178,34 @@ function quoteAlternativeRangeLabel(items: OrcamentoItemInput[]) {
   return min === max ? money(min) : `${money(min)} a ${money(max)}`
 }
 
-function quoteAlternativeAdjustedRangeLabel(items: OrcamentoItemInput[], adjustment: number) {
+function quoteAlternativeAdjustedRangeLabel(items: OrcamentoItemInput[], scenario: QuoteConditionScenario) {
   const totals = items
-    .map((item) => quoteAdjustedTotal(item.valorTotal ?? 0, adjustment))
+    .map((item) => quoteRoundedTotal(quoteAdjustedTotal(item.valorTotal ?? 0, scenario.adjustment)))
     .filter((value) => value > 0)
   if (totals.length === 0) return money(0)
   const min = Math.min(...totals)
   const max = Math.max(...totals)
-  return min === max ? money(min) : `${money(min)} a ${money(max)}`
+  const totalRange = min === max ? money(min) : `${money(min)} a ${money(max)}`
+  const parcelas = scenario.parcelas ?? installmentsFromLabel(scenario.label)
+  if (parcelas <= 1) return totalRange
+  const minInstallment = min / parcelas
+  const maxInstallment = max / parcelas
+  const installmentRange = min === max
+    ? moneyWithCents(minInstallment)
+    : `${moneyWithCents(minInstallment)} a ${moneyWithCents(maxInstallment)}`
+  return `${totalRange} (${parcelas}x de ${installmentRange})`
 }
 
 function quoteBlockConditionLabel(
   block: { items: OrcamentoItemInput[] },
-  adjustment: number,
+  scenario: QuoteConditionScenario,
 ) {
   const principalTotal = quotePrincipalTotal(block.items)
-  if (principalTotal > 0) return money(quoteAdjustedTotal(principalTotal, adjustment))
+  if (principalTotal > 0) {
+    return quoteConditionValueLabel(quoteAdjustedTotal(principalTotal, scenario.adjustment), scenario.parcelas)
+  }
   const alternativeItems = block.items.filter((item) => (item.apresentacao ?? 'normal') === 'alternativa')
-  return quoteAlternativeAdjustedRangeLabel(alternativeItems, adjustment)
+  return quoteAlternativeAdjustedRangeLabel(alternativeItems, scenario)
 }
 
 function quoteHasSeparatedBlocks(blocks: Array<{ title: string; items: OrcamentoItemInput[] }>) {
@@ -6294,13 +6336,13 @@ function QuoteProposalPreview({
                   {condicoes.map((scenario) => (
                     <div key={`${block.title}-${scenario.label}`}>
                       <span>{quoteConditionLabel(scenario.label)}</span>
-                      <b>{quoteBlockConditionLabel(block, scenario.adjustment)}</b>
+                      <b>{quoteBlockConditionLabel(block, scenario)}</b>
                     </div>
                   ))}
                 </section>
               ))
             : condicoes.map((scenario) => (
-                <span key={scenario.label}>{quoteConditionLabel(scenario.label)}: {money(scenario.total)}</span>
+                <span key={scenario.label}>{quoteConditionLabel(scenario.label)}: {quoteConditionValueLabel(scenario.total, scenario.parcelas)}</span>
               ))}
         </div>
       )}
@@ -9682,7 +9724,7 @@ function OrcamentoWorkspace({
               {scenarios.map((scenario) => (
                 <div className="status-row" key={scenario.label}>
                   <span>{scenario.label}</span>
-                  <strong>{money(scenario.total)}</strong>
+                  <strong>{quoteConditionValueLabel(scenario.total, scenario.parcelas)}</strong>
                 </div>
               ))}
               <button className="button" type="button" onClick={copyMessage}>Copiar mensagem</button>
@@ -9958,7 +10000,7 @@ function OrcamentoRevisionEditor({
                     [scenario.label]: Number(event.target.value),
                   }))}
                 />
-                <strong>{money(scenario.total)}</strong>
+                <strong>{quoteConditionValueLabel(scenario.total, scenario.parcelas)}</strong>
               </label>
             ))}
           </div>
