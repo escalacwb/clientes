@@ -1504,6 +1504,25 @@ function App() {
             veiculos={clienteVeiculos}
             tarefas={clienteTarefas}
             campanhaEnvios={clienteCampanhas}
+            currentUser={session}
+            onAddInteraction={async (interacao) => {
+              const created = await createInteracao(interacao)
+              setInteracoes((current) => [created, ...current])
+              if (created.dataProximaAcao) {
+                const tarefa = await createTarefa({
+                  clienteId: created.clienteId,
+                  vendedorId: created.vendedorId,
+                  titulo: created.proximaAcao || bestNextAction(selectedClient),
+                  descricao: created.resumo,
+                  dataVencimento: created.dataProximaAcao,
+                  prioridade: 80,
+                  origem: 'atendimento',
+                })
+                setTarefas((current) => [tarefa, ...current])
+                setClienteTarefas((current) => [tarefa, ...current])
+              }
+              return created
+            }}
             onCreateTask={async () => {
               const created = await createTarefa({
                 clienteId: selectedClient.id,
@@ -6448,6 +6467,8 @@ function Cliente360({
   veiculos,
   tarefas,
   campanhaEnvios,
+  currentUser,
+  onAddInteraction,
   onCreateTask,
   onCreateQuote,
   onBack,
@@ -6460,6 +6481,8 @@ function Cliente360({
   veiculos: ClienteVeiculoResumo[]
   tarefas: Tarefa[]
   campanhaEnvios: CampanhaEnvio[]
+  currentUser: SessaoUsuario
+  onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
   onCreateTask: () => Promise<Tarefa>
   onCreateQuote: (initialItems?: OrcamentoItemInput[]) => void
   onBack: () => void
@@ -6471,6 +6494,11 @@ function Cliente360({
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [isCreatingTask, setIsCreatingTask] = useState(false)
+  const [contactChannel, setContactChannel] = useState<Interacao['canal']>('WhatsApp')
+  const [contactNote, setContactNote] = useState('')
+  const [nextActionDate, setNextActionDate] = useState('')
+  const [isSavingContact, setIsSavingContact] = useState(false)
+  const [contactFeedback, setContactFeedback] = useState('')
 
   const clienteVendas = vendasItens.filter((venda) => venda.clienteId === cliente.id)
   const clienteServicos = servicosItens.filter((servico) => servico.clienteId === cliente.id)
@@ -6515,6 +6543,12 @@ function Cliente360({
   const proximaRecompra = frequenciaDias && ultimaMovimentacao ? addDays(ultimaMovimentacao, Math.max(30, Math.round(frequenciaDias))) : undefined
   const veiculosResumo = buildVehicleSummary(veiculos, clienteServicos, clienteVendas)
   const tarefasAbertas = clienteTarefas.filter((tarefa) => tarefa.status === 'aberta')
+  const orcamentosAbertos = clienteOrcamentos.filter((orcamento) => ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando'].includes(orcamento.status))
+  const ultimoOrcamento = [...clienteOrcamentos].sort((a, b) => b.data.localeCompare(a.data))[0]
+  const latestMovements = buildClientServiceTimeline(clienteInteracoes, clienteOrcamentos, clienteTarefas, clienteCampanhas)
+  const whatsappUrl = cliente.whatsapp
+    ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(buildServiceOpeningMessage(cliente))}`
+    : undefined
 
   async function handleCreateTask() {
     setIsCreatingTask(true)
@@ -6523,6 +6557,29 @@ function Cliente360({
       setActiveTab('tarefas')
     } finally {
       setIsCreatingTask(false)
+    }
+  }
+
+  async function registerContact(resultado: string, createQuote = false) {
+    setIsSavingContact(true)
+    setContactFeedback('')
+    try {
+      const created = await onAddInteraction({
+        clienteId: cliente.id,
+        vendedorId: cliente.vendedorId ?? currentUser.id,
+        canal: contactChannel,
+        tipo: createQuote ? 'orcamento' : 'atendimento',
+        resumo: contactNote.trim() || `Atendimento registrado: ${resultado}.`,
+        resultado,
+        proximaAcao: nextActionDate ? nextActionLabelFromResult(resultado) : undefined,
+        dataProximaAcao: nextActionDate || undefined,
+      })
+      setContactFeedback(`Contato registrado em ${dateLabel(created.data)}.`)
+      setContactNote('')
+      setNextActionDate('')
+      if (createQuote) onCreateQuote()
+    } finally {
+      setIsSavingContact(false)
     }
   }
 
@@ -6536,6 +6593,11 @@ function Cliente360({
           <p>{cliente.cidade}/{cliente.uf} · {cliente.tipoCliente} · {cliente.vendedorNome ?? 'Sem vendedor responsavel'}</p>
         </div>
         <div className="client360-actions">
+          {whatsappUrl && (
+            <a className="button primary" href={whatsappUrl} target="_blank" rel="noreferrer">
+              <MessageCircle size={16} /> Abrir WhatsApp
+            </a>
+          )}
           <button className="button primary" type="button" onClick={() => onCreateQuote()}>Criar orcamento</button>
           <button className="button" type="button" onClick={handleCreateTask} disabled={isCreatingTask}>
             {isCreatingTask ? 'Criando...' : 'Criar tarefa'}
@@ -6548,8 +6610,63 @@ function Cliente360({
           <Info label="Email" value={cliente.email || 'Nao informado'} />
           <Info label="Total vendas" value={money(cliente.totalComprado)} />
           <Info label="Total servicos" value={money(cliente.totalServicos)} />
+          <Info label="Orcamentos abertos" value={orcamentosAbertos.length.toString()} />
+          <Info label="Ultimo orcamento" value={ultimoOrcamento ? `${money(ultimoOrcamento.valorTotal)} · ${ultimoOrcamento.status}` : 'Sem historico'} />
         </div>
       </div>
+
+      <section className="client360-workbench">
+        <div className="panel client360-contact-panel">
+          <div className="panel-header">
+            <div>
+              <h2>Atendimento agora</h2>
+              <p>Registre o resultado do contato sem sair da ficha.</p>
+            </div>
+          </div>
+          {contactFeedback && <div className="readiness ok">{contactFeedback}</div>}
+          <div className="client360-contact-grid">
+            <label>
+              Canal
+              <select value={contactChannel} onChange={(event) => setContactChannel(event.target.value as Interacao['canal'])}>
+                <option value="WhatsApp">WhatsApp</option>
+                <option value="Ligacao">Ligacao</option>
+                <option value="Email">Email</option>
+                <option value="Presencial">Presencial</option>
+              </select>
+            </label>
+            <label>
+              Proxima acao
+              <input type="date" value={nextActionDate} onChange={(event) => setNextActionDate(event.target.value)} />
+            </label>
+          </div>
+          <label className="client360-contact-note">
+            Observacao do contato
+            <textarea value={contactNote} onChange={(event) => setContactNote(event.target.value)} placeholder="Ex.: pediu pneu 295/80 para cotar hoje, prefere pagamento 30/60." />
+          </label>
+          <div className="client360-result-actions">
+            <button className="button primary" type="button" disabled={isSavingContact} onClick={() => registerContact('pediu orcamento', true)}>Pediu orcamento</button>
+            <button className="button" type="button" disabled={isSavingContact} onClick={() => registerContact('respondeu')}>Respondeu</button>
+            <button className="button" type="button" disabled={isSavingContact} onClick={() => registerContact('nao respondeu')}>Nao respondeu</button>
+            <button className="button" type="button" disabled={isSavingContact} onClick={() => registerContact('comprar depois')}>Comprar depois</button>
+            <button className="button" type="button" disabled={isSavingContact} onClick={() => registerContact('sem interesse')}>Sem interesse</button>
+          </div>
+        </div>
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <h2>Na mao para o contato</h2>
+              <p>Contexto comercial antes de chamar o cliente.</p>
+            </div>
+          </div>
+          <div className="status-list">
+            <div className="status-row"><span>Ultima compra</span><strong>{dateLabel(cliente.ultimaCompraEm)}</strong></div>
+            <div className="status-row"><span>Produto principal</span><strong>{produtoPrincipal || cliente.produtoPrincipal || 'Sem historico'}</strong></div>
+            <div className="status-row"><span>Servico recorrente</span><strong>{servicoRecorrente || 'Sem historico'}</strong></div>
+            <div className="status-row"><span>Proxima recompra</span><strong>{dateLabel(proximaRecompra)}</strong></div>
+            <div className="status-row"><span>Tarefas abertas</span><strong>{tarefasAbertas.length}</strong></div>
+          </div>
+        </div>
+      </section>
 
       <section className="panel wide">
         <div className="panel-header">
@@ -6841,18 +6958,21 @@ function Cliente360({
         <section className="panel wide">
           <div className="panel-header">
             <div>
-              <h2>Timeline</h2>
-              <p>{clienteInteracoes.length} interacoes registradas.</p>
+              <h2>Timeline operacional</h2>
+              <p>Contatos, orcamentos, tarefas e campanhas em ordem cronologica.</p>
             </div>
           </div>
           <div className="timeline">
-            {clienteInteracoes.map((interacao) => (
-              <div className="timeline-item" key={interacao.id}>
+            {latestMovements.map((event) => (
+              <div className={`timeline-item ${event.tone ?? ''}`} key={event.id}>
                 <CheckCircle2 size={16} />
-                <span><strong>{interacao.canal}</strong><small>{interacao.resumo}</small></span>
+                <span>
+                  <strong>{event.title}</strong>
+                  <small>{dateLabel(event.date)} · {event.detail}</small>
+                </span>
               </div>
             ))}
-            {clienteInteracoes.length === 0 && <div className="empty-state">Sem interacoes.</div>}
+            {latestMovements.length === 0 && <div className="empty-state">Sem movimentos registrados.</div>}
           </div>
         </section>
       )}
@@ -6866,6 +6986,57 @@ function inDateRange(value: string | undefined, startDate: string, endDate: stri
   if (startDate && day < startDate) return false
   if (endDate && day > endDate) return false
   return true
+}
+
+function buildServiceOpeningMessage(cliente: Cliente) {
+  const firstName = (cliente.responsavel || cliente.nome).split(' ')[0]
+  return `Bom dia, ${firstName}. Aqui é da Capital Truck Center. Estou passando para ver se precisa cotar pneus ou algum serviço.`
+}
+
+function nextActionLabelFromResult(resultado: string) {
+  if (resultado === 'nao respondeu') return 'Tentar novo contato'
+  if (resultado === 'comprar depois') return 'Retomar oportunidade'
+  if (resultado === 'pediu orcamento') return 'Follow-up de proposta'
+  return 'Próximo contato'
+}
+
+function buildClientServiceTimeline(
+  interacoes: Interacao[],
+  orcamentos: Orcamento[],
+  tarefas: Tarefa[],
+  campanhas: CampanhaEnvio[],
+) {
+  const events = [
+    ...interacoes.map((interacao) => ({
+      id: `interacao-${interacao.id}`,
+      date: interacao.data,
+      title: `${interacao.canal} · ${interacao.resultado}`,
+      detail: interacao.resumo,
+      tone: 'ok',
+    })),
+    ...orcamentos.map((orcamento) => ({
+      id: `orcamento-${orcamento.id}`,
+      date: orcamento.data,
+      title: `Orcamento ${orcamento.status}`,
+      detail: `${money(orcamento.valorTotal)} · validade ${dateLabel(orcamento.validade)}`,
+      tone: orcamento.status === 'perdido' ? 'danger' : orcamento.status === 'ganho' ? 'ok' : 'warn',
+    })),
+    ...tarefas.map((tarefa) => ({
+      id: `tarefa-${tarefa.id}`,
+      date: tarefa.concluidaEm || tarefa.dataVencimento,
+      title: `Tarefa ${tarefa.status}`,
+      detail: `${tarefa.titulo}${tarefa.descricao ? ` · ${tarefa.descricao}` : ''}`,
+      tone: tarefa.status === 'aberta' ? 'warn' : 'ok',
+    })),
+    ...campanhas.map((envio) => ({
+      id: `campanha-${envio.id}`,
+      date: envio.dataMarcadoEnviado || envio.dataAberturaWhatsapp || new Date(0).toISOString(),
+      title: `Campanha · ${campaignStatusLabel(envio.status)}`,
+      detail: envio.campanhaNome || envio.mensagemFinal || 'Campanha sem nome',
+      tone: envio.status === 'perdido' || envio.status === 'nao_contatar' ? 'danger' : envio.status === 'ganhou' ? 'ok' : 'warn',
+    })),
+  ]
+  return events.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 40)
 }
 
 function topByValue<T>(items: T[], label: (item: T) => string | undefined, value: (item: T) => number) {

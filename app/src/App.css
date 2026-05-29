@@ -955,7 +955,8 @@ h3 {
   margin: 0;
 }
 
-.metric-grid {
+.metric-grid,
+.metrics-grid {
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -2673,7 +2674,59 @@ h3 {
   gap: 16px;
 }
 
+.client360-hero > .button {
+  justify-self: start;
+}
+
 .client360-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.client360-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.75fr);
+  gap: 16px;
+}
+
+.client360-contact-panel {
+  align-content: start;
+}
+
+.client360-contact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.client360-contact-grid label,
+.client360-contact-note {
+  display: grid;
+  gap: 6px;
+  color: #52625d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.client360-contact-grid select,
+.client360-contact-grid input,
+.client360-contact-note textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #cfd8d3;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1b1f23;
+  padding: 9px 10px;
+}
+
+.client360-contact-note textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.client360-result-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -2777,6 +2830,18 @@ h3 {
   align-items: flex-start;
   gap: 9px;
   color: #214744;
+}
+
+.timeline-item.ok svg {
+  color: #166534;
+}
+
+.timeline-item.warn svg {
+  color: #ad6800;
+}
+
+.timeline-item.danger svg {
+  color: #a8071a;
 }
 
 .timeline-item small {
@@ -3766,6 +3831,7 @@ h3 {
   .work-batch-grid,
   .import-timeline-item,
   .forecast-summary,
+  .client360-workbench,
   .client360-filters,
   .detail-grid {
     grid-template-columns: 1fr;
