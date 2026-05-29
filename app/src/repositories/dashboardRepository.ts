@@ -45,6 +45,20 @@ export type RankingResumo = {
   valorTotal: number
 }
 
+export type FunilGerencialResumo = {
+  vendedorId: string
+  vendedorNome: string
+  clientes: number
+  leadsRodobens: number
+  contatos30d: number
+  orcamentos30d: number
+  ganhos30d: number
+  perdidos30d: number
+  pipelineAberto: number
+  tempoMedioFechamento: number
+  tarefasVencidas: number
+}
+
 type DashboardResumoRow = {
   clientes_total: number
   clientes_ativos_90: number
@@ -90,6 +104,20 @@ type RankingResumoRow = {
   valor_total: number
 }
 
+type FunilGerencialRow = {
+  vendedor_id: string
+  vendedor_nome: string
+  clientes: number
+  leads_rodobens: number
+  contatos_30d: number
+  orcamentos_30d: number
+  ganhos_30d: number
+  perdidos_30d: number
+  pipeline_aberto: number
+  tempo_medio_fechamento: number
+  tarefas_vencidas: number
+}
+
 export async function getDashboardResumo(): Promise<DashboardResumo | undefined> {
   const supabase = await getSupabase()
   if (!supabase) return undefined
@@ -122,6 +150,31 @@ export async function listRankingMedidas(limit = 5): Promise<RankingResumo[]> {
 
 export async function listRankingServicos(limit = 5): Promise<RankingResumo[]> {
   return listRanking('vw_ranking_servicos_recorrentes', limit)
+}
+
+export async function listFunilGerencial(): Promise<FunilGerencialResumo[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('vw_funil_gerencial')
+    .select('*')
+    .order('pipeline_aberto', { ascending: false })
+
+  if (error) throw error
+  return (data as FunilGerencialRow[] | null ?? []).map((row) => ({
+    vendedorId: row.vendedor_id,
+    vendedorNome: row.vendedor_nome,
+    clientes: Number(row.clientes ?? 0),
+    leadsRodobens: Number(row.leads_rodobens ?? 0),
+    contatos30d: Number(row.contatos_30d ?? 0),
+    orcamentos30d: Number(row.orcamentos_30d ?? 0),
+    ganhos30d: Number(row.ganhos_30d ?? 0),
+    perdidos30d: Number(row.perdidos_30d ?? 0),
+    pipelineAberto: Number(row.pipeline_aberto ?? 0),
+    tempoMedioFechamento: Number(row.tempo_medio_fechamento ?? 0),
+    tarefasVencidas: Number(row.tarefas_vencidas ?? 0),
+  }))
 }
 
 async function listRanking(viewName: string, limit: number): Promise<RankingResumo[]> {

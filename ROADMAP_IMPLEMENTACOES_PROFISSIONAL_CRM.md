@@ -988,6 +988,23 @@ Validacao:
 Proximo passo tecnico:
 - Evoluir para historico de qualidade por importacao: linhas novas/ignoradas/atualizadas e mudancas de preco por arquivo.
 
+### 2026-05-28 - Funil gerencial por vendedor
+
+Status: concluido.
+
+Entregue:
+- Criada view `vw_funil_gerencial` no Supabase com `security_invoker`.
+- Relatorios agora mostram funil dos ultimos 30 dias por vendedor: clientes, leads Rodobens, contatos, orcamentos, ganhos, perdas, pipeline e tempo medio de fechamento.
+- Agregado roda no banco, sem depender de carregar clientes/orcamentos inteiros no browser.
+
+Validacao:
+- SQL aplicado com `node scripts/run-sql-file.mjs supabase/queries/funil_gerencial.sql`.
+- Build passou com `npm run build`.
+- Consulta direta validou linhas por vendedor, incluindo carteira sem vendedor.
+
+Proximo passo tecnico:
+- Adicionar motivos de perda e atividades feitas no dia ao relatorio gerencial.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

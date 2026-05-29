@@ -74,10 +74,12 @@ import { updateClienteComercial } from './repositories/clientesRepository'
 import { listConflitos, resolveConflito } from './repositories/conflitosRepository'
 import {
   getDashboardResumo,
+  listFunilGerencial,
   listRankingMedidas,
   listRankingServicos,
   listVendedoresResumo,
   type DashboardResumo,
+  type FunilGerencialResumo,
   type RankingResumo,
   type VendedorResumo,
 } from './repositories/dashboardRepository'
@@ -251,6 +253,7 @@ function App() {
   const [vendedoresHistoricosResumo, setVendedoresHistoricosResumo] = useState<VendedorHistoricoResumo[]>([])
   const [rankingMedidas, setRankingMedidas] = useState<RankingResumo[]>([])
   const [rankingServicos, setRankingServicos] = useState<RankingResumo[]>([])
+  const [funilGerencial, setFunilGerencial] = useState<FunilGerencialResumo[]>([])
   const [rodobensLeads, setRodobensLeads] = useState<Cliente[]>([])
   const [rodobensTotal, setRodobensTotal] = useState(0)
   const [rodobensPage, setRodobensPage] = useState(1)
@@ -325,6 +328,7 @@ function App() {
           loadedVendedoresHistoricosResumo,
           loadedRankingMedidas,
           loadedRankingServicos,
+          loadedFunilGerencial,
         ] = await Promise.all([
           listInteracoes(),
           listOrcamentos(),
@@ -341,6 +345,7 @@ function App() {
           listVendedoresHistoricosResumo(),
           listRankingMedidas(),
           listRankingServicos(),
+          listFunilGerencial(),
         ])
 
         if (!isMounted) return
@@ -359,6 +364,7 @@ function App() {
         setVendedoresHistoricosResumo(loadedVendedoresHistoricosResumo)
         setRankingMedidas(loadedRankingMedidas)
         setRankingServicos(loadedRankingServicos)
+        setFunilGerencial(loadedFunilGerencial)
       } catch (exception) {
         if (!isMounted) return
         setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar os dados.')
@@ -1304,6 +1310,7 @@ function App() {
             vendedoresResumo={vendedoresResumo}
             rankingMedidas={rankingMedidas}
             rankingServicos={rankingServicos}
+            funilGerencial={funilGerencial}
             interacoes={interacoes}
             orcamentos={orcamentos}
             importacoes={importacoes}
@@ -5847,6 +5854,7 @@ function Relatorios({
   vendedoresResumo,
   rankingMedidas,
   rankingServicos,
+  funilGerencial,
   interacoes,
   orcamentos,
   importacoes,
@@ -5862,6 +5870,7 @@ function Relatorios({
   vendedoresResumo: VendedorResumo[]
   rankingMedidas: RankingResumo[]
   rankingServicos: RankingResumo[]
+  funilGerencial: FunilGerencialResumo[]
   interacoes: Interacao[]
   orcamentos: Orcamento[]
   importacoes: Importacao[]
@@ -5987,6 +5996,41 @@ function Relatorios({
               </span>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Funil comercial 30 dias</h2>
+            <p>Contatos, propostas, ganhos, perdas e pipeline por responsavel.</p>
+          </div>
+          <BarChart3 size={18} />
+        </div>
+        <div className="table">
+          <div className="table-head funnel-report">
+            <span>Vendedor</span>
+            <span>Clientes</span>
+            <span>Contatos</span>
+            <span>Orc.</span>
+            <span>Ganhos</span>
+            <span>Perdas</span>
+            <span>Pipeline</span>
+            <span>Tempo</span>
+          </div>
+          {funilGerencial.map((row) => (
+            <div className="table-row funnel-report" key={row.vendedorId}>
+              <span><strong>{row.vendedorNome}</strong><small>{row.leadsRodobens} Rodobens</small></span>
+              <span>{row.clientes}</span>
+              <span>{row.contatos30d}</span>
+              <span>{row.orcamentos30d}</span>
+              <span>{row.ganhos30d}</span>
+              <span>{row.perdidos30d}</span>
+              <span>{money(row.pipelineAberto)}</span>
+              <span>{Math.round(row.tempoMedioFechamento)} dias</span>
+            </div>
+          ))}
+          {funilGerencial.length === 0 && <div className="empty-state">Sem dados agregados de funil.</div>}
         </div>
       </section>
 

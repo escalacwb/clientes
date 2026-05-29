@@ -260,16 +260,19 @@ Pronto quando:
 
 ### Q12 - Relatorios gerenciais de funil
 
-Status: Pendente.
+Status: Parcial.
 
 Objetivo:
 Mostrar o fluxo comercial completo por vendedor, origem e periodo.
 
-Entregas:
-- Leads/contatos/orcamentos/ganhos/perdidos.
-- Motivos de perda.
+Ja entregue:
+- Leads/contatos/orcamentos/ganhos/perdidos por vendedor nos ultimos 30 dias.
 - Tempo medio ate fechamento.
 - Pipeline aberto por vendedor.
+- View `vw_funil_gerencial` no Supabase com security invoker.
+
+Proximas entregas:
+- Motivos de perda.
 - Atividades feitas no dia.
 
 Pronto quando:

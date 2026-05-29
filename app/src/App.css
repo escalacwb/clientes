@@ -628,6 +628,16 @@ h3 {
   grid-template-columns: minmax(210px, 1fr) 85px 85px 80px 80px 130px 80px;
 }
 
+.funnel-report {
+  grid-template-columns: minmax(190px, 1.2fr) 80px 80px 70px 70px 70px 120px 80px;
+}
+
+.funnel-report small {
+  display: block;
+  color: #66736f;
+  margin-top: 2px;
+}
+
 .campaign {
   grid-template-columns: minmax(190px, 0.8fr) minmax(260px, 1.4fr) 130px minmax(360px, 1fr);
 }
