@@ -109,6 +109,7 @@ import { listClienteServicosItens, listClienteVeiculos, listClienteVendasItens }
 import { createInteracao } from './repositories/interacoesRepository'
 import { listInteracoes } from './repositories/interacoesRepository'
 import { createImportacaoPreview } from './repositories/importacoesRepository'
+import { finalizeImportacaoDiaria } from './repositories/importacoesRepository'
 import { getImportacaoQualidadeResumo } from './repositories/importacoesRepository'
 import { importReferenceFiles } from './repositories/importacoesRepository'
 import { listImportacaoArquivos, type ImportacaoArquivoResumo, type ImportacaoQualidadeResumo } from './repositories/importacoesRepository'
@@ -4490,6 +4491,7 @@ function Importacoes({
   const [isReadingWorkbook, setIsReadingWorkbook] = useState(false)
   const [isReadingReference, setIsReadingReference] = useState(false)
   const [isImportingReference, setIsImportingReference] = useState(false)
+  const [isFinalizingImport, setIsFinalizingImport] = useState(false)
   const [referenceImportResult, setReferenceImportResult] = useState('')
   const [error, setError] = useState('')
   const [registeredFiles, setRegisteredFiles] = useState<string[]>([])
@@ -4642,6 +4644,24 @@ function Importacoes({
     }
   }
 
+  async function runImportPostProcess() {
+    setIsFinalizingImport(true)
+    setError('')
+    setReferenceImportResult('')
+
+    try {
+      const result = await finalizeImportacaoDiaria()
+      setReferenceImportResult(
+        `Fechamento reprocessado: ${result.clientes_atualizados ?? 0} clientes recalculados e ${result.oportunidades_geradas ?? 0} oportunidades na fila.`,
+      )
+      setQualidadeResumo(await getImportacaoQualidadeResumo())
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel reprocessar o fechamento da importacao.')
+    } finally {
+      setIsFinalizingImport(false)
+    }
+  }
+
   return (
     <section className="grid-layout">
       <section className="panel wide">
@@ -4664,7 +4684,18 @@ function Importacoes({
             <h2>Saude da base</h2>
             <p>Alertas operacionais calculados direto no Supabase.</p>
           </div>
-          <ShieldCheck size={18} />
+          <div className="panel-actions">
+            <button
+              className="button"
+              type="button"
+              disabled={isFinalizingImport}
+              onClick={runImportPostProcess}
+            >
+              <RefreshCw size={16} />
+              {isFinalizingImport ? 'Reprocessando...' : 'Reprocessar fechamento'}
+            </button>
+            <ShieldCheck size={18} />
+          </div>
         </div>
         <div className="metrics-grid">
           <Metric
@@ -4682,6 +4713,7 @@ function Importacoes({
           <Metric icon={AlertTriangle} label="Conflitos pendentes" value={(qualidadeResumo?.conflitosPendentes ?? 0).toString()} tone="amber" />
           <Metric icon={UsersRound} label="Sem vendedor" value={(qualidadeResumo?.clientesSemVendedor ?? 0).toString()} tone="amber" />
         </div>
+        {referenceImportResult && <div className="success-alert">{referenceImportResult}</div>}
         <div className="status-list quality-list">
           <div className="status-row"><span>Clientes sem WhatsApp</span><strong>{qualidadeResumo?.clientesSemWhatsapp ?? 0}</strong></div>
           <div className="status-row"><span>Origem desconhecida</span><strong>{qualidadeResumo?.clientesOrigemDesconhecida ?? 0}</strong></div>

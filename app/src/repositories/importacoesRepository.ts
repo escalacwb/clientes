@@ -137,6 +137,15 @@ export async function importReferenceFiles(files: FileList | File[]): Promise<Re
   return data as ReferenceImportResult
 }
 
+export async function finalizeImportacaoDiaria(): Promise<NonNullable<ReferenceImportResult['postProcess']>> {
+  const supabase = await getSupabase()
+  if (!supabase) throw new Error('Supabase nao configurado para finalizar importacao.')
+
+  const { data, error } = await supabase.rpc('finalizar_importacao_diaria')
+  if (error) throw error
+  return data as NonNullable<ReferenceImportResult['postProcess']>
+}
+
 export async function listImportacaoArquivos(): Promise<ImportacaoArquivoResumo[]> {
   const supabase = await getSupabase()
   if (!supabase) return []

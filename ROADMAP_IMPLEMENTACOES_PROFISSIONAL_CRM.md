@@ -1180,6 +1180,7 @@ Entregue:
 - Edge Function `import-reference-files` passou a chamar o pos-processamento antes de retornar sucesso.
 - Script local `import-reference-files-to-supabase.mjs` passou a usar a mesma funcao de finalizacao, evitando divergencia entre importacao pelo app e importacao por terminal.
 - Tela de Importacoes agora mostra quantos clientes foram recalculados e quantas oportunidades ficaram na fila.
+- Tela de Saude da base ganhou acao admin `Reprocessar fechamento` para recalcular clientes e oportunidades sem reenviar arquivos.
 - Script de deploy da Edge Function passou a usar `npx supabase`, sem depender de CLI global.
 
 Validacao:
