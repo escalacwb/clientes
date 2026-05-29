@@ -6685,6 +6685,7 @@ function Cliente360({
   const [isCreatingTask, setIsCreatingTask] = useState(false)
   const [contactChannel, setContactChannel] = useState<Interacao['canal']>('WhatsApp')
   const [contactNote, setContactNote] = useState('')
+  const [contactResult, setContactResult] = useState('respondeu')
   const [nextActionDate, setNextActionDate] = useState('')
   const [isSavingContact, setIsSavingContact] = useState(false)
   const [contactFeedback, setContactFeedback] = useState('')
@@ -6704,6 +6705,7 @@ function Cliente360({
   const clienteVendas = vendasItens.filter((venda) => venda.clienteId === cliente.id)
   const clienteServicos = servicosItens.filter((servico) => servico.clienteId === cliente.id)
   const clienteInteracoes = interacoes.filter((interacao) => interacao.clienteId === cliente.id)
+  const recentContactHistory = [...clienteInteracoes].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 3)
   const clienteOrcamentos = orcamentos.filter((orcamento) => orcamento.clienteId === cliente.id)
   const clienteTarefas = tarefas.filter((tarefa) => tarefa.clienteId === cliente.id)
   const clienteCampanhas = campanhaEnvios.filter((envio) => envio.clienteId === cliente.id)
@@ -6773,7 +6775,8 @@ function Cliente360({
     }
   }
 
-  async function registerContact(resultado: string, createQuote = false) {
+  async function registerContact(createQuote = false) {
+    const resultado = contactResult
     setIsSavingContact(true)
     setContactFeedback('')
     try {
@@ -6790,6 +6793,7 @@ function Cliente360({
       setContactFeedback(`Contato registrado em ${dateLabel(created.data)}.`)
       setContactNote('')
       setNextActionDate('')
+      setContactResult('respondeu')
       if (createQuote) onCreateQuote()
     } finally {
       setIsSavingContact(false)
@@ -6934,6 +6938,16 @@ function Cliente360({
               </select>
             </label>
             <label>
+              Resultado do contato
+              <select value={contactResult} onChange={(event) => setContactResult(event.target.value)}>
+                <option value="respondeu">Respondeu</option>
+                <option value="pediu orcamento">Pediu orcamento</option>
+                <option value="nao respondeu">Nao respondeu</option>
+                <option value="comprar depois">Comprar depois</option>
+                <option value="sem interesse">Sem interesse</option>
+              </select>
+            </label>
+            <label>
               Proxima acao
               <input type="date" value={nextActionDate} onChange={(event) => setNextActionDate(event.target.value)} />
             </label>
@@ -6942,12 +6956,24 @@ function Cliente360({
             Observacao do contato
             <textarea value={contactNote} onChange={(event) => setContactNote(event.target.value)} placeholder="Ex.: pediu pneu 295/80 para cotar hoje, prefere pagamento 30/60." />
           </label>
-          <div className="client360-result-actions">
-            <button className="button primary" type="button" disabled={isSavingContact} onClick={() => registerContact('pediu orcamento', true)}>Pediu orcamento</button>
-            <button className="button" type="button" disabled={isSavingContact} onClick={() => registerContact('respondeu')}>Respondeu</button>
-            <button className="button" type="button" disabled={isSavingContact} onClick={() => registerContact('nao respondeu')}>Nao respondeu</button>
-            <button className="button" type="button" disabled={isSavingContact} onClick={() => registerContact('comprar depois')}>Comprar depois</button>
-            <button className="button" type="button" disabled={isSavingContact} onClick={() => registerContact('sem interesse')}>Sem interesse</button>
+          <div className="client360-save-bar">
+            <button className="button primary" type="button" disabled={isSavingContact} onClick={() => void registerContact(false)}>
+              {isSavingContact ? 'Salvando...' : 'Salvar no historico'}
+            </button>
+            <button className="button" type="button" disabled={isSavingContact} onClick={() => void registerContact(true)}>
+              Salvar e criar orcamento
+            </button>
+            <span>{nextActionDate ? `Proxima acao em ${dateLabel(nextActionDate)}` : 'Sem proxima acao agendada'}</span>
+          </div>
+          <div className="client360-recent-history">
+            <strong>Ultimos registros</strong>
+            {recentContactHistory.map((interacao) => (
+              <div className="status-row compact" key={interacao.id}>
+                <span>{dateLabel(interacao.data)} - {interacao.canal} - {interacao.resultado}</span>
+                <small>{interacao.resumo}</small>
+              </div>
+            ))}
+            {clienteInteracoes.length === 0 && <div className="empty-state compact">Nenhum atendimento registrado ainda.</div>}
           </div>
         </div>
         <div className="panel">

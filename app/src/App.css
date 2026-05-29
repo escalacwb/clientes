@@ -2757,7 +2757,7 @@ h3 {
 
 .client360-contact-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -2791,10 +2791,40 @@ h3 {
   resize: vertical;
 }
 
-.client360-result-actions {
+.client360-save-bar {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
+  margin-top: 10px;
+}
+
+.client360-save-bar span {
+  color: #60706c;
+  font-size: 12px;
+}
+
+.client360-recent-history {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  border-top: 1px solid #e1e8e3;
+  padding-top: 12px;
+}
+
+.client360-recent-history > strong {
+  color: #132421;
+}
+
+.status-row.compact {
+  display: grid;
+  gap: 3px;
+  align-items: start;
+}
+
+.status-row.compact small {
+  color: #60706c;
+  line-height: 1.35;
 }
 
 .client360-edit-grid {
