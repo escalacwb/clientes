@@ -3099,6 +3099,38 @@ h3 {
   font-size: 12px;
 }
 
+.ai-contact-brief,
+.client-followup-queue {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ai-contact-brief {
+  border: 1px solid #cfe2d8;
+  border-radius: 8px;
+  background: #f3fbf6;
+  padding: 12px;
+}
+
+.ai-contact-brief > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ai-contact-brief p {
+  margin: 0;
+  color: #40524c;
+  line-height: 1.4;
+}
+
+.client-followup-queue {
+  border-top: 1px solid #e1e8e3;
+  padding-top: 12px;
+}
+
 .client360-edit-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -54,7 +54,7 @@ import { isSupabaseConfigured } from './lib/supabase'
 import { buildOportunidades } from './lib/oportunidades'
 import { carteiraFiltros, filterClientes } from './lib/filtros'
 import { getCurrentSession, signInWithPassword, signOut } from './repositories/authRepository'
-import { analyzeWhatsAppContact } from './repositories/aiRepository'
+import { analyzeWhatsAppContact, type WhatsAppContactAnalysis } from './repositories/aiRepository'
 import { listClienteAlteracoes } from './repositories/auditoriaRepository'
 import {
   campanhaSegmentos,
@@ -6859,8 +6859,10 @@ function Cliente360({
   const [whatsappHistoryPaste, setWhatsappHistoryPaste] = useState('')
   const [interpretationFeedback, setInterpretationFeedback] = useState('')
   const [isAnalyzingWithAI, setIsAnalyzingWithAI] = useState(false)
+  const [lastAIAnalysis, setLastAIAnalysis] = useState<WhatsAppContactAnalysis | null>(null)
   const [isSavingContact, setIsSavingContact] = useState(false)
   const [contactFeedback, setContactFeedback] = useState('')
+  const [contactError, setContactError] = useState('')
   const [isEditingClient, setIsEditingClient] = useState(false)
   const [isSavingClient, setIsSavingClient] = useState(false)
   const [clientDraft, setClientDraft] = useState(() => ({
@@ -6921,6 +6923,12 @@ function Cliente360({
   const orcamentosAbertos = clienteOrcamentos.filter((orcamento) => ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando'].includes(orcamento.status))
   const ultimoOrcamento = [...clienteOrcamentos].sort((a, b) => b.data.localeCompare(a.data))[0]
   const latestMovements = buildClientServiceTimeline(clienteInteracoes, clienteOrcamentos, clienteTarefas, clienteCampanhas)
+  const contactIsTerminal = isTerminalContactResult(contactResult)
+  const contactMissingNextStep = !contactIsTerminal && (!nextActionDate || !contactNextActionText.trim())
+  const nextOpenTasks = tarefasAbertas
+    .slice()
+    .sort((a, b) => a.dataVencimento.localeCompare(b.dataVencimento))
+    .slice(0, 5)
   const whatsappUrl = cliente.whatsapp
     ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(buildServiceOpeningMessage(cliente))}`
     : undefined
@@ -6949,6 +6957,11 @@ function Cliente360({
 
   async function registerContact(createQuote = false) {
     const resultado = contactResult
+    if (contactMissingNextStep) {
+      setContactError('Defina a proxima acao e a data antes de salvar um contato que ainda precisa de follow-up.')
+      return
+    }
+
     const tipo = createQuote ? 'orcamento' : contactReason
     const resumo = buildContactSummary({
       reason: contactReason,
@@ -6959,6 +6972,7 @@ function Cliente360({
     })
     setIsSavingContact(true)
     setContactFeedback('')
+    setContactError('')
     try {
       const created = await onAddInteraction({
         clienteId: cliente.id,
@@ -6971,6 +6985,10 @@ function Cliente360({
         dataProximaAcao: nextActionDate || undefined,
         orcamentoId: contactBudgetId || undefined,
       })
+      const nextClientStatus = clientStatusFromContactResult(resultado)
+      if (nextClientStatus && nextClientStatus !== cliente.status) {
+        await onUpdateClient({ status: nextClientStatus })
+      }
       setContactFeedback(`Contato registrado em ${dateLabel(created.data)}.`)
       setContactNote('')
       setNextActionDate('')
@@ -6978,7 +6996,8 @@ function Cliente360({
       setContactBudgetId('')
       setContactResult('respondeu')
       setContactTemperature('morno')
-      if (createQuote) onCreateQuote()
+      setLastAIAnalysis(null)
+      if (createQuote) onCreateQuote(quoteItemsFromAnalysis(lastAIAnalysis))
     } finally {
       setIsSavingContact(false)
     }
@@ -6997,6 +7016,7 @@ function Cliente360({
     setContactNote(interpretation.summary)
     setContactNextActionText(interpretation.nextAction)
     setNextActionDate(interpretation.nextAction ? addDays(new Date().toISOString().slice(0, 10), interpretation.nextActionDays) : '')
+    setLastAIAnalysis(null)
     setInterpretationFeedback('Conversa interpretada. Revise os campos antes de salvar no historico.')
   }
 
@@ -7020,6 +7040,7 @@ function Cliente360({
       setContactNote(formatAIContactSummary(analysis))
       setContactNextActionText(analysis.nextAction)
       setNextActionDate(analysis.nextAction ? addDays(new Date().toISOString().slice(0, 10), analysis.nextActionDays) : '')
+      setLastAIAnalysis(analysis)
       setInterpretationFeedback(`IA analisou a conversa com ${Math.round(analysis.confidence * 100)}% de confianca. Revise antes de salvar.`)
     } catch (exception) {
       const fallback = interpretWhatsAppConversation(whatsappHistoryPaste, cliente.nome)
@@ -7030,6 +7051,7 @@ function Cliente360({
       setContactNote(fallback.summary)
       setContactNextActionText(fallback.nextAction)
       setNextActionDate(fallback.nextAction ? addDays(new Date().toISOString().slice(0, 10), fallback.nextActionDays) : '')
+      setLastAIAnalysis(null)
       setInterpretationFeedback(exception instanceof Error
         ? `IA indisponivel: ${exception.message}. Usei a interpretacao local como fallback.`
         : 'IA indisponivel. Usei a interpretacao local como fallback.')
@@ -7165,6 +7187,7 @@ function Cliente360({
             </div>
           </div>
           {contactFeedback && <div className="readiness ok">{contactFeedback}</div>}
+          {contactError && <div className="alert">{contactError}</div>}
           {interpretationFeedback && <div className="readiness ok">{interpretationFeedback}</div>}
           <div className="whatsapp-interpret-box">
             <label className="client360-contact-note">
@@ -7287,6 +7310,28 @@ function Cliente360({
             Proxima acao planejada
             <input value={contactNextActionText} onChange={(event) => setContactNextActionText(event.target.value)} placeholder="Ex.: enviar proposta revisada, ligar as 14h, confirmar disponibilidade." />
           </label>
+          {lastAIAnalysis && (
+            <div className="ai-contact-brief">
+              <div>
+                <strong>{lastAIAnalysis.negotiationStatus}</strong>
+                <span>{lastAIAnalysis.temperature} - {lastAIAnalysis.result}</span>
+              </div>
+              {lastAIAnalysis.detectedProducts.length > 0 && (
+                <p>Itens detectados: {lastAIAnalysis.detectedProducts.join(', ')}</p>
+              )}
+              {lastAIAnalysis.objections.length > 0 && (
+                <p>Travas: {lastAIAnalysis.objections.join(', ')}</p>
+              )}
+              {lastAIAnalysis.paymentTerms.length > 0 && (
+                <p>Pagamento: {lastAIAnalysis.paymentTerms.join(', ')}</p>
+              )}
+              {lastAIAnalysis.detectedProducts.length > 0 && (
+                <button className="button" type="button" onClick={() => onCreateQuote(quoteItemsFromAnalysis(lastAIAnalysis))}>
+                  Criar orcamento com itens detectados
+                </button>
+              )}
+            </div>
+          )}
           <div className="client360-save-bar">
             <button className="button primary" type="button" disabled={isSavingContact} onClick={() => void registerContact(false)}>
               {isSavingContact ? 'Salvando...' : 'Salvar no historico'}
@@ -7294,7 +7339,7 @@ function Cliente360({
             <button className="button" type="button" disabled={isSavingContact} onClick={() => void registerContact(true)}>
               Salvar e criar orcamento
             </button>
-            <span>{nextActionDate ? `Proxima acao em ${dateLabel(nextActionDate)}` : 'Sem proxima acao agendada'}</span>
+            <span>{contactIsTerminal ? 'Contato conclusivo' : nextActionDate ? `Proxima acao em ${dateLabel(nextActionDate)}` : 'Defina proxima acao para nao perder o follow-up'}</span>
           </div>
           <div className="client360-recent-history">
             <strong>Historico de atendimento</strong>
@@ -7324,11 +7369,38 @@ function Cliente360({
             </div>
           </div>
           <div className="status-list">
+            <div className="status-row"><span>Status CRM</span><strong>{cliente.status}</strong></div>
             <div className="status-row"><span>Ultima compra</span><strong>{dateLabel(cliente.ultimaCompraEm)}</strong></div>
             <div className="status-row"><span>Produto principal</span><strong>{produtoPrincipal || cliente.produtoPrincipal || 'Sem historico'}</strong></div>
             <div className="status-row"><span>Servico recorrente</span><strong>{servicoRecorrente || 'Sem historico'}</strong></div>
             <div className="status-row"><span>Proxima recompra</span><strong>{dateLabel(proximaRecompra)}</strong></div>
             <div className="status-row"><span>Tarefas abertas</span><strong>{tarefasAbertas.length}</strong></div>
+          </div>
+          <div className="client-followup-queue">
+            <strong>Fila deste cliente</strong>
+            {nextOpenTasks.map((tarefa) => (
+              <div className="contact-history-card" key={tarefa.id}>
+                <div>
+                  <span className="status-pill">{tarefa.status}</span>
+                  <strong>{tarefa.titulo}</strong>
+                  <small>{dateLabel(tarefa.dataVencimento)}</small>
+                </div>
+                <p>{tarefa.descricao || 'Sem descricao.'}</p>
+              </div>
+            ))}
+            {orcamentosAbertos.slice(0, 3).map((orcamento) => (
+              <div className="contact-history-card" key={orcamento.id}>
+                <div>
+                  <span className="status-pill">{orcamento.status}</span>
+                  <strong>{money(orcamento.valorTotal)}</strong>
+                  <small>Validade {dateLabel(orcamento.validade)}</small>
+                </div>
+                <button className="button compact-button" type="button" onClick={() => onOpenBudget(orcamento.id)}>Abrir proposta</button>
+              </div>
+            ))}
+            {nextOpenTasks.length === 0 && orcamentosAbertos.length === 0 && (
+              <div className="empty-state compact">Sem pendencias abertas para este cliente.</div>
+            )}
           </div>
         </div>
       </section>
@@ -7745,6 +7817,44 @@ function formatAIContactSummary(analysis: Awaited<ReturnType<typeof analyzeWhats
     analysis.objections.length ? `Objecoes/travas: ${analysis.objections.join(', ')}.` : '',
   ]
   return lines.filter(Boolean).join('\n')
+}
+
+function isTerminalContactResult(result: string) {
+  return ['sem interesse', 'numero invalido', 'fechou pedido', 'dados atualizados'].includes(result)
+}
+
+function clientStatusFromContactResult(result: string): ClienteStatus | undefined {
+  const map: Record<string, ClienteStatus> = {
+    'pediu orcamento': 'Orcamento aberto',
+    'fechou pedido': 'Ativo',
+    'comprar depois': 'Em acompanhamento',
+    'nao respondeu': 'Em acompanhamento',
+    reclamacao: 'Em acompanhamento',
+    'sem interesse': 'Reativar',
+    'numero invalido': 'Nao contatar',
+    'dados atualizados': 'Em acompanhamento',
+  }
+  return map[result]
+}
+
+function quoteItemsFromAnalysis(analysis: WhatsAppContactAnalysis | null): OrcamentoItemInput[] | undefined {
+  if (!analysis?.detectedProducts.length) return undefined
+  return analysis.detectedProducts.slice(0, 8).map((description) => ({
+    descricao: description,
+    tipo: /servi[cç]o|alinhamento|balanceamento|montagem|cambagem/i.test(description) ? 'servico' : 'produto',
+    quantidade: quantityFromText(description) ?? 1,
+    valorUnitario: 0,
+    descontoPercentual: 0,
+    apresentacao: 'normal',
+    observacao: 'Detectado pela IA a partir da conversa do WhatsApp',
+  }))
+}
+
+function quantityFromText(value: string) {
+  const match = value.match(/\b(\d{1,3})\s*(?:x|un|unidades?|pneus?|pecas?|peças?)\b/i)
+  if (!match) return undefined
+  const parsed = Number(match[1])
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
 }
 
 function interpretWhatsAppConversation(rawText: string, clienteNome: string) {
