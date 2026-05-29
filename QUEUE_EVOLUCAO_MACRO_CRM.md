@@ -46,6 +46,7 @@ Ja entregue:
 - Repository paginado com filtros de ativas, bloqueadas e todas.
 - Tela de oportunidades usando dados globais do Supabase, nao apenas clientes carregados.
 - Criar tarefa a partir de sugestao marca a oportunidade como bloqueada por tarefa existente.
+- Atribuicao em lote para oportunidades `Sem vendedor`, com recalculo automatico da fila.
 
 Pronto quando:
 - Admin ve a fila da base inteira.

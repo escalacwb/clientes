@@ -1233,6 +1233,23 @@ Validacao:
 Proximo passo tecnico:
 - Transformar cada atalho em fluxo de acao em lote: atribuir vendedor, gerar campanha, criar tarefas em massa ou abrir proposta conforme o gargalo.
 
+### 2026-05-28 - Atribuicao em lote na fila sem vendedor
+
+Status: concluido.
+
+Entregue:
+- Motor de Oportunidades ganhou barra de acao em lote quando o filtro `Sem vendedor` esta ativo.
+- Admin pode selecionar as oportunidades visiveis da pagina, escolher um vendedor e atribuir clientes em massa.
+- Atribuicao em lote atualiza `clientes.vendedor_id`, recalcula `oportunidades_cache` e atualiza resumos de vendedores.
+- O atalho `Distribuir carteira` do Dashboard leva direto para essa fila operacional.
+
+Validacao:
+- Build passou com `npm run build`.
+- Playwright local validou o fluxo sem gravar dados: abriu `Distribuir carteira`, exibiu seletor de vendedor, selecionou 50 clientes da pagina e habilitou `Atribuir 50`.
+
+Proximo passo tecnico:
+- Criar acoes em lote equivalentes para Rodobens, tarefas e campanhas: criar tarefas em massa e gerar campanha a partir da selecao.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

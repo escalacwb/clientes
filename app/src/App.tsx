@@ -86,6 +86,7 @@ import {
   type VendedorHistoricoResumo,
 } from './repositories/clientesRepository'
 import { assignClienteVendedor } from './repositories/clientesRepository'
+import { assignClientesVendedor } from './repositories/clientesRepository'
 import { listClientesPage } from './repositories/clientesRepository'
 import { listRodobensLeads } from './repositories/clientesRepository'
 import { updateClienteComercial } from './repositories/clientesRepository'
@@ -1186,6 +1187,7 @@ function App() {
             tipoFilter={oportunidadesTipoFilter}
             isLoading={isLoadingOportunidades}
             canRefresh={session.role === 'admin'}
+            usuarios={usuarios}
             onPageChange={setOportunidadesPage}
             onFilterChange={(filter) => {
               setOportunidadesFilter(filter)
@@ -1199,6 +1201,16 @@ function App() {
               await refreshOportunidadesCache()
               setOportunidadesPage(1)
               setOportunidadesRefreshKey((current) => current + 1)
+            }}
+            onAssignSelected={async (clienteIds, vendedorId) => {
+              const updated = await assignClientesVendedor(clienteIds, vendedorId)
+              await refreshOportunidadesCache()
+              setOportunidadesPage(1)
+              setOportunidadesRefreshKey((current) => current + 1)
+              const [resumo, historicos] = await Promise.all([listVendedoresResumo(), listVendedoresHistoricosResumo()])
+              setVendedoresResumo(resumo)
+              setVendedoresHistoricosResumo(historicos)
+              return updated
             }}
             onCreateTask={async (oportunidade) => {
               const cliente = clientes.find((item) => item.id === oportunidade.clienteId)
@@ -2191,10 +2203,12 @@ function Oportunidades({
   tipoFilter,
   isLoading,
   canRefresh,
+  usuarios,
   onPageChange,
   onFilterChange,
   onTipoFilterChange,
   onRefresh,
+  onAssignSelected,
   onCreateTask,
 }: {
   oportunidades: Oportunidade[]
@@ -2206,15 +2220,21 @@ function Oportunidades({
   tipoFilter: string
   isLoading: boolean
   canRefresh: boolean
+  usuarios: Vendedor[]
   onPageChange: (page: number) => void
   onFilterChange: (filter: OportunidadeFilter) => void
   onTipoFilterChange: (tipo: string) => void
   onRefresh: () => Promise<void>
+  onAssignSelected: (clienteIds: string[], vendedorId: string) => Promise<number>
   onCreateTask: (oportunidade: Oportunidade) => Promise<Tarefa>
 }) {
   const [createdTasks, setCreatedTasks] = useState<string[]>([])
   const [error, setError] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [bulkVendedorId, setBulkVendedorId] = useState('')
+  const [isAssigning, setIsAssigning] = useState(false)
+  const vendedores = usuarios.filter((usuario) => usuario.role === 'vendedor')
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const totalAtivas = resumo.reduce((sum, item) => sum + item.ativas, 0)
   const totalBloqueadas = resumo.reduce((sum, item) => sum + item.bloqueadas, 0)
@@ -2224,6 +2244,15 @@ function Oportunidades({
     if (filter === 'ativas') return !oportunidade.bloqueada
     return true
   }).slice((page - 1) * pageSize, page * pageSize)
+  const isSemVendedor = tipoFilter === 'sem_vendedor'
+  const selectableIds = filtered
+    .filter((oportunidade) => !oportunidade.bloqueada && !oportunidade.tarefaExistente)
+    .map((oportunidade) => oportunidade.id)
+  const allVisibleSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id))
+
+  useEffect(() => {
+    setSelectedIds([])
+  }, [filter, page, tipoFilter])
 
   return (
     <section className="panel wide">
@@ -2273,6 +2302,51 @@ function Oportunidades({
         </label>
       </div>
       {error && <div className="alert">{error}</div>}
+      {isSemVendedor && (
+        <div className="bulk-action-bar">
+          <label>
+            Vendedor responsavel
+            <select value={bulkVendedorId} onChange={(event) => setBulkVendedorId(event.target.value)}>
+              <option value="">Selecionar vendedor</option>
+              {vendedores.map((usuario) => (
+                <option value={usuario.id} key={usuario.id}>{usuario.nome}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="button"
+            type="button"
+            disabled={selectableIds.length === 0}
+            onClick={() => {
+              setSelectedIds(allVisibleSelected ? [] : selectableIds)
+            }}
+          >
+            {allVisibleSelected ? 'Limpar selecao' : 'Selecionar pagina'}
+          </button>
+          <button
+            className="button primary"
+            type="button"
+            disabled={selectedIds.length === 0 || !bulkVendedorId || isAssigning}
+            onClick={async () => {
+              setError('')
+              setIsAssigning(true)
+              try {
+                const clienteIds = selectedIds.map((id) => id.split('-sem_vendedor')[0])
+                const updated = await onAssignSelected(clienteIds, bulkVendedorId)
+                setSelectedIds([])
+                setBulkVendedorId('')
+                setError(`${updated} clientes atribuidos e fila recalculada.`)
+              } catch (exception) {
+                setError(exception instanceof Error ? exception.message : 'Nao foi possivel atribuir os clientes.')
+              } finally {
+                setIsAssigning(false)
+              }
+            }}
+          >
+            {isAssigning ? 'Atribuindo...' : `Atribuir ${selectedIds.length || ''}`}
+          </button>
+        </div>
+      )}
       <div className="opportunity-summary-strip">
         <div className="opportunity-summary-card">
           <strong>{totalAtivas || total}</strong>
@@ -2294,7 +2368,8 @@ function Oportunidades({
       </div>
       {isLoading && filtered.length === 0 && <div className="empty-state">Carregando oportunidades...</div>}
       <div className="table">
-        <div className="table-head opportunity">
+        <div className={isSemVendedor ? 'table-head opportunity assign-opportunity' : 'table-head opportunity'}>
+          {isSemVendedor && <span>Sel.</span>}
           <span>Cliente</span>
           <span>Tipo</span>
           <span>Motivo</span>
@@ -2303,7 +2378,27 @@ function Oportunidades({
           <span>Acoes</span>
         </div>
         {filtered.map((oportunidade) => (
-          <div className={oportunidade.bloqueada ? 'table-row opportunity blocked' : 'table-row opportunity'} key={oportunidade.id}>
+          <div className={isSemVendedor
+            ? oportunidade.bloqueada ? 'table-row opportunity assign-opportunity blocked' : 'table-row opportunity assign-opportunity'
+            : oportunidade.bloqueada ? 'table-row opportunity blocked' : 'table-row opportunity'
+          } key={oportunidade.id}>
+            {isSemVendedor && (
+              <span>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(oportunidade.id)}
+                  disabled={oportunidade.bloqueada || oportunidade.tarefaExistente}
+                  onChange={(event) => {
+                    setSelectedIds((current) =>
+                      event.target.checked
+                        ? [...new Set([...current, oportunidade.id])]
+                        : current.filter((id) => id !== oportunidade.id),
+                    )
+                  }}
+                  aria-label={`Selecionar ${oportunidade.clienteNome}`}
+                />
+              </span>
+            )}
             <span><strong>{oportunidade.clienteNome}</strong></span>
             <span>{oportunidade.tipo}</span>
             <span>{oportunidade.motivo}</span>

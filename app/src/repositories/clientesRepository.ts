@@ -222,6 +222,21 @@ export async function assignClienteVendedor(clienteId: string, vendedorId: strin
   if (error) throw error
 }
 
+export async function assignClientesVendedor(clienteIds: string[], vendedorId: string): Promise<number> {
+  const supabase = await getSupabase()
+  if (!supabase) return clienteIds.length
+  if (clienteIds.length === 0) return 0
+
+  const { data, error } = await supabase
+    .from('clientes')
+    .update({ vendedor_id: vendedorId })
+    .in('id', clienteIds)
+    .select('id')
+
+  if (error) throw error
+  return data?.length ?? 0
+}
+
 export async function updateClienteComercial(
   clienteId: string,
   input: {
