@@ -13,6 +13,7 @@ import {
   Send,
   ShieldCheck,
   Truck,
+  UserCheck,
   UserRound,
   UsersRound,
   WalletCards,
@@ -54,6 +55,7 @@ import { upsertCampanhaEnvio } from './repositories/campanhasRepository'
 import { listCatalogoItens } from './repositories/catalogoRepository'
 import { assignClienteVendedor } from './repositories/clientesRepository'
 import { listClientesPage } from './repositories/clientesRepository'
+import { listRodobensLeads } from './repositories/clientesRepository'
 import { updateClienteComercial } from './repositories/clientesRepository'
 import { listConflitos, resolveConflito } from './repositories/conflitosRepository'
 import {
@@ -107,6 +109,7 @@ const SalesChart = lazy(() => import('./components/SalesChart'))
 const nav = [
   { id: 'dashboard', label: 'Dashboard', icon: Gauge },
   { id: 'clientes', label: 'Clientes', icon: UsersRound },
+  { id: 'rodobens', label: 'Inbox Rodobens', icon: UserCheck },
   { id: 'carteira', label: 'Minha carteira', icon: ClipboardList },
   { id: 'oportunidades', label: 'Oportunidades', icon: AlertTriangle },
   { id: 'tarefas', label: 'Tarefas', icon: CalendarClock },
@@ -175,6 +178,11 @@ function App() {
   const [vendedoresResumo, setVendedoresResumo] = useState<VendedorResumo[]>([])
   const [rankingMedidas, setRankingMedidas] = useState<RankingResumo[]>([])
   const [rankingServicos, setRankingServicos] = useState<RankingResumo[]>([])
+  const [rodobensLeads, setRodobensLeads] = useState<Cliente[]>([])
+  const [rodobensTotal, setRodobensTotal] = useState(0)
+  const [rodobensPage, setRodobensPage] = useState(1)
+  const [rodobensQuery, setRodobensQuery] = useState('')
+  const [isLoadingRodobens, setIsLoadingRodobens] = useState(false)
   const [isLoadingData, setIsLoadingData] = useState(isSupabaseConfigured)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [isLoadingClientes, setIsLoadingClientes] = useState(isSupabaseConfigured)
@@ -325,6 +333,39 @@ function App() {
       window.clearTimeout(handle)
     }
   }, [clienteFiltro, clientesPage, isCheckingSession, query, session])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadRodobens() {
+      if (isCheckingSession) return
+      if (!session) {
+        setRodobensLeads([])
+        setRodobensTotal(0)
+        return
+      }
+      if (view !== 'rodobens') return
+
+      setIsLoadingRodobens(true)
+      try {
+        const result = await listRodobensLeads({ page: rodobensPage, pageSize: clientePageSize, query: rodobensQuery })
+        if (!isMounted) return
+        setRodobensLeads(result.clientes)
+        setRodobensTotal(result.total)
+      } catch (exception) {
+        if (isMounted) setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar Inbox Rodobens.')
+      } finally {
+        if (isMounted) setIsLoadingRodobens(false)
+      }
+    }
+
+    const handle = window.setTimeout(loadRodobens, rodobensQuery.trim() ? 250 : 0)
+
+    return () => {
+      isMounted = false
+      window.clearTimeout(handle)
+    }
+  }, [isCheckingSession, rodobensPage, rodobensQuery, session, view])
 
   useEffect(() => {
     let isMounted = true
@@ -654,6 +695,35 @@ function App() {
             onBack={() => setView('clientes')}
           />
         )}
+        {canUseScopedClientViews && view === 'rodobens' && (
+          <RodobensInbox
+            leads={rodobensLeads}
+            total={rodobensTotal}
+            page={rodobensPage}
+            pageSize={clientePageSize}
+            query={rodobensQuery}
+            isLoading={isLoadingRodobens}
+            onQueryChange={(nextQuery) => {
+              setRodobensQuery(nextQuery)
+              setRodobensPage(1)
+            }}
+            onPageChange={setRodobensPage}
+            onSelect={(cliente) => {
+              setSelectedClientId(cliente.id)
+              setView('cliente360')
+            }}
+            onAddInteraction={async (interacao) => {
+              const created = await createInteracao(interacao)
+              setInteracoes((current) => [created, ...current])
+              return created
+            }}
+            onCreateTask={async (task) => {
+              const created = await createTarefa(task)
+              setTarefas((current) => [created, ...current])
+              return created
+            }}
+          />
+        )}
         {canUseScopedClientViews && view === 'carteira' && (
           <Carteira
             clientes={carteiraClientes}
@@ -843,6 +913,7 @@ function titleFor(view: string) {
   const titles: Record<string, string> = {
     dashboard: 'Painel comercial',
     clientes: 'Base unica de clientes',
+    rodobens: 'Inbox Rodobens',
     carteira: 'Fila diaria do vendedor',
     oportunidades: 'Oportunidades automaticas',
     tarefas: 'Tarefas e proximas acoes',
@@ -1183,6 +1254,145 @@ function Carteira({
         <FilterControl clientes={baseClientes} orcamentos={orcamentos} value={filtro} onChange={onFilterChange} />
       </div>
       <PriorityTable clientes={clientes} onSelect={onSelect} showActions />
+    </section>
+  )
+}
+
+function RodobensInbox({
+  leads,
+  total,
+  page,
+  pageSize,
+  query,
+  isLoading,
+  onQueryChange,
+  onPageChange,
+  onSelect,
+  onAddInteraction,
+  onCreateTask,
+}: {
+  leads: Cliente[]
+  total: number
+  page: number
+  pageSize: number
+  query: string
+  isLoading: boolean
+  onQueryChange: (query: string) => void
+  onPageChange: (page: number) => void
+  onSelect: (cliente: Cliente) => void
+  onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
+  onCreateTask: (task: TarefaInput) => Promise<Tarefa>
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const safePage = Math.min(page, totalPages)
+  const [statusMessage, setStatusMessage] = useState('')
+
+  async function registerFirstContact(cliente: Cliente) {
+    await onAddInteraction({
+      clienteId: cliente.id,
+      vendedorId: cliente.vendedorId ?? 'u-1',
+      canal: 'WhatsApp',
+      tipo: 'primeiro contato rodobens',
+      resumo: 'Primeiro contato iniciado pela Inbox Rodobens.',
+      resultado: 'WhatsApp aberto',
+    })
+    await onCreateTask({
+      clienteId: cliente.id,
+      vendedorId: cliente.vendedorId,
+      titulo: 'Follow-up Rodobens',
+      descricao: 'Retornar cliente abordado pela Inbox Rodobens.',
+      dataVencimento: new Date().toISOString().slice(0, 10),
+      prioridade: 80,
+      origem: 'rodobens',
+    })
+    setStatusMessage(`Contato registrado para ${cliente.nome}.`)
+  }
+
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Inbox Rodobens</h2>
+          <p>Fila de primeiro contato para clientes identificados com origem Rodobens.</p>
+        </div>
+        <div className="toolbar-actions">
+          <label className="search compact-search">
+            <Search size={16} />
+            <input
+              value={query}
+              onChange={(event) => onQueryChange(event.target.value)}
+              placeholder="Buscar lead Rodobens"
+            />
+          </label>
+          <span className="status-pill">{total} leads</span>
+        </div>
+      </div>
+      <div className="client-alerts">
+        <div>
+          <AlertTriangle size={15} />
+          <span>
+            A importacao atual classificou 0 clientes com origem Rodobens. Esta tela ja esta pronta; ela sera preenchida quando a origem vier no arquivo ou for reclassificada.
+          </span>
+        </div>
+      </div>
+      {statusMessage && <div className="readiness ok">{statusMessage}</div>}
+      {isLoading && <div className="empty-state compact">Carregando leads Rodobens...</div>}
+      {!isLoading && leads.length === 0 && (
+        <div className="empty-state">
+          Nenhum lead Rodobens encontrado na classificacao atual.
+        </div>
+      )}
+      {leads.length > 0 && (
+        <div className="table">
+          <div className="table-head campaign">
+            <span>Cliente</span>
+            <span>Origem</span>
+            <span>Contexto</span>
+            <span>Acoes</span>
+          </div>
+          {leads.map((cliente) => {
+            const message = `Bom dia, ${cliente.responsavel ?? cliente.nome}. Aqui e da Capital Truck Center. Identifiquei seu cadastro na nossa base Rodobens e gostaria de entender se podemos ajudar com pneus ou servicos.`
+            const waUrl = cliente.whatsapp ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(message)}` : undefined
+
+            return (
+              <div className="table-row campaign" key={cliente.id}>
+                <span>
+                  <strong>{cliente.nome}</strong>
+                  <small>{cliente.cidade}/{cliente.uf} - {cliente.whatsapp ?? 'Sem WhatsApp'}</small>
+                </span>
+                <span>
+                  <strong>{origemLabel(cliente.origemBase)}</strong>
+                  <small>{cliente.origemDetalhe ?? cliente.origem}</small>
+                </span>
+                <span>
+                  <small>Ultima compra: {dateLabel(cliente.ultimaCompraEm)}</small>
+                  <small>Total historico: {money(cliente.totalComprado + cliente.totalServicos)}</small>
+                </span>
+                <span className="campaign-actions">
+                  <button className="button" type="button" onClick={() => onSelect(cliente)}>
+                    <UserRound size={16} /> Ficha
+                  </button>
+                  <a className={!waUrl ? 'button disabled' : 'button'} href={waUrl} target="_blank" rel="noreferrer">
+                    <MessageCircle size={16} /> WhatsApp
+                  </a>
+                  <button className="button primary" type="button" onClick={() => registerFirstContact(cliente)}>
+                    Registrar contato
+                  </button>
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      <div className="pagination-row">
+        <button className="button" type="button" disabled={safePage <= 1 || isLoading} onClick={() => onPageChange(Math.max(1, safePage - 1))}>
+          Anterior
+        </button>
+        <span>Pagina {safePage} de {totalPages}</span>
+        <button className="button" type="button" disabled={safePage >= totalPages || isLoading} onClick={() => onPageChange(Math.min(totalPages, safePage + 1))}>
+          Proxima
+        </button>
+      </div>
     </section>
   )
 }

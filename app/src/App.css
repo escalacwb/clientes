@@ -210,6 +210,10 @@ h3 {
   font: inherit;
 }
 
+.compact-search {
+  width: min(300px, 100%);
+}
+
 .filter-control {
   display: inline-flex;
   align-items: center;

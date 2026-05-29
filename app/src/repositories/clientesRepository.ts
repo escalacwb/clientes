@@ -103,6 +103,15 @@ export async function listClientesPage(input: {
   }
 }
 
+export async function listRodobensLeads(input: { page: number; pageSize: number; query?: string }): Promise<{ clientes: Cliente[]; total: number }> {
+  return listClientesPage({
+    page: input.page,
+    pageSize: input.pageSize,
+    query: input.query,
+    origemBase: 'rodobens',
+  })
+}
+
 export async function assignClienteVendedor(clienteId: string, vendedorId: string): Promise<void> {
   const supabase = await getSupabase()
   if (!supabase) return

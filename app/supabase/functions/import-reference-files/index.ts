@@ -470,8 +470,8 @@ async function upsertClientes(service: ReturnType<typeof createClient>, rows: Cl
       canal_venda: cliente.canal_venda || null,
       status_comercial: 'novo',
       origem: 'listaclientessistema',
-      origem_base: 'capital_truck',
-      origem_detalhe: 'Cadastro ERP Capital Truck Center',
+      origem_base: inferOrigemBase(cliente.raw, 'capital_truck'),
+      origem_detalhe: inferOrigemDetalhe(cliente.raw, 'Cadastro ERP Capital Truck Center'),
       raw_data: cliente.raw,
     }
   })
@@ -722,6 +722,19 @@ function uniqueValue<T>(map: Map<string, T[]>, key: string) {
 
 function resolveClienteId(index: Map<string, string>, row: { codigo_cliente_erp?: string; codigo_erp?: string; cpf_cnpj?: string; cliente_nome?: string; nome?: string }) {
   return index.get(`erp:${row.codigo_cliente_erp || row.codigo_erp}`) || index.get(`doc:${row.cpf_cnpj}`) || index.get(`nome:${normalizeKey(row.cliente_nome || row.nome || '')}`) || null
+}
+
+function inferOrigemBase(raw: Record<string, unknown> = {}, fallback = 'desconhecida') {
+  const haystack = Object.values(raw).join(' ').toLowerCase()
+  if (haystack.includes('rodobens')) return 'rodobens'
+  if (haystack.includes('capital truck') || haystack.includes('capital service')) return 'capital_truck'
+  return fallback
+}
+
+function inferOrigemDetalhe(raw: Record<string, unknown> = {}, fallback = '') {
+  const haystack = Object.values(raw).join(' ').toLowerCase()
+  if (haystack.includes('rodobens')) return 'Sinal Rodobens identificado no arquivo de referencia'
+  return fallback
 }
 
 function addClienteKeys(index: Map<string, string>, cliente: Record<string, string>) {

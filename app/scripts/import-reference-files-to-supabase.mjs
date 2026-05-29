@@ -231,8 +231,8 @@ async function upsertClientes(rows, appUsers) {
       cadastro_erp_em: cliente.cadastro_em || null,
       status_comercial: 'novo',
       origem: 'listaclientessistema',
-      origem_base: 'capital_truck',
-      origem_detalhe: 'Cadastro ERP Capital Truck Center',
+      origem_base: inferOrigemBase(cliente.raw, 'capital_truck'),
+      origem_detalhe: inferOrigemDetalhe(cliente.raw, 'Cadastro ERP Capital Truck Center'),
       raw_data: cliente.raw,
     }
   })
@@ -742,6 +742,19 @@ function addVeiculoKeys(index, veiculo) {
 
 function resolveClienteId(index, row) {
   return index.get(`erp:${row.codigo_cliente_erp || row.codigo_erp}`) || index.get(`doc:${row.cpf_cnpj}`) || index.get(`nome:${normalizeKey(row.cliente_nome || row.nome)}`) || null
+}
+
+function inferOrigemBase(raw = {}, fallback = 'desconhecida') {
+  const haystack = Object.values(raw).join(' ').toLowerCase()
+  if (haystack.includes('rodobens')) return 'rodobens'
+  if (haystack.includes('capital truck') || haystack.includes('capital service')) return 'capital_truck'
+  return fallback
+}
+
+function inferOrigemDetalhe(raw = {}, fallback = '') {
+  const haystack = Object.values(raw).join(' ').toLowerCase()
+  if (haystack.includes('rodobens')) return 'Sinal Rodobens identificado no arquivo de referencia'
+  return fallback
 }
 
 function addClienteKeys(index, cliente) {

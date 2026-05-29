@@ -394,6 +394,27 @@ Validacao local:
 Proximo passo tecnico:
 - Criar tela "Inbox Rodobens" e/ou corrigir classificacao de origem caso o arquivo atual ainda tenha todos os clientes como Capital Truck.
 
+### 2026-05-28 - Inbox Rodobens e reclassificacao inicial
+
+Status: concluido.
+
+Entregue:
+- Criada tela `Inbox Rodobens` no menu.
+- Criado carregamento paginado de leads Rodobens via `listRodobensLeads`.
+- Tela mostra fila de primeiro contato, ficha, WhatsApp e acao para registrar contato/follow-up.
+- Importador local e Edge Function passaram a inferir `origem_base = rodobens` quando o bruto do arquivo contem Rodobens.
+- Criado SQL `reclassify_rodobens_origin.sql` para corrigir a base atual.
+
+Validacao local:
+- A base atual possuia apenas 2 registros com texto bruto Rodobens.
+- Esses 2 clientes foram reclassificados para `origem_base = rodobens`.
+- Dashboard passou a contar 2 Rodobens e 21.573 Capital.
+- Inbox Rodobens abriu com 2 leads.
+- Build passou com `npm run build`.
+
+Observacao:
+- A base atual nao parece trazer uma origem Rodobens ampla; os dois casos encontrados sao empresas com Rodobens no proprio nome. Para separar todos os clientes vindos de uma base Rodobens, o arquivo de importacao precisa trazer esse sinal em alguma coluna, nome de arquivo, aba ou metadado.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:
