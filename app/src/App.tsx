@@ -65,7 +65,7 @@ import {
   type CampanhaSegmentoId,
   attributeCampanhaRevenueByOrcamento,
 } from './repositories/campanhasRepository'
-import { listCatalogoItens } from './repositories/catalogoRepository'
+import { listCatalogoItens, listCatalogoPage, type CatalogoTipoFilter } from './repositories/catalogoRepository'
 import { assignClientesVendedorByFilter, listVendedoresHistoricosResumo, type ClientePageFilters, type VendedorHistoricoResumo } from './repositories/clientesRepository'
 import { assignClienteVendedor } from './repositories/clientesRepository'
 import { listClientesPage } from './repositories/clientesRepository'
@@ -148,6 +148,7 @@ const nav = [
   { id: 'mesclagem', label: 'Mesclagem', icon: UsersRound },
   { id: 'campanhas', label: 'Campanhas', icon: Send },
   { id: 'orcamentos', label: 'Orcamentos', icon: WalletCards },
+  { id: 'catalogo', label: 'Catalogo', icon: ClipboardList },
   { id: 'relatorios', label: 'Relatorios', icon: BarChart3 },
   { id: 'vendedores', label: 'Vendedores', icon: UserRound },
   { id: 'usuarios', label: 'Usuarios', icon: ShieldCheck },
@@ -239,6 +240,11 @@ function App() {
   const [possiveisDuplicados, setPossiveisDuplicados] = useState<PossivelDuplicado[]>(isSupabaseConfigured ? [] : seedPossiveisDuplicados)
   const [mesclagens, setMesclagens] = useState<ClienteMesclagem[]>(isSupabaseConfigured ? [] : seedMesclagens)
   const [catalogo, setCatalogo] = useState<CatalogoItem[]>([])
+  const [catalogoLista, setCatalogoLista] = useState<CatalogoItem[]>([])
+  const [catalogoTotal, setCatalogoTotal] = useState(0)
+  const [catalogoPage, setCatalogoPage] = useState(1)
+  const [catalogoQuery, setCatalogoQuery] = useState('')
+  const [catalogoTipoFilter, setCatalogoTipoFilter] = useState<CatalogoTipoFilter>('todos')
   const [dashboardResumo, setDashboardResumo] = useState<DashboardResumo | undefined>()
   const [vendedoresResumo, setVendedoresResumo] = useState<VendedorResumo[]>([])
   const [vendedoresHistoricosResumo, setVendedoresHistoricosResumo] = useState<VendedorHistoricoResumo[]>([])
@@ -257,6 +263,7 @@ function App() {
   const [isLoadingOrcamentos, setIsLoadingOrcamentos] = useState(false)
   const [isLoadingTarefas, setIsLoadingTarefas] = useState(false)
   const [isLoadingOportunidades, setIsLoadingOportunidades] = useState(false)
+  const [isLoadingCatalogo, setIsLoadingCatalogo] = useState(false)
   const [dataError, setDataError] = useState('')
 
   useEffect(() => {
@@ -524,6 +531,49 @@ function App() {
       isMounted = false
     }
   }, [isCheckingSession, oportunidadesFilter, oportunidadesPage, session, view])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadCatalogoPage() {
+      if (isCheckingSession) return
+      if (!isSupabaseConfigured) {
+        setCatalogoLista(catalogo)
+        setCatalogoTotal(catalogo.length)
+        return
+      }
+      if (!session) {
+        setCatalogoLista([])
+        setCatalogoTotal(0)
+        return
+      }
+      if (view !== 'catalogo') return
+
+      setIsLoadingCatalogo(true)
+      try {
+        const result = await listCatalogoPage({
+          page: catalogoPage,
+          pageSize: 50,
+          query: catalogoQuery,
+          tipo: catalogoTipoFilter,
+        })
+        if (!isMounted) return
+        setCatalogoLista(result.itens)
+        setCatalogoTotal(result.total)
+      } catch (exception) {
+        if (isMounted) setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar o catalogo.')
+      } finally {
+        if (isMounted) setIsLoadingCatalogo(false)
+      }
+    }
+
+    const handle = window.setTimeout(loadCatalogoPage, catalogoQuery.trim() ? 250 : 0)
+
+    return () => {
+      isMounted = false
+      window.clearTimeout(handle)
+    }
+  }, [catalogo, catalogoPage, catalogoQuery, catalogoTipoFilter, isCheckingSession, session, view])
 
   useEffect(() => {
     let isMounted = true
@@ -1226,6 +1276,26 @@ function App() {
             }}
           />
         )}
+        {canUseScopedClientViews && view === 'catalogo' && (
+          <Catalogo
+            itens={isSupabaseConfigured ? catalogoLista : catalogo}
+            total={isSupabaseConfigured ? catalogoTotal : catalogo.length}
+            page={catalogoPage}
+            pageSize={50}
+            query={catalogoQuery}
+            tipoFilter={catalogoTipoFilter}
+            isLoading={isLoadingCatalogo}
+            onQueryChange={(nextQuery) => {
+              setCatalogoQuery(nextQuery)
+              setCatalogoPage(1)
+            }}
+            onTipoFilterChange={(filter) => {
+              setCatalogoTipoFilter(filter)
+              setCatalogoPage(1)
+            }}
+            onPageChange={setCatalogoPage}
+          />
+        )}
         {session.role === 'admin' && view === 'relatorios' && (
           <Relatorios
             clientes={clientes}
@@ -1311,6 +1381,7 @@ function titleFor(view: string) {
     mesclagem: 'Mesclagem de clientes',
     campanhas: 'Campanhas WhatsApp',
     orcamentos: 'Orcamentos e conversao',
+    catalogo: 'Catalogo e precos',
     relatorios: 'Relatorios gerenciais',
     usuarios: 'Usuarios e permissoes',
     auditoria: 'Auditoria',
@@ -1907,6 +1978,97 @@ function Oportunidades({
       <div className="pagination">
         <button className="button" type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>Anterior</button>
         <span>Pagina {page} de {totalPages}</span>
+        <button className="button" type="button" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>Proxima</button>
+      </div>
+    </section>
+  )
+}
+
+function Catalogo({
+  itens,
+  total,
+  page,
+  pageSize,
+  query,
+  tipoFilter,
+  isLoading,
+  onQueryChange,
+  onTipoFilterChange,
+  onPageChange,
+}: {
+  itens: CatalogoItem[]
+  total: number
+  page: number
+  pageSize: number
+  query: string
+  tipoFilter: CatalogoTipoFilter
+  isLoading: boolean
+  onQueryChange: (query: string) => void
+  onTipoFilterChange: (filter: CatalogoTipoFilter) => void
+  onPageChange: (page: number) => void
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const produtos = itens.filter((item) => item.tipo === 'produto').length
+  const servicos = itens.filter((item) => item.tipo === 'servico').length
+  const semPreco = itens.filter((item) => item.preco <= 0).length
+
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Catalogo profissional</h2>
+          <p>Produtos e servicos vindos das listas de preco importadas, prontos para orcamento.</p>
+        </div>
+        <div className="segmented">
+          <button className={tipoFilter === 'todos' ? 'active' : ''} type="button" onClick={() => onTipoFilterChange('todos')}>Todos</button>
+          <button className={tipoFilter === 'produto' ? 'active' : ''} type="button" onClick={() => onTipoFilterChange('produto')}>Produtos</button>
+          <button className={tipoFilter === 'servico' ? 'active' : ''} type="button" onClick={() => onTipoFilterChange('servico')}>Servicos</button>
+        </div>
+      </div>
+
+      <div className="filter-row">
+        <label>
+          Buscar
+          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Codigo, medida, descricao, marca ou grupo" />
+        </label>
+      </div>
+
+      <div className="metrics-grid">
+        <Metric icon={ClipboardList} label="Itens nesta pagina" value={itens.length.toString()} tone="blue" />
+        <Metric icon={WalletCards} label="Produtos" value={produtos.toString()} tone="green" />
+        <Metric icon={Truck} label="Servicos" value={servicos.toString()} tone="blue" />
+        <Metric icon={AlertTriangle} label="Sem preco" value={semPreco.toString()} tone="amber" />
+      </div>
+
+      {isLoading && <div className="empty-state">Carregando catalogo...</div>}
+      <div className="table">
+        <div className="table-head catalog-row">
+          <span>Codigo</span>
+          <span>Descricao</span>
+          <span>Tipo</span>
+          <span>Marca/grupo</span>
+          <span>Preco</span>
+          <span>Regra</span>
+        </div>
+        {itens.map((item) => (
+          <div className="table-row catalog-row" key={item.id}>
+            <span><strong>{item.codigo}</strong><small>{item.unidade || 'un.'}</small></span>
+            <span><strong>{item.descricao}</strong><small>{item.subgrupo || item.grupo || 'Sem classificacao'}</small></span>
+            <span>{item.tipo === 'produto' ? 'Produto' : 'Servico'}</span>
+            <span>{item.marca || item.grupo || 'Nao informado'}</span>
+            <strong>{money(item.preco)}</strong>
+            <span>
+              {item.descontoMaximo !== undefined ? `Desc. max ${item.descontoMaximo}%` : 'Sem limite'}
+              <small>{item.estoque !== undefined ? `Estoque ${item.estoque}` : 'Sem estoque'}</small>
+            </span>
+          </div>
+        ))}
+        {!isLoading && itens.length === 0 && <div className="empty-state">Nenhum item encontrado no catalogo.</div>}
+      </div>
+
+      <div className="pagination">
+        <button className="button" type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>Anterior</button>
+        <span>Pagina {page} de {totalPages} - {total} itens</span>
         <button className="button" type="button" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>Proxima</button>
       </div>
     </section>

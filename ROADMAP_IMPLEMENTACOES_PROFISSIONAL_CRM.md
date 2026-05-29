@@ -923,6 +923,22 @@ Validacao:
 Proximo passo tecnico:
 - Transformar essa fila em painel gerencial com agrupamento por vendedor/origem e acoes em lote.
 
+### 2026-05-28 - Tela de catalogo profissional
+
+Status: concluido.
+
+Entregue:
+- Novo modulo `Catalogo` no menu principal.
+- Consulta paginada no Supabase para produtos e servicos ativos.
+- Busca por codigo, descricao, marca, grupo e subgrupo.
+- Filtro por produto/servico e visualizacao de preco, desconto maximo e estoque.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Adicionar historico de vigencia de preco e itens inativos, preparando revisao de mudancas de tabela.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:
