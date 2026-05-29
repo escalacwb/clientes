@@ -602,6 +602,23 @@ Proximo passo tecnico:
 - Persistir versoes de proposta e condicoes comerciais estruturadas em tabela propria.
 - Criar acao "Criar e enviar" para marcar status `enviado` e gerar follow-up de envio.
 
+### 2026-05-28 - Criar e enviar orcamento
+
+Status: concluido.
+
+Entregue:
+- Editor de orcamento recebeu acao `Criar e enviar`.
+- Quando a proposta nao exige aprovacao, essa acao salva o orcamento com status `enviado`.
+- Quando ha desconto acima do limite, a acao de envio fica bloqueada e o fluxo segue para aprovacao.
+- Ao criar e enviar, a tarefa gerada passa a ser `Follow-up de proposta enviada`, com origem `orcamento:envio`.
+- Se o cliente possui WhatsApp, o link WA.ME abre automaticamente apos salvar.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Vincular o orcamento criado pela tela a campanha/tarefa de origem.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

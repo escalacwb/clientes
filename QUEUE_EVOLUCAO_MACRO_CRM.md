@@ -62,10 +62,10 @@ Ja entregue:
 - Preview, mensagem WhatsApp e impressao.
 - Aprovacao de desconto.
 - Condicoes comparativas e follow-up automatico.
+- Acao `Criar e enviar`, marcando status `enviado` quando nao exige aprovacao.
+- Follow-up automatico especifico para proposta enviada.
 
 Proximas entregas:
-- Acao `Criar e enviar`, mudando status para `enviado`.
-- Follow-up automatico ao enviar.
 - Vincular orcamento criado a campanha/tarefa de origem.
 - Historico de versoes de proposta.
 - Rejeitar aprovacao com motivo.

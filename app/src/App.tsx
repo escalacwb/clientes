@@ -2686,12 +2686,14 @@ function OrcamentoEditor({
     setIsSaving(true)
     setError('')
     setFeedback('')
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
     const needsApproval = approvalWarnings.length > 0
+    const shouldSend = submitter?.value === 'send' && !needsApproval
     try {
       const created = await onCreate({
         clienteId: cliente.id,
         vendedorId: cliente.vendedorId ?? 'u-1',
-        status: needsApproval ? 'aguardando_aprovacao' : 'aberto',
+        status: needsApproval ? 'aguardando_aprovacao' : shouldSend ? 'enviado' : 'aberto',
         valorTotal: total,
         validade,
         previsaoFechamento: previsaoFechamento || undefined,
@@ -2703,13 +2705,14 @@ function OrcamentoEditor({
       await onCreateTask({
         clienteId: cliente.id,
         vendedorId: cliente.vendedorId,
-        titulo: 'Follow-up do orcamento',
-        descricao: `Retornar proposta ${created.id.slice(0, 8)} de ${money(created.valorTotal)}.`,
+        titulo: shouldSend ? 'Follow-up de proposta enviada' : 'Follow-up do orcamento',
+        descricao: `${shouldSend ? 'Confirmar recebimento da proposta' : 'Retornar proposta'} ${created.id.slice(0, 8)} de ${money(created.valorTotal)}.`,
         dataVencimento: previsaoFechamento || new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10),
         prioridade: needsApproval ? 90 : 80,
-        origem: 'orcamento:followup',
+        origem: shouldSend ? 'orcamento:envio' : 'orcamento:followup',
       })
-      setFeedback(`Orcamento ${created.id.slice(0, 8)} criado com total de ${money(created.valorTotal)}.`)
+      if (shouldSend && waUrl) window.open(waUrl, '_blank', 'noopener,noreferrer')
+      setFeedback(`Orcamento ${created.id.slice(0, 8)} ${shouldSend ? 'criado e marcado como enviado' : 'criado'} com total de ${money(created.valorTotal)}.`)
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Nao foi possivel criar o orcamento.')
     } finally {
@@ -2882,8 +2885,11 @@ function OrcamentoEditor({
           <button className="button" type="button" onClick={copyMessage} disabled={validItems.length === 0}>
             Copiar mensagem
           </button>
-          <button className="button primary" type="submit" disabled={isSaving}>
+          <button className="button" type="submit" value="draft" disabled={isSaving}>
             {isSaving ? 'Criando...' : 'Criar orcamento'}
+          </button>
+          <button className="button primary" type="submit" value="send" disabled={isSaving || approvalWarnings.length > 0 || !waUrl}>
+            {isSaving ? 'Criando...' : 'Criar e enviar'}
           </button>
         </aside>
       </form>
