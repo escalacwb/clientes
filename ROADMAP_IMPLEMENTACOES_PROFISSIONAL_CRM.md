@@ -1250,6 +1250,23 @@ Validacao:
 Proximo passo tecnico:
 - Criar acoes em lote equivalentes para Rodobens, tarefas e campanhas: criar tarefas em massa e gerar campanha a partir da selecao.
 
+### 2026-05-29 - Tarefas em lote para Rodobens
+
+Status: concluido.
+
+Entregue:
+- Inbox Rodobens ganhou selecao de leads da pagina.
+- Admin pode selecionar a pagina atual e criar tarefas de primeiro contato em lote.
+- O lote cria tarefas com origem `rodobens:primeiro_contato`, prioridade 85 e vencimento no dia.
+- O fluxo nao marca lead como contatado automaticamente; isso fica reservado para quando o contato de fato acontecer.
+
+Validacao:
+- Build passou com `npm run build`.
+- Playwright local validou o atalho `Qualificar Rodobens`, selecao de 2 leads e habilitacao de `Criar 2 tarefas`.
+
+Proximo passo tecnico:
+- Criar geracao de campanha a partir de selecao de oportunidades/leads e permitir acompanhar envio/resposta sem duplicar clientes.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

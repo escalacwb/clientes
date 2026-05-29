@@ -706,6 +706,10 @@ h3 {
   grid-template-columns: minmax(190px, 0.9fr) minmax(180px, 0.8fr) 140px minmax(170px, 0.8fr) minmax(420px, 1.1fr);
 }
 
+.rodobens-bulk-row {
+  grid-template-columns: 48px minmax(190px, 0.9fr) minmax(180px, 0.8fr) 140px minmax(170px, 0.8fr) minmax(420px, 1.1fr);
+}
+
 .assign {
   grid-template-columns: minmax(220px, 1.2fr) 150px 140px 220px;
 }

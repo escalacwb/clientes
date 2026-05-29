@@ -2002,7 +2002,15 @@ function RodobensInbox({
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const safePage = Math.min(page, totalPages)
   const [statusMessage, setStatusMessage] = useState('')
+  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([])
+  const [isCreatingBulkTasks, setIsCreatingBulkTasks] = useState(false)
   const statusTotals = new Map(funil.map((item) => [item.status, item]))
+  const selectableLeadIds = leads.map((cliente) => cliente.id)
+  const allLeadsSelected = selectableLeadIds.length > 0 && selectableLeadIds.every((id) => selectedLeadIds.includes(id))
+
+  useEffect(() => {
+    setSelectedLeadIds([])
+  }, [page, query, statusFilter])
 
   async function registerFirstContact(cliente: Cliente) {
     await onAddInteraction({
@@ -2030,6 +2038,33 @@ function RodobensInbox({
     const observacao = rodobensQualificacaoLabel(status)
     await onUpdateQualificacao(cliente, status, observacao)
     setStatusMessage(`${cliente.nome}: ${observacao}.`)
+  }
+
+  async function createBulkContactTasks() {
+    const selectedLeads = leads.filter((cliente) => selectedLeadIds.includes(cliente.id))
+    if (selectedLeads.length === 0) return
+
+    setIsCreatingBulkTasks(true)
+    setStatusMessage('')
+    try {
+      for (const cliente of selectedLeads) {
+        await onCreateTask({
+          clienteId: cliente.id,
+          vendedorId: cliente.vendedorId,
+          titulo: 'Primeiro contato Rodobens',
+          descricao: 'Abordar lead Rodobens, qualificar frota e registrar resultado do contato.',
+          dataVencimento: new Date().toISOString().slice(0, 10),
+          prioridade: 85,
+          origem: 'rodobens:primeiro_contato',
+        })
+      }
+      setSelectedLeadIds([])
+      setStatusMessage(`${selectedLeads.length} tarefas de primeiro contato criadas.`)
+    } catch (exception) {
+      setStatusMessage(exception instanceof Error ? exception.message : 'Nao foi possivel criar as tarefas em lote.')
+    } finally {
+      setIsCreatingBulkTasks(false)
+    }
   }
 
   return (
@@ -2078,6 +2113,26 @@ function RodobensInbox({
           )
         })}
       </div>
+      {leads.length > 0 && (
+        <div className="bulk-action-bar">
+          <button
+            className="button"
+            type="button"
+            onClick={() => setSelectedLeadIds(allLeadsSelected ? [] : selectableLeadIds)}
+          >
+            {allLeadsSelected ? 'Limpar selecao' : 'Selecionar pagina'}
+          </button>
+          <button
+            className="button primary"
+            type="button"
+            disabled={selectedLeadIds.length === 0 || isCreatingBulkTasks}
+            onClick={createBulkContactTasks}
+          >
+            {isCreatingBulkTasks ? 'Criando...' : `Criar ${selectedLeadIds.length || ''} tarefas`}
+          </button>
+          <span className="status-pill">{selectedLeadIds.length} selecionados</span>
+        </div>
+      )}
       {statusMessage && <div className="readiness ok">{statusMessage}</div>}
       {isLoading && <div className="empty-state compact">Carregando leads Rodobens...</div>}
       {!isLoading && leads.length === 0 && (
@@ -2087,7 +2142,8 @@ function RodobensInbox({
       )}
       {leads.length > 0 && (
         <div className="table">
-          <div className="table-head rodobens-row">
+          <div className="table-head rodobens-row rodobens-bulk-row">
+            <span>Sel.</span>
             <span>Cliente</span>
             <span>Origem</span>
             <span>Status</span>
@@ -2099,7 +2155,21 @@ function RodobensInbox({
             const waUrl = cliente.whatsapp ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(message)}` : undefined
 
             return (
-              <div className="table-row rodobens-row" key={cliente.id}>
+              <div className="table-row rodobens-row rodobens-bulk-row" key={cliente.id}>
+                <span>
+                  <input
+                    type="checkbox"
+                    checked={selectedLeadIds.includes(cliente.id)}
+                    onChange={(event) => {
+                      setSelectedLeadIds((current) =>
+                        event.target.checked
+                          ? [...new Set([...current, cliente.id])]
+                          : current.filter((id) => id !== cliente.id),
+                      )
+                    }}
+                    aria-label={`Selecionar ${cliente.nome}`}
+                  />
+                </span>
                 <span>
                   <strong>{cliente.nome}</strong>
                   <small>{cliente.cidade}/{cliente.uf} - {cliente.whatsapp ?? 'Sem WhatsApp'}</small>
