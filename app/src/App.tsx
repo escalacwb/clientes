@@ -56,6 +56,15 @@ import { assignClienteVendedor } from './repositories/clientesRepository'
 import { listClientesPage } from './repositories/clientesRepository'
 import { updateClienteComercial } from './repositories/clientesRepository'
 import { listConflitos, resolveConflito } from './repositories/conflitosRepository'
+import {
+  getDashboardResumo,
+  listRankingMedidas,
+  listRankingServicos,
+  listVendedoresResumo,
+  type DashboardResumo,
+  type RankingResumo,
+  type VendedorResumo,
+} from './repositories/dashboardRepository'
 import { listClienteServicosItens, listClienteVendasItens } from './repositories/historicoRepository'
 import { createInteracao } from './repositories/interacoesRepository'
 import { listInteracoes } from './repositories/interacoesRepository'
@@ -162,6 +171,10 @@ function App() {
   const [possiveisDuplicados, setPossiveisDuplicados] = useState<PossivelDuplicado[]>(isSupabaseConfigured ? [] : seedPossiveisDuplicados)
   const [mesclagens, setMesclagens] = useState<ClienteMesclagem[]>(isSupabaseConfigured ? [] : seedMesclagens)
   const [catalogo, setCatalogo] = useState<CatalogoItem[]>([])
+  const [dashboardResumo, setDashboardResumo] = useState<DashboardResumo | undefined>()
+  const [vendedoresResumo, setVendedoresResumo] = useState<VendedorResumo[]>([])
+  const [rankingMedidas, setRankingMedidas] = useState<RankingResumo[]>([])
+  const [rankingServicos, setRankingServicos] = useState<RankingResumo[]>([])
   const [isLoadingData, setIsLoadingData] = useState(isSupabaseConfigured)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [isLoadingClientes, setIsLoadingClientes] = useState(isSupabaseConfigured)
@@ -220,6 +233,10 @@ function App() {
           loadedPossiveisDuplicados,
           loadedMesclagens,
           loadedCatalogo,
+          loadedDashboardResumo,
+          loadedVendedoresResumo,
+          loadedRankingMedidas,
+          loadedRankingServicos,
         ] = await Promise.all([
           listInteracoes(),
           listOrcamentos(),
@@ -231,6 +248,10 @@ function App() {
           listPossiveisDuplicados(),
           listMesclagens(),
           listCatalogoItens(),
+          getDashboardResumo(),
+          listVendedoresResumo(),
+          listRankingMedidas(),
+          listRankingServicos(),
         ])
 
         if (!isMounted) return
@@ -244,6 +265,10 @@ function App() {
         setPossiveisDuplicados(loadedPossiveisDuplicados)
         setMesclagens(loadedMesclagens)
         setCatalogo(loadedCatalogo)
+        setDashboardResumo(loadedDashboardResumo)
+        setVendedoresResumo(loadedVendedoresResumo)
+        setRankingMedidas(loadedRankingMedidas)
+        setRankingServicos(loadedRankingServicos)
       } catch (exception) {
         if (!isMounted) return
         setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar os dados.')
@@ -527,6 +552,8 @@ function App() {
         {view === 'dashboard' && (
           <Dashboard
             scoredClientes={scoredClientes}
+            resumo={dashboardResumo}
+            vendedoresResumo={vendedoresResumo}
             interacoes={scopedInteracoes}
             orcamentos={scopedOrcamentos}
             importacoes={importacoes}
@@ -773,6 +800,10 @@ function App() {
         {session.role === 'admin' && view === 'relatorios' && (
           <Relatorios
             clientes={clientes}
+            resumo={dashboardResumo}
+            vendedoresResumo={vendedoresResumo}
+            rankingMedidas={rankingMedidas}
+            rankingServicos={rankingServicos}
             interacoes={interacoes}
             orcamentos={orcamentos}
             importacoes={importacoes}
@@ -903,6 +934,8 @@ function Login({ usuarios, onLogin }: { usuarios: Vendedor[]; onLogin: (session:
 
 function Dashboard({
   scoredClientes,
+  resumo,
+  vendedoresResumo,
   interacoes,
   orcamentos,
   importacoes,
@@ -910,26 +943,36 @@ function Dashboard({
   oportunidades,
 }: {
   scoredClientes: Array<Cliente & { score: number; motivo: string }>
+  resumo?: DashboardResumo
+  vendedoresResumo: VendedorResumo[]
   interacoes: Interacao[]
   orcamentos: Orcamento[]
   importacoes: Importacao[]
   usuarios: Vendedor[]
   oportunidades: Oportunidade[]
 }) {
-  const ativos = scoredClientes.filter((cliente) => daysSince(cliente.ultimaCompraEm) <= 90).length
-  const inativos90 = scoredClientes.filter((cliente) => daysSince(cliente.ultimaCompraEm) > 90).length
-  const vencidos = scoredClientes.filter((cliente) => cliente.proximaAcaoEm && daysSince(cliente.proximaAcaoEm) > 0).length
-  const semVendedor = scoredClientes.filter((cliente) => !cliente.vendedorId).length
+  const ativos = resumo?.clientesAtivos90 ?? scoredClientes.filter((cliente) => daysSince(cliente.ultimaCompraEm) <= 90).length
+  const inativos90 = resumo?.clientesInativos90 ?? scoredClientes.filter((cliente) => daysSince(cliente.ultimaCompraEm) > 90).length
+  const vencidos = resumo?.acoesVencidas ?? scoredClientes.filter((cliente) => cliente.proximaAcaoEm && daysSince(cliente.proximaAcaoEm) > 0).length
+  const semVendedor = resumo?.clientesSemVendedor ?? scoredClientes.filter((cliente) => !cliente.vendedorId).length
   const oportunidadesAtivas = oportunidades.filter((oportunidade) => !oportunidade.bloqueada).length
-  const chartData = usuarios
-    .filter((vendedor) => vendedor.role !== 'operacao')
-    .map((vendedor) => ({
-      nome: vendedor.nome.split(' ')[0],
-      vendas: scoredClientes
-        .filter((cliente) => cliente.vendedorId === vendedor.id)
-        .reduce((total, cliente) => total + cliente.totalComprado, 0),
-      contatos: interacoes.filter((interacao) => interacao.vendedorId === vendedor.id).length,
-    }))
+  const chartData = vendedoresResumo.length > 0
+    ? vendedoresResumo
+        .filter((vendedor) => vendedor.role !== 'operacao')
+        .map((vendedor) => ({
+          nome: vendedor.vendedorNome.split(' ')[0],
+          vendas: vendedor.totalCarteira,
+          contatos: vendedor.contatos,
+        }))
+    : usuarios
+        .filter((vendedor) => vendedor.role !== 'operacao')
+        .map((vendedor) => ({
+          nome: vendedor.nome.split(' ')[0],
+          vendas: scoredClientes
+            .filter((cliente) => cliente.vendedorId === vendedor.id)
+            .reduce((total, cliente) => total + cliente.totalComprado, 0),
+          contatos: interacoes.filter((interacao) => interacao.vendedorId === vendedor.id).length,
+        }))
 
   return (
     <section className="grid-layout">
@@ -3413,6 +3456,10 @@ function Orcamentos({
 
 function Relatorios({
   clientes,
+  resumo,
+  vendedoresResumo,
+  rankingMedidas,
+  rankingServicos,
   interacoes,
   orcamentos,
   importacoes,
@@ -3424,6 +3471,10 @@ function Relatorios({
   servicosItens,
 }: {
   clientes: Cliente[]
+  resumo?: DashboardResumo
+  vendedoresResumo: VendedorResumo[]
+  rankingMedidas: RankingResumo[]
+  rankingServicos: RankingResumo[]
   interacoes: Interacao[]
   orcamentos: Orcamento[]
   importacoes: Importacao[]
@@ -3434,46 +3485,72 @@ function Relatorios({
   vendasItens: VendaItem[]
   servicosItens: ServicoItem[]
 }) {
-  const orcamentosGanhos = orcamentos.filter((orcamento) => orcamento.status === 'ganho').length
-  const taxaConversao = orcamentos.length ? Math.round((orcamentosGanhos / orcamentos.length) * 100) : 0
-  const valorAberto = orcamentos
-    .filter((orcamento) => ['aberto', 'enviado', 'negociando'].includes(orcamento.status))
-    .reduce((total, orcamento) => total + orcamento.valorTotal, 0)
-  const clientesRisco = clientes.filter((cliente) => daysSince(cliente.ultimaCompraEm) > 180).length
+  const orcamentosGanhos = resumo?.orcamentosGanhos ?? orcamentos.filter((orcamento) => orcamento.status === 'ganho').length
+  const orcamentosTotal = resumo?.orcamentosTotal ?? orcamentos.length
+  const taxaConversao = orcamentosTotal ? Math.round((orcamentosGanhos / orcamentosTotal) * 100) : 0
+  const valorAberto = resumo?.pipelineAberto ?? orcamentos
+      .filter((orcamento) => ['aberto', 'enviado', 'negociando'].includes(orcamento.status))
+      .reduce((total, orcamento) => total + orcamento.valorTotal, 0)
+  const clientesRisco = resumo
+    ? resumo.clientesInativos90
+    : clientes.filter((cliente) => daysSince(cliente.ultimaCompraEm) > 180).length
   const conflitosPendentes = conflitos.filter((conflito) => !conflito.resolvido).length
-  const tarefasVencidas = tarefas.filter((tarefa) => tarefa.status === 'aberta' && daysSince(tarefa.dataVencimento) > 0).length
+  const tarefasVencidas = resumo?.tarefasVencidas ?? tarefas.filter((tarefa) => tarefa.status === 'aberta' && daysSince(tarefa.dataVencimento) > 0).length
   const oportunidadesBloqueadas = oportunidades.filter((oportunidade) => oportunidade.bloqueada).length
-  const medidas = rankBy(vendasItens, (venda) => venda.medida ?? venda.produtoNome)
-  const servicos = rankBy(servicosItens, (servico) => servico.servicoNome)
+  const medidas = rankingMedidas.length > 0
+    ? rankingMedidas.map((item) => ({ label: item.label, count: item.itens }))
+    : rankBy(vendasItens, (venda) => venda.medida ?? venda.produtoNome)
+  const servicos = rankingServicos.length > 0
+    ? rankingServicos.map((item) => ({ label: item.label, count: item.itens }))
+    : rankBy(servicosItens, (servico) => servico.servicoNome)
 
-  const vendedorRows = usuarios
-    .filter((vendedor) => vendedor.role !== 'operacao')
-    .map((vendedor) => {
-      const clientesVendedor = clientes.filter((cliente) => cliente.vendedorId === vendedor.id)
-      const contatos = interacoes.filter((interacao) => interacao.vendedorId === vendedor.id)
-      const clientesEmRisco = clientesVendedor.filter((cliente) => daysSince(cliente.ultimaCompraEm) > 180).length
-      const tarefasAtrasadas = tarefas.filter(
-        (tarefa) => tarefa.vendedorId === vendedor.id && tarefa.status === 'aberta' && daysSince(tarefa.dataVencimento) > 0,
-      ).length
-      const pipeline = orcamentos
-        .filter((orcamento) => orcamento.vendedorId === vendedor.id)
-        .reduce((total, orcamento) => total + orcamento.valorTotal, 0)
-      const coberturaContato = clientesVendedor.length
-        ? Math.round((clientesVendedor.filter((cliente) => daysSince(cliente.ultimoContatoEm) <= 60).length / clientesVendedor.length) * 100)
-        : 0
-      const saude = Math.max(0, Math.min(100, coberturaContato - tarefasAtrasadas * 8 - clientesEmRisco * 5))
+  const vendedorRows = vendedoresResumo.length > 0
+    ? vendedoresResumo
+        .filter((vendedor) => vendedor.role !== 'operacao')
+        .map((vendedor) => {
+          const coberturaContato = vendedor.clientes
+            ? Math.round(((vendedor.clientes - vendedor.clientesRisco) / vendedor.clientes) * 100)
+            : 0
+          const saude = Math.max(0, Math.min(100, coberturaContato - vendedor.tarefasVencidas * 8))
+          return {
+            vendedor: vendedor.vendedorNome,
+            clientes: vendedor.clientes,
+            contatos: vendedor.contatos,
+            clientesEmRisco: vendedor.clientesRisco,
+            tarefasAtrasadas: vendedor.tarefasVencidas,
+            pipeline: vendedor.pipeline,
+            saude,
+          }
+        })
+        .sort((a, b) => a.saude - b.saude)
+    : usuarios
+        .filter((vendedor) => vendedor.role !== 'operacao')
+        .map((vendedor) => {
+          const clientesVendedor = clientes.filter((cliente) => cliente.vendedorId === vendedor.id)
+          const contatos = interacoes.filter((interacao) => interacao.vendedorId === vendedor.id)
+          const clientesEmRisco = clientesVendedor.filter((cliente) => daysSince(cliente.ultimaCompraEm) > 180).length
+          const tarefasAtrasadas = tarefas.filter(
+            (tarefa) => tarefa.vendedorId === vendedor.id && tarefa.status === 'aberta' && daysSince(tarefa.dataVencimento) > 0,
+          ).length
+          const pipeline = orcamentos
+            .filter((orcamento) => orcamento.vendedorId === vendedor.id)
+            .reduce((total, orcamento) => total + orcamento.valorTotal, 0)
+          const coberturaContato = clientesVendedor.length
+            ? Math.round((clientesVendedor.filter((cliente) => daysSince(cliente.ultimoContatoEm) <= 60).length / clientesVendedor.length) * 100)
+            : 0
+          const saude = Math.max(0, Math.min(100, coberturaContato - tarefasAtrasadas * 8 - clientesEmRisco * 5))
 
-      return {
-        vendedor: vendedor.nome,
-        clientes: clientesVendedor.length,
-        contatos: contatos.length,
-        clientesEmRisco,
-        tarefasAtrasadas,
-        pipeline,
-        saude,
-      }
-    })
-    .sort((a, b) => a.saude - b.saude)
+          return {
+            vendedor: vendedor.nome,
+            clientes: clientesVendedor.length,
+            contatos: contatos.length,
+            clientesEmRisco,
+            tarefasAtrasadas,
+            pipeline,
+            saude,
+          }
+        })
+        .sort((a, b) => a.saude - b.saude)
   const planoGerencial = [
     tarefasVencidas > 0 ? `Revisar ${tarefasVencidas} tarefas vencidas antes de novas campanhas.` : '',
     conflitosPendentes > 0 ? `Resolver ${conflitosPendentes} conflitos de importacao pendentes.` : '',
@@ -3576,15 +3653,15 @@ function Relatorios({
         <div className="status-list">
           <div className="status-row">
             <span>Sem vendedor</span>
-            <strong>{clientes.filter((cliente) => !cliente.vendedorId).length}</strong>
+            <strong>{resumo?.clientesSemVendedor ?? clientes.filter((cliente) => !cliente.vendedorId).length}</strong>
           </div>
           <div className="status-row">
             <span>Sem WhatsApp</span>
-            <strong>{clientes.filter((cliente) => !cliente.whatsapp).length}</strong>
+            <strong>{resumo?.clientesSemWhatsapp ?? clientes.filter((cliente) => !cliente.whatsapp).length}</strong>
           </div>
           <div className="status-row">
             <span>Sem contato recente</span>
-            <strong>{clientes.filter((cliente) => daysSince(cliente.ultimoContatoEm) > 60).length}</strong>
+            <strong>{resumo?.clientesSemContato60 ?? clientes.filter((cliente) => daysSince(cliente.ultimoContatoEm) > 60).length}</strong>
           </div>
         </div>
       </section>

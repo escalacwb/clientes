@@ -374,6 +374,26 @@ Validacao local:
 Proximo passo tecnico:
 - Criar agregados/views para Dashboard, Carteira, Campanhas e Relatorios, porque essas telas ainda usam a pagina atual de clientes quando o app esta em modo paginado.
 
+### 2026-05-28 - Views agregadas para dashboard e relatorios
+
+Status: concluido.
+
+Entregue:
+- Criadas views `vw_dashboard_resumo`, `vw_vendedores_resumo`, `vw_ranking_medidas_vendidas` e `vw_ranking_servicos_recorrentes`.
+- Criado `dashboardRepository` para ler os agregados do Supabase.
+- Dashboard passou a usar indicadores globais do banco quando Supabase esta configurado.
+- Relatorios passaram a usar resumo global, produtividade por vendedor e rankings do banco.
+- Views foram escritas com subconsultas agregadas para evitar multiplicacao de valores por joins.
+
+Validacao local:
+- SQL aplicado com sucesso no Supabase.
+- Dashboard carregou 21.575 clientes totais, 50 ativos em 90 dias, 21.525 inativos em 90 dias e 20.921 sem vendedor.
+- Relatorios abriu com 3 linhas de produtividade comercial.
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Criar tela "Inbox Rodobens" e/ou corrigir classificacao de origem caso o arquivo atual ainda tenha todos os clientes como Capital Truck.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:
