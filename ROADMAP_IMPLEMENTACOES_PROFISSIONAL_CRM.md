@@ -636,6 +636,23 @@ Proximo passo tecnico:
 - Criar historico dedicado de aprovacoes/rejeicoes em tabela propria.
 - Vincular orcamento a campanha/tarefa de origem.
 
+### 2026-05-28 - Origem comercial do orcamento
+
+Status: concluido.
+
+Entregue:
+- Editor de orcamento recebe o contexto de origem: cliente, tarefa ou campanha.
+- Origem fica visivel no cabecalho da proposta.
+- Observacao/interacao do orcamento passa a registrar a origem comercial.
+- Quando o orcamento nasce de uma campanha salva, o envio da campanha e marcado como `virou_orcamento`.
+- Quando o orcamento nasce de uma sugestao de tarefa, a proposta guarda o contexto da tarefa que originou a acao.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Criar colunas/tabela para vinculo forte `orcamento_origem`, em vez de guardar apenas na observacao.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

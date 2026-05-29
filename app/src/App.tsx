@@ -157,6 +157,11 @@ const authUsuarios: Vendedor[] = [
   },
 ]
 
+type QuoteOriginContext =
+  | { kind: 'campanha'; sourceId?: string; label: string }
+  | { kind: 'tarefa'; sourceId?: string; label: string }
+  | { kind: 'cliente'; sourceId?: string; label: string }
+
 function App() {
   const clientePageSize = 50
   const [session, setSession] = useState<SessaoUsuario | null>(null)
@@ -195,6 +200,7 @@ function App() {
   const [rodobensQuery, setRodobensQuery] = useState('')
   const [isLoadingRodobens, setIsLoadingRodobens] = useState(false)
   const [quoteSourceView, setQuoteSourceView] = useState('clientes')
+  const [quoteOriginContext, setQuoteOriginContext] = useState<QuoteOriginContext>({ kind: 'cliente', label: 'Ficha do cliente' })
   const [isLoadingData, setIsLoadingData] = useState(isSupabaseConfigured)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [isLoadingClientes, setIsLoadingClientes] = useState(isSupabaseConfigured)
@@ -646,6 +652,7 @@ function App() {
             onOpenBudgetEditor={(cliente) => {
               setSelectedClientId(cliente.id)
               setQuoteSourceView('clientes')
+              setQuoteOriginContext({ kind: 'cliente', label: 'Lista de clientes' })
               setView('orcamento-editor')
             }}
             onUpdateClient={(clienteId, patch) => {
@@ -716,6 +723,7 @@ function App() {
           <OrcamentoEditor
             cliente={selectedClient}
             catalogo={catalogo}
+            originContext={quoteOriginContext}
             onBack={() => setView(quoteSourceView)}
             onCreateTask={async (task) => {
               const created = await createTarefa(task)
@@ -725,12 +733,23 @@ function App() {
             onCreate={async (orcamento) => {
               const created = await createOrcamento(orcamento, orcamento.itens)
               setOrcamentos((current) => [created, ...current])
+              if (quoteOriginContext.kind === 'campanha' && quoteOriginContext.sourceId) {
+                await upsertCampanhaEnvio({
+                  campanhaId: quoteOriginContext.sourceId,
+                  campanhaNome: quoteOriginContext.label,
+                  clienteId: created.clienteId,
+                  vendedorId: created.vendedorId,
+                  telefone: selectedClient.whatsapp,
+                  mensagemFinal: created.observacao || `Orcamento ${created.id.slice(0, 8)} criado a partir da campanha ${quoteOriginContext.label}.`,
+                  status: 'virou_orcamento',
+                })
+              }
               const interacao = await createInteracao({
                 clienteId: created.clienteId,
                 vendedorId: created.vendedorId ?? selectedClient.vendedorId ?? 'u-1',
                 canal: 'WhatsApp',
                 tipo: 'orcamento',
-                resumo: created.observacao || `Orcamento criado no valor de ${money(created.valorTotal)}.`,
+                resumo: `${created.observacao || `Orcamento criado no valor de ${money(created.valorTotal)}.`} Origem: ${quoteOriginContext.label}.`,
                 resultado: 'pediu orcamento',
               })
               setInteracoes((current) => [interacao, ...current])
@@ -813,11 +832,12 @@ function App() {
               setSelectedClientId(clienteId)
               setView('cliente360')
             }}
-            onOpenBudgetEditor={(clienteId) => {
+            onOpenBudgetEditor={(clienteId, originContext) => {
               const cliente = scopedClientes.find((item) => item.id === clienteId)
               if (cliente) {
                 setSelectedClientId(cliente.id)
                 setQuoteSourceView('tarefas')
+                setQuoteOriginContext(originContext ?? { kind: 'tarefa', label: 'Fila de tarefas' })
                 setView('orcamento-editor')
               }
             }}
@@ -895,12 +915,13 @@ function App() {
           <Campanhas
             usuarios={usuarios}
             currentUser={session}
-            onOpenBudgetEditor={(cliente) => {
+            onOpenBudgetEditor={(cliente, originContext) => {
               setClientes((current) =>
                 current.some((item) => item.id === cliente.id) ? current : [cliente, ...current],
               )
               setSelectedClientId(cliente.id)
               setQuoteSourceView('campanhas')
+              setQuoteOriginContext(originContext)
               setView('orcamento-editor')
             }}
             onAddInteraction={async (interacao) => {
@@ -1591,7 +1612,7 @@ function Tarefas({
   tarefas: Tarefa[]
   orcamentos: Orcamento[]
   onOpenClient: (clienteId: string) => void
-  onOpenBudgetEditor: (clienteId: string) => void
+  onOpenBudgetEditor: (clienteId: string, originContext?: QuoteOriginContext) => void
   onCreate: (task: TarefaInput) => Promise<Tarefa>
   onComplete: (id: string) => void
 }) {
@@ -1832,7 +1853,15 @@ function Tarefas({
                   Ficha
                 </button>
                 {suggestion.tipo.startsWith('orcamento') && (
-                  <button className="button" onClick={() => onOpenBudgetEditor(suggestion.clienteId)} type="button">
+                  <button
+                    className="button"
+                    onClick={() => onOpenBudgetEditor(suggestion.clienteId, {
+                      kind: 'tarefa',
+                      sourceId: suggestion.id,
+                      label: suggestion.titulo,
+                    })}
+                    type="button"
+                  >
                     Orcamento
                   </button>
                 )}
@@ -2606,12 +2635,14 @@ function FichaCliente({
 function OrcamentoEditor({
   cliente,
   catalogo,
+  originContext,
   onBack,
   onCreateTask,
   onCreate,
 }: {
   cliente: Cliente
   catalogo: CatalogoItem[]
+  originContext: QuoteOriginContext
   onBack: () => void
   onCreateTask: (task: TarefaInput) => Promise<Tarefa>
   onCreate: (orcamento: OrcamentoInput) => Promise<Orcamento>
@@ -2689,6 +2720,8 @@ function OrcamentoEditor({
     const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
     const needsApproval = approvalWarnings.length > 0
     const shouldSend = submitter?.value === 'send' && !needsApproval
+    const originNote = `Origem: ${originContext.label}${originContext.sourceId ? ` (${originContext.sourceId})` : ''}.`
+    const finalObservation = [observacao.trim(), originNote].filter(Boolean).join('\n\n')
     try {
       const created = await onCreate({
         clienteId: cliente.id,
@@ -2699,7 +2732,7 @@ function OrcamentoEditor({
         previsaoFechamento: previsaoFechamento || undefined,
         formaPagamento,
         aprovacaoMotivo: needsApproval ? approvalWarnings.join(' ') : undefined,
-        observacao,
+        observacao: finalObservation,
         itens: validItems,
       })
       await onCreateTask({
@@ -2731,7 +2764,7 @@ function OrcamentoEditor({
       <div className="panel-header">
         <div>
           <h2>Proposta para {cliente.nome}</h2>
-          <p>{cliente.cidade}/{cliente.uf} - {cliente.whatsapp ?? 'sem WhatsApp'} - {origemLabel(cliente.origemBase)}</p>
+          <p>{cliente.cidade}/{cliente.uf} - {cliente.whatsapp ?? 'sem WhatsApp'} - {origemLabel(cliente.origemBase)} - Origem: {originContext.label}</p>
         </div>
         <div className="toolbar-actions">
           <button className="button" type="button" onClick={onBack}>Voltar</button>
@@ -3937,7 +3970,7 @@ function Campanhas({
 }: {
   usuarios: Vendedor[]
   currentUser: SessaoUsuario
-  onOpenBudgetEditor: (cliente: Cliente) => void
+  onOpenBudgetEditor: (cliente: Cliente, originContext: QuoteOriginContext) => void
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
   onAddTask: (task: TarefaInput) => Promise<Tarefa>
 }) {
@@ -4352,7 +4385,15 @@ function Campanhas({
                 <button className="button" type="button" onClick={() => markStatus(cliente, 'virou_orcamento', finalMessage)}>
                   Virou orc.
                 </button>
-                <button className="button primary" type="button" onClick={() => onOpenBudgetEditor(cliente)}>
+                <button
+                  className="button primary"
+                  type="button"
+                  onClick={() => onOpenBudgetEditor(cliente, {
+                    kind: 'campanha',
+                    sourceId: activeCampanhaId || undefined,
+                    label: activeCampanhaId ? saveName || segmento.campanhaNome : segmento.campanhaNome,
+                  })}
+                >
                   Orcamento
                 </button>
                 <button className="button" type="button" onClick={() => markStatus(cliente, 'ganhou', finalMessage)}>

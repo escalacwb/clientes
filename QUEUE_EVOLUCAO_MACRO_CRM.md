@@ -66,9 +66,10 @@ Ja entregue:
 - Follow-up automatico especifico para proposta enviada.
 - Rejeicao de aprovacao com motivo padronizado.
 - Motivo de perda padronizado e obrigatorio.
+- Contexto de origem preservado ao criar orcamento por campanha/tarefa.
+- Campanha salva e marcada como `virou_orcamento` quando gera proposta.
 
 Proximas entregas:
-- Vincular orcamento criado a campanha/tarefa de origem.
 - Historico de versoes de proposta.
 
 Pronto quando:
