@@ -102,7 +102,7 @@ Aplicacao para a Capital:
 - Clientes ainda carregam uma base muito grande no primeiro load.
 - Orcamentos ainda nao possuem tela propria de proposta/CPQ.
 - Campanhas ainda sao uma reativacao fixa, nao um modulo de segmentacao.
-- Tarefas ainda nao tem automacoes suficientes nem calendario/kanban.
+- Tarefas ja tem automacao inicial de follow-up, mas ainda nao tem calendario/kanban nem motor configuravel de regras.
 - Relatorios ainda misturam muito indicador agregado e pouco funil acionavel.
 - Nao ha Inbox Rodobens/leads separado.
 - Nao ha aprovacao de desconto, margem, estoque, validade de tabela ou versao da proposta.
@@ -190,7 +190,7 @@ Prioridade: maxima.
 
 6. Automacoes do funil.
    - Enviado cria tarefa de follow-up.
-   - Vencido vira tarefa urgente.
+   - Vencido vira tarefa urgente. Primeira automacao entregue para orcamentos vencidos.
    - Perdido exige motivo.
    - Ganho marca oportunidade e pode gerar registro para venda futura.
 

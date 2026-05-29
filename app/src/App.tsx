@@ -120,6 +120,7 @@ import { getImportacaoQualidadeResumo } from './repositories/importacoesReposito
 import { importReferenceFiles } from './repositories/importacoesRepository'
 import { listImportacaoArquivos, type ImportacaoArquivoResumo, type ImportacaoQualidadeResumo } from './repositories/importacoesRepository'
 import { listImportacoes } from './repositories/importacoesRepository'
+import { runFollowupAutomations } from './repositories/importacoesRepository'
 import { createMesclagem, listMesclagens, listPossiveisDuplicados } from './repositories/mesclagensRepository'
 import { createOrcamento } from './repositories/orcamentosRepository'
 import { listOrcamentos } from './repositories/orcamentosRepository'
@@ -307,6 +308,7 @@ function App() {
   const [cockpitCampanhas, setCockpitCampanhas] = useState<CampanhaInboxItem[]>([])
   const [cockpitSlaVendedores, setCockpitSlaVendedores] = useState<TarefaSlaVendedorResumo[]>([])
   const [isLoadingCockpit, setIsLoadingCockpit] = useState(false)
+  const [cockpitRefreshKey, setCockpitRefreshKey] = useState(0)
   const [quoteSourceView, setQuoteSourceView] = useState('clientes')
   const [quoteOriginContext, setQuoteOriginContext] = useState<QuoteOriginContext>({ kind: 'cliente', label: 'Ficha do cliente' })
   const [campaignToOpenId, setCampaignToOpenId] = useState('')
@@ -553,7 +555,7 @@ function App() {
     return () => {
       isMounted = false
     }
-  }, [isCheckingSession, session, view])
+  }, [cockpitRefreshKey, isCheckingSession, session, view])
 
   useEffect(() => {
     let isMounted = true
@@ -1067,6 +1069,16 @@ function App() {
               setCockpitTarefas((current) => current.map((tarefa) => tarefa.id === id ? updated : tarefa).filter((tarefa) => tarefa.status === 'aberta'))
               setCockpitTarefasVencidas((current) => current.filter((tarefa) => tarefa.id !== id))
               setTarefas((current) => current.map((tarefa) => tarefa.id === id ? updated : tarefa))
+            }}
+            onRunFollowupAutomations={async () => {
+              const result = await runFollowupAutomations()
+              setCockpitRefreshKey((current) => current + 1)
+              setTarefasPage(1)
+              return {
+                total: result.tarefas_followup_total ?? 0,
+                orcamentos: result.orcamentos_vencidos_tarefas ?? 0,
+                campanhas: result.campanhas_resposta_tarefas ?? 0,
+              }
             }}
           />
         )}
@@ -1824,6 +1836,7 @@ function Cockpit({
   onOpenModule,
   onCompleteTask,
   onRescheduleTask,
+  onRunFollowupAutomations,
 }: {
   currentUser: SessaoUsuario
   usuarios: Vendedor[]
@@ -1840,6 +1853,7 @@ function Cockpit({
   onOpenModule: (target: 'tarefas' | 'orcamentos' | 'rodobens' | 'oportunidades' | 'campanhas') => void
   onCompleteTask: (id: string) => Promise<void>
   onRescheduleTask: (id: string, dataVencimento: string, motivo: string) => Promise<void>
+  onRunFollowupAutomations: () => Promise<{ total: number; orcamentos: number; campanhas: number }>
 }) {
   const [busyTaskId, setBusyTaskId] = useState('')
   const [rescheduleTarget, setRescheduleTarget] = useState<Tarefa | null>(null)
@@ -1847,6 +1861,8 @@ function Cockpit({
   const [rescheduleReason, setRescheduleReason] = useState('')
   const [rescheduleError, setRescheduleError] = useState('')
   const [slaAlertLimit, setSlaAlertLimit] = useState(3)
+  const [isRunningFollowups, setIsRunningFollowups] = useState(false)
+  const [followupAutomationMessage, setFollowupAutomationMessage] = useState('')
   const todayTasks = tarefas.filter((tarefa) => daysSince(tarefa.dataVencimento) >= 0)
   const highPriorityTasks = tarefas
     .filter((tarefa) => tarefa.prioridade >= 80 && !todayTasks.some((item) => item.id === tarefa.id))
@@ -1901,6 +1917,21 @@ function Cockpit({
       setRescheduleError(exception instanceof Error ? exception.message : 'Nao foi possivel reagendar a tarefa.')
     } finally {
       setBusyTaskId('')
+    }
+  }
+
+  async function runFollowups() {
+    setIsRunningFollowups(true)
+    setFollowupAutomationMessage('')
+    try {
+      const result = await onRunFollowupAutomations()
+      setFollowupAutomationMessage(
+        `${result.total} tarefas sincronizadas: ${result.orcamentos} orcamentos vencidos e ${result.campanhas} respostas de campanha.`,
+      )
+    } catch (exception) {
+      setFollowupAutomationMessage(exception instanceof Error ? exception.message : 'Nao foi possivel gerar follow-ups.')
+    } finally {
+      setIsRunningFollowups(false)
     }
   }
 
@@ -2067,16 +2098,23 @@ function Cockpit({
               <h2>Alertas de SLA</h2>
               <p>Vendedores acima do limite operacional configurado nesta visao.</p>
             </div>
-            <label className="mini-select">
-              <Gauge size={15} />
-              <select value={slaAlertLimit} onChange={(event) => setSlaAlertLimit(Number(event.target.value))}>
-                <option value={1}>Alertar com 1+</option>
-                <option value={3}>Alertar com 3+</option>
-                <option value={5}>Alertar com 5+</option>
-                <option value={10}>Alertar com 10+</option>
-              </select>
-            </label>
+            <div className="toolbar-actions">
+              <button className="button" type="button" disabled={isRunningFollowups} onClick={runFollowups}>
+                <RefreshCw size={15} />
+                {isRunningFollowups ? 'Gerando...' : 'Gerar follow-ups'}
+              </button>
+              <label className="mini-select">
+                <Gauge size={15} />
+                <select value={slaAlertLimit} onChange={(event) => setSlaAlertLimit(Number(event.target.value))}>
+                  <option value={1}>Alertar com 1+</option>
+                  <option value={3}>Alertar com 3+</option>
+                  <option value={5}>Alertar com 5+</option>
+                  <option value={10}>Alertar com 10+</option>
+                </select>
+              </label>
+            </div>
           </div>
+          {followupAutomationMessage && <div className="success-alert">{followupAutomationMessage}</div>}
           <div className="alert-grid">
             {slaAlerts.map((item) => (
               <article className="sla-alert-card" key={item.id}>
@@ -5543,7 +5581,7 @@ function Importacoes({
         ? ` Catalogo: ${result.catalogo.itens} itens, ${result.catalogo.precosNovos ?? 0} precos novos, ${result.catalogo.precosAlterados ?? 0} alterados, ${result.catalogo.precosInalterados ?? 0} inalterados.`
         : ''
       const postProcessResumo = result.postProcess
-        ? ` Pos-processamento: ${result.postProcess.clientes_atualizados ?? 0} clientes recalculados e ${result.postProcess.oportunidades_geradas ?? 0} oportunidades na fila.`
+        ? ` Pos-processamento: ${result.postProcess.clientes_atualizados ?? 0} clientes recalculados, ${result.postProcess.oportunidades_geradas ?? 0} oportunidades e ${result.postProcess.tarefas_followup?.tarefas_followup_total ?? 0} follow-ups sincronizados.`
         : ''
       setReferenceImportResult(
         `Importacao concluida: ${result.clientes} clientes, ${result.veiculos} veiculos, ${result.ordens} ordens, ${result.vendas.created + result.servicos.created} itens.${catalogoResumo}${postProcessResumo}`,
@@ -5568,7 +5606,7 @@ function Importacoes({
     try {
       const result = await finalizeImportacaoDiaria()
       setReferenceImportResult(
-        `Fechamento reprocessado: ${result.clientes_atualizados ?? 0} clientes recalculados e ${result.oportunidades_geradas ?? 0} oportunidades na fila.`,
+        `Fechamento reprocessado: ${result.clientes_atualizados ?? 0} clientes recalculados, ${result.oportunidades_geradas ?? 0} oportunidades e ${result.tarefas_followup?.tarefas_followup_total ?? 0} follow-ups sincronizados.`,
       )
       setQualidadeResumo(await getImportacaoQualidadeResumo())
     } catch (exception) {

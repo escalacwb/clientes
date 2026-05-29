@@ -42,9 +42,16 @@ export type ReferenceImportResult = {
   postProcess?: {
     clientes_atualizados?: number
     oportunidades_geradas?: number
+    tarefas_followup?: FollowupAutomationResult
   }
   movimentosComVeiculo: number
   movimentosSemVeiculo: number
+}
+
+export type FollowupAutomationResult = {
+  orcamentos_vencidos_tarefas?: number
+  campanhas_resposta_tarefas?: number
+  tarefas_followup_total?: number
 }
 
 export type ImportacaoArquivoResumo = {
@@ -148,6 +155,15 @@ export async function finalizeImportacaoDiaria(): Promise<NonNullable<ReferenceI
   const { data, error } = await supabase.rpc('finalizar_importacao_diaria')
   if (error) throw error
   return data as NonNullable<ReferenceImportResult['postProcess']>
+}
+
+export async function runFollowupAutomations(): Promise<FollowupAutomationResult> {
+  const supabase = await getSupabase()
+  if (!supabase) throw new Error('Supabase nao configurado para automacoes de follow-up.')
+
+  const { data, error } = await supabase.rpc('criar_tarefas_followup_automaticas')
+  if (error) throw error
+  return data as FollowupAutomationResult
 }
 
 export async function listImportacaoArquivos(): Promise<ImportacaoArquivoResumo[]> {

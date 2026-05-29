@@ -62,7 +62,7 @@ Dependencias:
 
 ### M02 - SLA e fila de follow-up comercial
 
-Status: Parcial.
+Status: Concluido - primeira versao.
 
 Objetivo:
 Transformar tarefas e campanhas em rotina com prazo, atraso e escalonamento.
@@ -85,9 +85,12 @@ Ja entregue:
 - Criada view `vw_tarefas_sla_vendedor` para SLA global por vendedor, com atrasadas, vencem hoje, alta prioridade e origem critica.
 - Cockpit admin passou a usar a visao global de SLA, nao apenas as tarefas carregadas na pagina.
 - Cockpit admin ganhou painel `Alertas de SLA` com limite ajustavel de atraso/prioridade.
+- Criada funcao Supabase `criar_tarefas_followup_automaticas` para abrir/atualizar tarefas deduplicadas de orcamentos vencidos e respostas de campanha.
+- Pos-processamento da importacao diaria agora recalcula clientes, atualiza oportunidades e sincroniza follow-ups comerciais.
+- Cockpit admin ganhou acao `Gerar follow-ups` para rodar a automacao sob demanda e recarregar a fila.
 
 Proximas entregas:
-- Automacoes adicionais para criar tarefas quando orcamento vencer ou campanha responder.
+- Evoluir para motor configuravel de automacoes no M11, incluindo log de regras executadas.
 
 Pronto quando:
 - O gerente sabe quem esta atrasado e em qual etapa.
