@@ -51,7 +51,13 @@ import { buildOportunidades } from './lib/oportunidades'
 import { carteiraFiltros, filterClientes } from './lib/filtros'
 import { getCurrentSession, signInWithPassword, signOut } from './repositories/authRepository'
 import { listClienteAlteracoes } from './repositories/auditoriaRepository'
-import { upsertCampanhaEnvio } from './repositories/campanhasRepository'
+import {
+  campanhaSegmentos,
+  listCampanhaSegmento,
+  upsertCampanhaEnvio,
+  type CampanhaPublicoFiltros,
+  type CampanhaSegmentoId,
+} from './repositories/campanhasRepository'
 import { listCatalogoItens } from './repositories/catalogoRepository'
 import { assignClienteVendedor } from './repositories/clientesRepository'
 import { listClientesPage } from './repositories/clientesRepository'
@@ -864,7 +870,7 @@ function App() {
         )}
         {canUseScopedClientViews && view === 'campanhas' && (
           <Campanhas
-            clientes={scoredClientes}
+            usuarios={usuarios}
             onAddInteraction={async (interacao) => {
               const created = await createInteracao(interacao)
               setInteracoes((current) => [created, ...current])
@@ -3648,23 +3654,31 @@ function Mesclagem({
 }
 
 function Campanhas({
-  clientes,
+  usuarios,
   onAddInteraction,
   onAddTask,
 }: {
-  clientes: Array<Cliente & { score: number; motivo: string }>
+  usuarios: Vendedor[]
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
   onAddTask: (task: TarefaInput) => Promise<Tarefa>
 }) {
-  const [showSuggestion, setShowSuggestion] = useState(false)
+  const pageSize = 50
+  const [segmentoId, setSegmentoId] = useState<CampanhaSegmentoId>('inativos-90')
+  const [page, setPage] = useState(1)
+  const [query, setQuery] = useState('')
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [total, setTotal] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
+  const [publicoFiltros, setPublicoFiltros] = useState<CampanhaPublicoFiltros>({})
   const [statuses, setStatuses] = useState<Record<string, CampanhaEnvioStatus>>({})
   const [statusFilter, setStatusFilter] = useState<CampanhaEnvioStatus | 'todos'>('todos')
   const [campaignError, setCampaignError] = useState('')
-  const sugestaoClientes = clientes.filter((cliente) => cliente.whatsapp && daysSince(cliente.ultimaCompraEm) > 90)
-  const campanhaClientes = showSuggestion ? sugestaoClientes : []
+  const segmento = campanhaSegmentos.find((item) => item.id === segmentoId) ?? campanhaSegmentos[0]
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const campanhaClientes = clientes
   const nextClient = campanhaClientes
     .filter((cliente) => (statuses[cliente.id] ?? 'pendente') === 'pendente')
-    .sort((a, b) => b.score - a.score)[0]
+    .sort((a, b) => (b.totalComprado + b.totalServicos) - (a.totalComprado + a.totalServicos))[0]
   const campaignCounts = campanhaClientes.reduce<Record<CampanhaEnvioStatus, number>>(
     (acc, cliente) => {
       const status = statuses[cliente.id] ?? 'pendente'
@@ -3674,12 +3688,55 @@ function Campanhas({
     { pendente: 0, enviado: 0, respondeu: 0, nao_respondeu: 0, virou_orcamento: 0 },
   )
   const filteredClientes = campanhaClientes.filter((cliente) => statusFilter === 'todos' || (statuses[cliente.id] ?? 'pendente') === statusFilter)
-  const campanhaId = 'campanha-inativos-90'
-  const mensagem = 'Bom dia, {primeiro_nome}. Aqui e {nome_vendedor}, da Capital Truck Center. Vi que faz um tempo desde sua ultima compra e estou passando para ver se precisa cotar pneus ou algum servico.'
+
+  useEffect(() => {
+    let cancelled = false
+    setIsLoading(true)
+    setCampaignError('')
+
+    listCampanhaSegmento({ segmentoId, page, pageSize, query, filtros: publicoFiltros })
+      .then((result) => {
+        if (cancelled) return
+        setClientes(result.clientes)
+        setTotal(result.total)
+        setStatuses(result.statuses)
+      })
+      .catch((exception) => {
+        if (cancelled) return
+        setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar o segmento de campanha.')
+        setClientes([])
+        setTotal(0)
+        setStatuses({})
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [segmentoId, page, query, publicoFiltros])
+
+  function changeSegment(nextSegmentoId: CampanhaSegmentoId) {
+    setSegmentoId(nextSegmentoId)
+    setPage(1)
+    setStatusFilter('todos')
+  }
+
+  function changeQuery(nextQuery: string) {
+    setQuery(nextQuery)
+    setPage(1)
+  }
+
+  function updatePublicoFiltro<K extends keyof CampanhaPublicoFiltros>(key: K, value: CampanhaPublicoFiltros[K]) {
+    setPublicoFiltros((current) => ({ ...current, [key]: value || undefined }))
+    setPage(1)
+    setStatusFilter('todos')
+  }
 
   function messageFor(cliente: Cliente) {
     const primeiroNome = (cliente.responsavel || cliente.nome).split(' ')[0]
-    return mensagem
+    return segmento.template
       .replace('{primeiro_nome}', primeiroNome)
       .replace('{nome_vendedor}', cliente.vendedorNome || 'Capital Truck Center')
   }
@@ -3689,8 +3746,8 @@ function Campanhas({
 
     try {
       await upsertCampanhaEnvio({
-        campanhaId,
-        campanhaNome: 'Clientes sem compra ha 90 dias',
+        campanhaId: segmento.campanhaId,
+        campanhaNome: segmento.campanhaNome,
         clienteId: cliente.id,
         vendedorId: cliente.vendedorId,
         telefone: cliente.whatsapp,
@@ -3727,45 +3784,97 @@ function Campanhas({
       <div className="panel-header">
         <div>
           <h2>Campanhas WhatsApp</h2>
-          <p>{showSuggestion ? `${campanhaClientes.length} clientes na previa de reativacao.` : 'Nenhuma campanha ativa cadastrada.'}</p>
+          <p>{total} clientes no segmento. Exibindo ate {pageSize} por pagina para nao carregar a base inteira.</p>
         </div>
         <div className="toolbar-actions">
-          {showSuggestion && (
-            <label className="mini-select">
-              <Filter size={15} />
-              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as CampanhaEnvioStatus | 'todos')}>
-                <option value="todos">Todos os status</option>
-                <option value="pendente">Pendentes</option>
-                <option value="enviado">Enviados</option>
-                <option value="respondeu">Responderam</option>
-                <option value="virou_orcamento">Virou orcamento</option>
-                <option value="nao_respondeu">Nao respondeu</option>
-              </select>
-            </label>
-          )}
+          <label className="mini-select">
+            <Filter size={15} />
+            <select value={segmentoId} onChange={(event) => changeSegment(event.target.value as CampanhaSegmentoId)}>
+              {campanhaSegmentos.map((item) => (
+                <option value={item.id} key={item.id}>{item.nome}</option>
+              ))}
+            </select>
+          </label>
+          <label className="mini-select">
+            <Search size={15} />
+            <input
+              value={query}
+              onChange={(event) => changeQuery(event.target.value)}
+              placeholder="Buscar cliente"
+            />
+          </label>
+          <label className="mini-select">
+            <Filter size={15} />
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as CampanhaEnvioStatus | 'todos')}>
+              <option value="todos">Todos os status</option>
+              <option value="pendente">Pendentes</option>
+              <option value="enviado">Enviados</option>
+              <option value="respondeu">Responderam</option>
+              <option value="virou_orcamento">Virou orcamento</option>
+              <option value="nao_respondeu">Nao respondeu</option>
+            </select>
+          </label>
           <Send size={18} />
         </div>
       </div>
-      {!showSuggestion && (
-        <div className="empty-state">
-          Nenhuma campanha foi criada ainda.
-          <button className="button primary" type="button" onClick={() => setShowSuggestion(true)}>
-            Montar previa de reativacao
-          </button>
-        </div>
-      )}
-      {showSuggestion && (
-        <>
       <div className="message-template">
-        {mensagem}
+        <strong>{segmento.nome}</strong>
+        <span>{segmento.descricao}</span>
+      </div>
+      <div className="campaign-filter-grid">
+        <label>
+          Cidade
+          <input
+            value={publicoFiltros.cidade ?? ''}
+            onChange={(event) => updatePublicoFiltro('cidade', event.target.value)}
+            placeholder="Ex.: Curitiba"
+          />
+        </label>
+        <label>
+          UF / regiao
+          <input
+            value={publicoFiltros.uf ?? ''}
+            onChange={(event) => updatePublicoFiltro('uf', event.target.value.toUpperCase().slice(0, 2))}
+            placeholder="PR"
+          />
+        </label>
+        <label>
+          Vendedor
+          <select
+            value={publicoFiltros.vendedorId ?? ''}
+            onChange={(event) => updatePublicoFiltro('vendedorId', event.target.value)}
+          >
+            <option value="">Todos</option>
+            {usuarios.map((usuario) => (
+              <option value={usuario.id} key={usuario.id}>{usuario.nome}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Produto ou servico comprado
+          <input
+            value={publicoFiltros.produtoTerm ?? ''}
+            onChange={(event) => updatePublicoFiltro('produtoTerm', event.target.value)}
+            placeholder="Ex.: 295/80, Michelin, alinhamento"
+          />
+        </label>
+      </div>
+      <div className="message-template">
+        {segmento.template}
       </div>
       {nextClient && (
         <div className="next-campaign-target">
           <span>
             <strong>Proximo contato sugerido: {nextClient.nome}</strong>
-            <small>{nextClient.motivo}</small>
+            <small>{nextClient.cidade || 'Cidade nao informada'} · ultima compra {dateLabel(nextClient.ultimaCompraEm)}</small>
           </span>
-          <a className="button primary" href={`https://wa.me/${nextClient.whatsapp}?text=${encodeURIComponent(messageFor(nextClient))}`} target="_blank" rel="noreferrer">
+          <a
+            className="button primary"
+            href={nextClient.whatsapp ? `https://wa.me/${nextClient.whatsapp}?text=${encodeURIComponent(messageFor(nextClient))}` : undefined}
+            target="_blank"
+            rel="noreferrer"
+            aria-disabled={!nextClient.whatsapp}
+          >
             <MessageCircle size={16} /> Abrir WhatsApp
           </a>
         </div>
@@ -3777,6 +3886,8 @@ function Campanhas({
         <Info label="Orcamentos" value={campaignCounts.virou_orcamento.toString()} />
       </div>
       {campaignError && <div className="alert">{campaignError}</div>}
+      {isLoading && <div className="empty-state">Carregando segmento de campanha...</div>}
+      {!isLoading && (
       <div className="table">
         <div className="table-head campaign">
           <span>Cliente</span>
@@ -3823,8 +3934,16 @@ function Campanhas({
         })}
         {filteredClientes.length === 0 && <div className="empty-state">Nenhum cliente neste status de campanha.</div>}
       </div>
-        </>
       )}
+      <div className="pagination-bar">
+        <button className="button" disabled={page <= 1 || isLoading} onClick={() => setPage((current) => Math.max(1, current - 1))} type="button">
+          Anterior
+        </button>
+        <span>Pagina {page} de {totalPages}</span>
+        <button className="button" disabled={page >= totalPages || isLoading} onClick={() => setPage((current) => current + 1)} type="button">
+          Proxima
+        </button>
+      </div>
     </section>
   )
 }

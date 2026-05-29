@@ -1,5 +1,25 @@
 import { getSupabase } from '../lib/supabase'
-import type { CampanhaEnvio, CampanhaEnvioStatus } from '../types'
+import { listClientesPage } from './clientesRepository'
+import type { CampanhaEnvio, CampanhaEnvioStatus, CarteiraFiltro, Cliente } from '../types'
+
+export type CampanhaSegmentoId = 'inativos-90' | 'rodobens-pendentes' | 'sem-contato-60' | 'sem-whatsapp'
+
+export type CampanhaSegmento = {
+  id: CampanhaSegmentoId
+  nome: string
+  descricao: string
+  campanhaNome: string
+  campanhaId: string
+  filtro?: CarteiraFiltro
+  template: string
+}
+
+export type CampanhaPublicoFiltros = {
+  cidade?: string
+  uf?: string
+  vendedorId?: string
+  produtoTerm?: string
+}
 
 type CampanhaEnvioRow = {
   id: string
@@ -14,6 +34,151 @@ type CampanhaEnvioRow = {
   resposta_cliente: string | null
   virou_orcamento: boolean
   virou_venda: boolean
+}
+
+export const campanhaSegmentos: CampanhaSegmento[] = [
+  {
+    id: 'inativos-90',
+    nome: 'Reativacao 90 dias',
+    descricao: 'Clientes sem compra recente para cotacao ativa de pneus e servicos.',
+    campanhaNome: 'Clientes sem compra ha 90 dias',
+    campanhaId: 'campanha-inativos-90',
+    filtro: 'sem-compra-90',
+    template:
+      'Bom dia, {primeiro_nome}. Aqui e {nome_vendedor}, da Capital Truck Center. Vi que faz um tempo desde sua ultima compra e estou passando para ver se precisa cotar pneus ou algum servico.',
+  },
+  {
+    id: 'rodobens-pendentes',
+    nome: 'Primeiro contato Rodobens',
+    descricao: 'Leads vindos da Rodobens para qualificacao antes de entrar na carteira Capital.',
+    campanhaNome: 'Rodobens - primeiro contato',
+    campanhaId: 'campanha-rodobens-primeiro-contato',
+    template:
+      'Bom dia, {primeiro_nome}. Aqui e {nome_vendedor}, da Capital Truck Center. Estou entrando em contato para entender sua frota e ver como podemos ajudar com pneus e servicos.',
+  },
+  {
+    id: 'sem-contato-60',
+    nome: 'Sem contato 60 dias',
+    descricao: 'Clientes sem interacao recente para recuperar relacionamento comercial.',
+    campanhaNome: 'Clientes sem contato ha 60 dias',
+    campanhaId: 'campanha-sem-contato-60',
+    filtro: 'sem-contato-60',
+    template:
+      'Bom dia, {primeiro_nome}. Aqui e {nome_vendedor}, da Capital Truck Center. Faz um tempo que nao falamos e queria saber se precisa de algum apoio com pneus ou servicos.',
+  },
+  {
+    id: 'sem-whatsapp',
+    nome: 'Higiene de cadastro',
+    descricao: 'Clientes sem WhatsApp cadastrado para correcao antes de novas campanhas.',
+    campanhaNome: 'Clientes sem WhatsApp',
+    campanhaId: 'campanha-sem-whatsapp',
+    filtro: 'sem-whatsapp',
+    template:
+      'Atualizar cadastro de {primeiro_nome}: cliente sem WhatsApp principal no CRM.',
+  },
+]
+
+export async function listCampanhaSegmento(input: {
+  segmentoId: CampanhaSegmentoId
+  page: number
+  pageSize: number
+  query?: string
+  filtros?: CampanhaPublicoFiltros
+}): Promise<{ clientes: Cliente[]; total: number; statuses: Record<string, CampanhaEnvioStatus> }> {
+  const segmento = campanhaSegmentos.find((item) => item.id === input.segmentoId) ?? campanhaSegmentos[0]
+  const clienteIds = input.filtros?.produtoTerm?.trim()
+    ? await findClientesByProdutoOuServico(input.filtros.produtoTerm)
+    : undefined
+  const result =
+    segmento.id === 'rodobens-pendentes'
+      ? await listClientesPage({
+          page: input.page,
+          pageSize: input.pageSize,
+          query: input.query,
+          origemBase: 'rodobens',
+          cidade: input.filtros?.cidade,
+          uf: input.filtros?.uf,
+          vendedorId: input.filtros?.vendedorId,
+          clienteIds,
+        })
+      : await listClientesPage({
+          page: input.page,
+          pageSize: input.pageSize,
+          query: input.query,
+          filtro: segmento.filtro,
+          cidade: input.filtros?.cidade,
+          uf: input.filtros?.uf,
+          vendedorId: input.filtros?.vendedorId,
+          clienteIds,
+        })
+
+  return {
+    ...result,
+    statuses: await listCampanhaStatuses(segmento.campanhaNome, result.clientes.map((cliente) => cliente.id)),
+  }
+}
+
+async function findClientesByProdutoOuServico(term: string): Promise<string[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+  const terms = term
+    .split(/[;,]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 6)
+
+  const clienteIds = new Set<string>()
+  for (const item of terms) {
+    const pattern = `%${item}%`
+    const [vendas, servicos] = await Promise.all([
+      supabase
+        .from('vendas_itens')
+        .select('cliente_id')
+        .or(`produto_nome.ilike.${pattern},produto_codigo.ilike.${pattern},marca.ilike.${pattern},modelo.ilike.${pattern},medida.ilike.${pattern}`)
+        .limit(5000),
+      supabase
+        .from('servicos_itens')
+        .select('cliente_id')
+        .or(`servico_nome.ilike.${pattern},servico_codigo.ilike.${pattern},observacao.ilike.${pattern},placa.ilike.${pattern}`)
+        .limit(5000),
+    ])
+
+    if (vendas.error) throw vendas.error
+    if (servicos.error) throw servicos.error
+
+    for (const row of vendas.data ?? []) clienteIds.add(row.cliente_id as string)
+    for (const row of servicos.data ?? []) clienteIds.add(row.cliente_id as string)
+  }
+
+  return Array.from(clienteIds)
+}
+
+export async function listCampanhaStatuses(campanhaNome: string, clienteIds: string[]): Promise<Record<string, CampanhaEnvioStatus>> {
+  if (clienteIds.length === 0) return {}
+  const supabase = await getSupabase()
+  if (!supabase) return {}
+
+  const { data: campanha, error: campanhaError } = await supabase
+    .from('campanhas')
+    .select('id')
+    .eq('nome', campanhaNome)
+    .maybeSingle()
+
+  if (campanhaError) throw campanhaError
+  if (!campanha?.id) return {}
+
+  const { data, error } = await supabase
+    .from('campanha_envios')
+    .select('cliente_id,status')
+    .eq('campanha_id', campanha.id)
+    .in('cliente_id', clienteIds)
+
+  if (error) throw error
+
+  return (data ?? []).reduce<Record<string, CampanhaEnvioStatus>>((acc, row) => {
+    acc[row.cliente_id as string] = row.status as CampanhaEnvioStatus
+    return acc
+  }, {})
 }
 
 export async function upsertCampanhaEnvio(input: {

@@ -34,6 +34,8 @@ type ClienteRow = {
 }
 
 interface ClienteQueryBuilder {
+  eq: (column: string, value: unknown) => this
+  ilike: (column: string, pattern: string) => this
   not: (column: string, operator: string, value: unknown) => this
   lte: (column: string, value: unknown) => this
   or: (filters: string) => this
@@ -65,6 +67,9 @@ export async function listClientesPage(input: {
   origemBase?: Cliente['origemBase'] | 'todos'
   filtro?: CarteiraFiltro
   vendedorId?: string
+  cidade?: string
+  uf?: string
+  clienteIds?: string[]
 }): Promise<{ clientes: Cliente[]; total: number }> {
   const supabase = await getSupabase()
   if (!supabase) {
@@ -85,6 +90,9 @@ export async function listClientesPage(input: {
   const origemBase = input.origemBase ?? origemBaseFromFiltro(input.filtro)
   if (origemBase && origemBase !== 'todos') query = query.eq('origem_base', origemBase)
   if (input.vendedorId) query = query.eq('vendedor_id', input.vendedorId)
+  if (input.cidade?.trim()) query = query.ilike('cidade', `%${input.cidade.trim()}%`)
+  if (input.uf?.trim()) query = query.ilike('uf', input.uf.trim())
+  if (input.clienteIds) query = input.clienteIds.length > 0 ? query.in('id', input.clienteIds) : query.in('id', ['00000000-0000-0000-0000-000000000000'])
   query = applyClienteFiltro(query, input.filtro)
   if (input.query?.trim()) {
     const term = `%${input.query.trim()}%`
@@ -245,13 +253,26 @@ function applyClienteFiltro<T extends ClienteQueryBuilder>(query: T, filtro?: Ca
 
 function filterMockClientes(
   clientes: Cliente[],
-  input: { query?: string; origemBase?: Cliente['origemBase'] | 'todos'; filtro?: CarteiraFiltro; vendedorId?: string },
+  input: {
+    query?: string
+    origemBase?: Cliente['origemBase'] | 'todos'
+    filtro?: CarteiraFiltro
+    vendedorId?: string
+    cidade?: string
+    uf?: string
+    clienteIds?: string[]
+  },
 ) {
   const term = input.query?.trim().toLowerCase()
+  const cidade = input.cidade?.trim().toLowerCase()
+  const uf = input.uf?.trim().toLowerCase()
   return clientes.filter((cliente) => {
     const origemBase = input.origemBase ?? origemBaseFromFiltro(input.filtro)
     if (origemBase && origemBase !== 'todos' && cliente.origemBase !== origemBase) return false
     if (input.vendedorId && cliente.vendedorId !== input.vendedorId) return false
+    if (cidade && !cliente.cidade.toLowerCase().includes(cidade)) return false
+    if (uf && cliente.uf.toLowerCase() !== uf) return false
+    if (input.clienteIds && !input.clienteIds.includes(cliente.id)) return false
     if (!term) return true
     return `${cliente.nome} ${cliente.cidade} ${cliente.cpfCnpj ?? ''} ${cliente.codigoErp}`.toLowerCase().includes(term)
   })

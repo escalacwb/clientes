@@ -494,6 +494,25 @@ Validacao:
 Proximo passo tecnico:
 - Criar historico dedicado de aprovacoes e permitir rejeitar solicitacao com motivo.
 
+### 2026-05-28 - Campanhas com construtor de publico
+
+Status: concluido.
+
+Entregue:
+- Campanhas deixaram de depender da amostra de clientes carregada na tela.
+- Segmentos base: reativacao 90 dias, primeiro contato Rodobens, sem contato 60 dias e higiene de cadastro sem WhatsApp.
+- Filtros combinaveis por cidade, UF/regiao, vendedor e produto/servico comprado.
+- Busca de compradores em vendas de produtos e servicos por codigo, nome, marca, modelo, medida, servico, observacao ou placa.
+- Paginacao de 50 contatos por vez, mantendo status de envio por campanha/cliente.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Salvar segmentos personalizados com nome, filtros, template e responsavel.
+- Permitir selecao assistida de varios produtos/servicos pelo catalogo, em vez de campo livre.
+- Criar relatorio de campanha com alcance, respostas, orcamentos, vendas e receita atribuida.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:
