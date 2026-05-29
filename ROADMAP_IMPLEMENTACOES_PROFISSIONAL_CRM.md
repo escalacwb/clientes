@@ -1399,6 +1399,24 @@ Validacao:
 Proximo passo tecnico:
 - Adicionar SLA visual por origem e alerta gerencial de tarefas criticas atrasadas por vendedor.
 
+### 2026-05-29 - SLA visual por origem
+
+Status: concluido.
+
+Entregue:
+- Criado calculo visual de SLA por origem da tarefa: campanha, orcamento, Rodobens, oportunidade, interacao ou generico.
+- Cockpit passou a exibir selo de SLA em tarefas criticas: no prazo, no limite, vence hoje ou atrasada.
+- Tela de Tarefas passou a exibir o mesmo selo junto ao vencimento.
+- Carga por vendedor no Cockpit ganhou coluna `SLA critico`.
+
+Validacao:
+- Build passou com `npm run build`.
+- Playwright local validou selo `.sla-pill.danger` no Cockpit e em Tarefas.
+- Registro temporario usado para teste foi removido do Supabase.
+
+Proximo passo tecnico:
+- Criar alertas gerenciais por vendedor com limite configuravel e/ou view agregada de SLA por responsavel.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

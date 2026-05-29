@@ -563,6 +563,37 @@ h3 {
   line-height: 1.35;
 }
 
+.sla-pill {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 26px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sla-pill.ok {
+  background: #dff3ec;
+  color: #0f766e;
+}
+
+.sla-pill.warn {
+  background: #fff3d6;
+  color: #9a5b00;
+}
+
+.sla-pill.danger {
+  background: #ffe8e6;
+  color: #b42318;
+}
+
+.sla-pill.neutral {
+  background: #eef2f0;
+  color: #64736f;
+}
+
 .floating-panel {
   position: fixed;
   right: 24px;

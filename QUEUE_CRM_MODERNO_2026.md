@@ -80,9 +80,10 @@ Ja entregue:
 - Cockpit permite reagendar tarefas criticas com motivo obrigatorio.
 - Tela de Tarefas permite reagendar tarefas abertas inline.
 - Ficha/lista de tarefas exibe o motivo do reagendamento quando existir.
+- SLA visual por origem aparece no Cockpit e na tela de Tarefas: no prazo, no limite, vence hoje ou atrasada.
+- Visao admin do Cockpit mostra tambem tarefas com SLA critico por vendedor.
 
 Proximas entregas:
-- SLA visual por origem com prazo esperado e atraso em horas/dias.
 - Alertas gerenciais por vendedor com limite configuravel.
 - Automacoes adicionais para criar tarefas quando orcamento vencer ou campanha responder.
 

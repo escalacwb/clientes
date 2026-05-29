@@ -1840,6 +1840,7 @@ function Cockpit({
   const highPriorityTasks = tarefas
     .filter((tarefa) => tarefa.prioridade >= 80 && !todayTasks.some((item) => item.id === tarefa.id))
     .slice(0, 4)
+  const criticalTasks = [...tarefasVencidas, ...todayTasks, ...highPriorityTasks].slice(0, 10)
   const ownerLabel = currentUser.role === 'admin' ? 'Visao gerencial' : `Fila de ${currentUser.nome.split(' ')[0]}`
   const workload = usuarios
     .filter((usuario) => usuario.role === 'vendedor')
@@ -1849,6 +1850,7 @@ function Cockpit({
       tarefas: [...tarefas, ...tarefasVencidas].filter((tarefa) => tarefa.vendedorId === usuario.id).length,
       atrasadas: tarefasVencidas.filter((tarefa) => tarefa.vendedorId === usuario.id).length,
       campanhas: campanhas.filter((envio) => envio.vendedorId === usuario.id).length,
+      criticas: criticalTasks.filter((tarefa) => tarefa.vendedorId === usuario.id && taskSla(tarefa).tone === 'danger').length,
     }))
     .sort((a, b) => b.atrasadas - a.atrasadas || b.tarefas - a.tarefas)
 
@@ -1947,12 +1949,15 @@ function Cockpit({
           <button className="button" type="button" onClick={() => onOpenModule('tarefas')}>Abrir tarefas</button>
         </div>
         <div className="cockpit-list">
-          {[...tarefasVencidas, ...todayTasks, ...highPriorityTasks].slice(0, 10).map((tarefa) => (
-            <article className={daysSince(tarefa.dataVencimento) > 0 ? 'cockpit-card danger' : 'cockpit-card'} key={tarefa.id}>
+          {criticalTasks.map((tarefa) => {
+            const sla = taskSla(tarefa)
+            return (
+            <article className={sla.tone === 'danger' ? 'cockpit-card danger' : 'cockpit-card'} key={tarefa.id}>
               <div>
                 <strong>{tarefa.titulo}</strong>
                 <small>{tarefa.clienteNome} - {dateLabel(tarefa.dataVencimento)} - prioridade {tarefa.prioridade}</small>
               </div>
+              <span className={`sla-pill ${sla.tone}`}>{sla.label}</span>
               {tarefa.descricao && <p>{tarefa.descricao}</p>}
               <div className="row-actions">
                 <button className="button" type="button" onClick={() => onOpenClient(tarefa.clienteId)}>Ficha</button>
@@ -1969,8 +1974,9 @@ function Cockpit({
                 </button>
               </div>
             </article>
-          ))}
-          {[...tarefasVencidas, ...todayTasks, ...highPriorityTasks].length === 0 && <div className="empty-state compact">Sem tarefas criticas agora.</div>}
+            )
+          })}
+          {criticalTasks.length === 0 && <div className="empty-state compact">Sem tarefas criticas agora.</div>}
         </div>
       </section>
 
@@ -2049,18 +2055,20 @@ function Cockpit({
             <UserRound size={18} />
           </div>
           <div className="table">
-            <div className="table-head four">
+            <div className="table-head five">
               <span>Vendedor</span>
               <span>Tarefas</span>
               <span>Atrasadas</span>
               <span>Respostas</span>
+              <span>SLA critico</span>
             </div>
             {workload.map((item) => (
-              <div className="table-row four" key={item.id}>
+              <div className="table-row five" key={item.id}>
                 <span><strong>{item.nome}</strong></span>
                 <span>{item.tarefas}</span>
                 <span className={item.atrasadas > 0 ? 'score danger' : 'score'}>{item.atrasadas}</span>
                 <span>{item.campanhas}</span>
+                <span className={item.criticas > 0 ? 'score danger' : 'score'}>{item.criticas}</span>
               </div>
             ))}
           </div>
@@ -3593,7 +3601,10 @@ function Tarefas({
             </span>
             <span>{tarefa.clienteNome}</span>
             <span>{tarefa.vendedorNome ?? 'Sem vendedor'}</span>
-            <span>{dateLabel(tarefa.dataVencimento)}</span>
+            <span>
+              <strong>{dateLabel(tarefa.dataVencimento)}</strong>
+              <span className={`sla-pill ${taskSla(tarefa).tone}`}>{taskSla(tarefa).label}</span>
+            </span>
             <span className="score">{tarefa.prioridade}</span>
             <span>
               {tarefa.status === 'aberta' ? (
@@ -6783,6 +6794,45 @@ function campaignTaskPriority(status: CampanhaEnvioStatus) {
 
 function tomorrowDate() {
   return new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+}
+
+function taskSla(tarefa: Tarefa): { label: string; tone: 'ok' | 'warn' | 'danger' | 'neutral' } {
+  if (tarefa.status !== 'aberta') return { label: 'concluida', tone: 'neutral' }
+
+  const days = daysSince(tarefa.dataVencimento)
+  const origin = tarefa.origem.toLowerCase()
+  const expected = taskSlaExpected(origin)
+  const originLabel = taskOriginSlaLabel(origin)
+
+  if (days > 0) {
+    return { label: `${originLabel}: ${days}d atrasada`, tone: 'danger' }
+  }
+  if (days === 0) {
+    return { label: `${originLabel}: vence hoje`, tone: 'warn' }
+  }
+
+  const daysUntilDue = Math.abs(days)
+  if (daysUntilDue <= 1) {
+    return { label: `${originLabel}: no limite`, tone: 'warn' }
+  }
+  return { label: `${originLabel}: ${daysUntilDue}d restantes / SLA ${expected}d`, tone: 'ok' }
+}
+
+function taskSlaExpected(origin: string) {
+  if (origin.startsWith('campanha')) return 1
+  if (origin.startsWith('orcamento')) return 2
+  if (origin.startsWith('rodobens')) return 1
+  if (origin.startsWith('oportunidade')) return 3
+  return 3
+}
+
+function taskOriginSlaLabel(origin: string) {
+  if (origin.startsWith('campanha')) return 'Campanha'
+  if (origin.startsWith('orcamento')) return 'Orcamento'
+  if (origin.startsWith('rodobens')) return 'Rodobens'
+  if (origin.startsWith('oportunidade')) return 'Oportunidade'
+  if (origin.startsWith('interacao')) return 'Interacao'
+  return 'SLA'
 }
 
 function conversionRate(conversions: number, total: number) {
