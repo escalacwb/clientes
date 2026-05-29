@@ -198,6 +198,7 @@ Ja entregue:
 - Tela de Campanhas permite combinar cidade, UF, vendedor, origem Capital/Rodobens/desconhecida, produto/servico comprado, dias sem compra, dias sem contato, valor historico minimo e somente clientes com WhatsApp.
 - Os filtros avancados sao enviados para query paginada no Supabase e tambem funcionam no fallback local.
 - Campanhas salvas preservam os filtros no `filtro_usado`, entao o publico pode ser reaberto depois.
+- O segmentador agora cruza vendedor historico, status de lead, medida, placa/veiculo e faixa de KM usando vendas, servicos e veiculos importados.
 
 Pronto quando:
 - Gerente consegue montar campanha tipo: "clientes de Curitiba que compraram Michelin 295/80 e nao compram ha 120 dias".

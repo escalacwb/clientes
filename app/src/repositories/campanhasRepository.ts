@@ -1,6 +1,6 @@
 import { getSupabase } from '../lib/supabase'
 import { listClientesPage } from './clientesRepository'
-import type { CampanhaEnvio, CampanhaEnvioStatus, CarteiraFiltro, Cliente } from '../types'
+import type { CampanhaEnvio, CampanhaEnvioStatus, CarteiraFiltro, Cliente, LeadQualificacaoStatus } from '../types'
 
 export type CampanhaSegmentoId = 'inativos-90' | 'rodobens-pendentes' | 'sem-contato-60' | 'sem-whatsapp' | 'selecionados'
 
@@ -18,8 +18,14 @@ export type CampanhaPublicoFiltros = {
   cidade?: string
   uf?: string
   vendedorId?: string
+  vendedorHistoricoNome?: string
   produtoTerm?: string
+  medidaTerm?: string
+  placaTerm?: string
+  kmMin?: number
+  kmMax?: number
   origemBase?: Cliente['origemBase'] | 'todos'
+  leadQualificacaoStatus?: LeadQualificacaoStatus | 'todos'
   diasSemCompraMin?: number
   diasSemContatoMin?: number
   valorMin?: number
@@ -195,13 +201,13 @@ export async function listCampanhaSegmento(input: {
   clienteIds?: string[]
 }): Promise<{ clientes: Cliente[]; total: number; statuses: Record<string, CampanhaEnvioStatus> }> {
   const segmento = campanhaSegmentos.find((item) => item.id === input.segmentoId) ?? campanhaSegmentos[0]
-  const clienteIds = input.filtros?.produtoTerm?.trim()
-    ? await findClientesByProdutoOuServico(input.filtros.produtoTerm)
-    : input.clienteIds
+  const clienteIds = await resolveCampaignClienteIds(input.filtros, input.clienteIds)
   const commonFilters = {
     cidade: input.filtros?.cidade,
     uf: input.filtros?.uf,
     vendedorId: input.filtros?.vendedorId,
+    vendedorHistoricoNome: input.filtros?.vendedorHistoricoNome,
+    leadQualificacaoStatus: input.filtros?.leadQualificacaoStatus,
     diasSemCompraMin: input.filtros?.diasSemCompraMin,
     diasSemContatoMin: input.filtros?.diasSemContatoMin,
     valorMin: input.filtros?.valorMin,
@@ -448,6 +454,64 @@ async function findClientesByProdutoOuServico(term: string): Promise<string[]> {
     for (const row of vendas.data ?? []) clienteIds.add(row.cliente_id as string)
     for (const row of servicos.data ?? []) clienteIds.add(row.cliente_id as string)
   }
+
+  return Array.from(clienteIds)
+}
+
+async function resolveCampaignClienteIds(filtros?: CampanhaPublicoFiltros, baseClienteIds?: string[]): Promise<string[] | undefined> {
+  const sets: Set<string>[] = []
+  if (baseClienteIds) sets.push(new Set(baseClienteIds))
+
+  if (filtros?.produtoTerm?.trim()) sets.push(new Set(await findClientesByProdutoOuServico(filtros.produtoTerm)))
+  if (filtros?.medidaTerm?.trim()) sets.push(new Set(await findClientesByProdutoOuServico(filtros.medidaTerm)))
+  if (filtros && hasVehicleFilter(filtros)) sets.push(new Set(await findClientesByVeiculoOuKm(filtros)))
+
+  if (sets.length === 0) return undefined
+  if (sets.some((set) => set.size === 0)) return []
+  return Array.from(sets[0]).filter((id) => sets.every((set) => set.has(id)))
+}
+
+function hasVehicleFilter(filtros?: CampanhaPublicoFiltros) {
+  return Boolean(filtros?.placaTerm?.trim() || filtros?.kmMin || filtros?.kmMax)
+}
+
+async function findClientesByVeiculoOuKm(filtros: CampanhaPublicoFiltros): Promise<string[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const clienteIds = new Set<string>()
+  const placaTerm = filtros.placaTerm?.trim()
+  const placaPattern = placaTerm ? `%${placaTerm}%` : undefined
+
+  const addRows = (rows: Array<{ cliente_id?: string | null }>) => {
+    for (const row of rows) {
+      if (row.cliente_id) clienteIds.add(row.cliente_id)
+    }
+  }
+
+  let servicos = supabase.from('servicos_itens').select('cliente_id').limit(5000)
+  if (placaPattern) servicos = servicos.or(`placa.ilike.${placaPattern},veiculo_observacao.ilike.${placaPattern}`)
+  if (filtros.kmMin) servicos = servicos.gte('km_extraido', filtros.kmMin)
+  if (filtros.kmMax) servicos = servicos.lte('km_extraido', filtros.kmMax)
+
+  let vendas = supabase.from('vendas_itens').select('cliente_id').limit(5000)
+  if (placaPattern) vendas = vendas.ilike('veiculo_observacao', placaPattern)
+  if (filtros.kmMin) vendas = vendas.gte('km_extraido', filtros.kmMin)
+  if (filtros.kmMax) vendas = vendas.lte('km_extraido', filtros.kmMax)
+
+  let veiculos = supabase.from('veiculos').select('cliente_id').limit(5000)
+  if (placaPattern) veiculos = veiculos.or(`placa.ilike.${placaPattern},descricao.ilike.${placaPattern},chassi.ilike.${placaPattern}`)
+  if (filtros.kmMin) veiculos = veiculos.gte('ultimo_km', filtros.kmMin)
+  if (filtros.kmMax) veiculos = veiculos.lte('ultimo_km', filtros.kmMax)
+
+  const [servicosResult, vendasResult, veiculosResult] = await Promise.all([servicos, vendas, veiculos])
+  if (servicosResult.error) throw servicosResult.error
+  if (vendasResult.error) throw vendasResult.error
+  if (veiculosResult.error) throw veiculosResult.error
+
+  addRows((servicosResult.data ?? []) as Array<{ cliente_id?: string | null }>)
+  addRows((vendasResult.data ?? []) as Array<{ cliente_id?: string | null }>)
+  addRows((veiculosResult.data ?? []) as Array<{ cliente_id?: string | null }>)
 
   return Array.from(clienteIds)
 }

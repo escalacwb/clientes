@@ -6753,11 +6753,53 @@ function Campanhas({
           </select>
         </label>
         <label>
+          Vendedor historico
+          <input
+            value={publicoFiltros.vendedorHistoricoNome ?? ''}
+            onChange={(event) => updatePublicoFiltro('vendedorHistoricoNome', event.target.value)}
+            placeholder="Nome no sistema"
+          />
+        </label>
+        <label>
           Produto ou servico comprado
           <input
             value={publicoFiltros.produtoTerm ?? ''}
             onChange={(event) => updatePublicoFiltro('produtoTerm', event.target.value)}
             placeholder="Ex.: 295/80; Michelin; alinhamento"
+          />
+        </label>
+        <label>
+          Medida
+          <input
+            value={publicoFiltros.medidaTerm ?? ''}
+            onChange={(event) => updatePublicoFiltro('medidaTerm', event.target.value)}
+            placeholder="Ex.: 295/80R22.5"
+          />
+        </label>
+        <label>
+          Placa / veiculo
+          <input
+            value={publicoFiltros.placaTerm ?? ''}
+            onChange={(event) => updatePublicoFiltro('placaTerm', event.target.value.toUpperCase())}
+            placeholder="ABC1D23"
+          />
+        </label>
+        <label>
+          KM minimo
+          <input
+            inputMode="numeric"
+            value={publicoFiltros.kmMin ?? ''}
+            onChange={(event) => updatePublicoFiltro('kmMin', positiveIntegerOrUndefined(event.target.value))}
+            placeholder="Ex.: 80000"
+          />
+        </label>
+        <label>
+          KM maximo
+          <input
+            inputMode="numeric"
+            value={publicoFiltros.kmMax ?? ''}
+            onChange={(event) => updatePublicoFiltro('kmMax', positiveIntegerOrUndefined(event.target.value))}
+            placeholder="Ex.: 180000"
           />
         </label>
         <label>
@@ -6770,6 +6812,21 @@ function Campanhas({
             <option value="capital_truck">Capital Truck</option>
             <option value="rodobens">Rodobens</option>
             <option value="desconhecida">Origem pendente</option>
+          </select>
+        </label>
+        <label>
+          Status lead
+          <select
+            value={publicoFiltros.leadQualificacaoStatus ?? 'todos'}
+            onChange={(event) => updatePublicoFiltro('leadQualificacaoStatus', event.target.value as CampanhaPublicoFiltros['leadQualificacaoStatus'])}
+          >
+            <option value="todos">Todos</option>
+            <option value="novo">Novo</option>
+            <option value="contatado">Contatado</option>
+            <option value="qualificado">Qualificado</option>
+            <option value="virou_cliente">Virou cliente</option>
+            <option value="descartado">Descartado</option>
+            <option value="nao_contatar">Nao contatar</option>
           </select>
         </label>
         <label>

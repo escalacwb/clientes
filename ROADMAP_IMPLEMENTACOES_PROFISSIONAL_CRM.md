@@ -210,6 +210,7 @@ Prioridade: alta.
    - Orcamento enviado sem resposta.
    - Cidade/UF/vendedor/origem.
    - Primeira evolucao entregue: filtros combinaveis por cidade, UF, vendedor, origem, produto/servico, recencia de compra/contato, valor historico minimo e WhatsApp.
+   - Segunda evolucao entregue: cruzamento por vendedor historico, status de lead, medida, placa/veiculo e faixa de KM.
 
 2. Criar campanhas como entidade real.
    - Nome, objetivo, responsavel, periodo, publico, template, status.
@@ -1473,6 +1474,22 @@ Validacao:
 
 Proximo passo tecnico:
 - Completar M07 com medida, vendedor historico, veiculo/KM/status de lead e criar view de elegibilidade com motivo de bloqueio.
+
+### 2026-05-29 - Segmentacao por frota e historico
+
+Status: concluido - segunda entrega do M07.
+
+Entregue:
+- Segmentador de campanhas ganhou filtros por vendedor historico, status de lead, medida, placa/veiculo, KM minimo e KM maximo.
+- A resolucao do publico cruza IDs vindos de `vendas_itens`, `servicos_itens` e `veiculos`, intersectando com selecoes manuais quando existirem.
+- O filtro por medida reaproveita a busca historica de produtos/servicos, permitindo campanhas como pneus 295/80 ou servicos especificos.
+
+Validacao:
+- Build passou com `npm run build`.
+- Playwright local confirmou login, abertura de Campanhas e renderizacao/uso dos campos de frota, medida e lead.
+
+Proximo passo tecnico:
+- Criar view de elegibilidade de campanha por cliente com motivo de bloqueio, janela minima configuravel e opt-out auditavel.
 
 ## Criterio de qualidade
 
