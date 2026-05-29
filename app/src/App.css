@@ -624,6 +624,21 @@ h3 {
   margin-bottom: 14px;
 }
 
+.task-commercial-panel {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+  border: 1px solid #dfe8e2;
+  border-radius: 8px;
+  background: #fbfdfa;
+  padding: 12px;
+}
+
+.task-commercial-grid {
+  display: grid;
+  gap: 8px;
+}
+
 .routine-queue-header {
   display: flex;
   align-items: flex-start;
@@ -662,6 +677,12 @@ h3 {
 .routine-card b {
   color: #0f766e;
   text-align: center;
+}
+
+.routine-card.danger {
+  border-color: #f2b8b5;
+  background: #fff7f7;
+  padding-inline: 10px;
 }
 
 .routine-actions {

@@ -26,6 +26,8 @@ export type TarefaStatusFilter = 'abertas' | 'vencidas' | 'concluidas'
 export type TarefaOriginFilter =
   | 'todas'
   | 'manual'
+  | 'atendimento'
+  | 'cliente360'
   | 'interacao'
   | 'orcamento'
   | 'importacao'
@@ -84,7 +86,7 @@ export async function listTarefasPage(input: {
 
   if (input.vendedorId) query = query.eq('vendedor_id', input.vendedorId)
   if (input.origem !== 'todas') {
-    query = ['orcamento', 'oportunidade', 'rodobens'].includes(input.origem)
+    query = ['orcamento', 'oportunidade', 'rodobens', 'atendimento', 'cliente360', 'campanha'].includes(input.origem)
       ? query.ilike('origem', `${input.origem}%`)
       : query.eq('origem', input.origem)
   }
@@ -222,7 +224,7 @@ function filterMockTarefas(
     })
     .filter((tarefa) => {
       if (origem === 'todas') return true
-      if (['orcamento', 'oportunidade', 'rodobens'].includes(origem)) return tarefa.origem.startsWith(origem)
+      if (['orcamento', 'oportunidade', 'rodobens', 'atendimento', 'cliente360', 'campanha'].includes(origem)) return tarefa.origem.startsWith(origem)
       return tarefa.origem === origem
     })
     .sort((a, b) => a.dataVencimento.localeCompare(b.dataVencimento) || b.prioridade - a.prioridade)

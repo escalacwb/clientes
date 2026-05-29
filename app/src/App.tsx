@@ -4595,6 +4595,9 @@ function Tarefas({
   const [error, setError] = useState('')
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const abertas = tarefas.filter((tarefa) => tarefa.status === 'aberta')
+  const commercialTasks = abertas
+    .filter((tarefa) => isCommercialFollowupTask(tarefa))
+    .sort((a, b) => taskCommercialPriority(b) - taskCommercialPriority(a))
   const suggestionQueue = buildRoutineSuggestions(clientes, orcamentos, abertas)
   const vendedores = usuarios.filter((usuario) => usuario.role === 'vendedor')
   const workload = vendedores
@@ -4613,6 +4616,16 @@ function Tarefas({
     .sort((a, b) => b.vencidas - a.vencidas || b.prioridadeMedia - a.prioridadeMedia)
   const overloaded = workload[0]
   const agendaBuckets = [
+    {
+      id: 'comercial',
+      label: 'Follow-up comercial',
+      hint: 'atendimento e propostas',
+      tarefas: commercialTasks,
+      onClick: () => {
+        onFilterChange('abertas')
+        onOriginFilterChange('atendimento')
+      },
+    },
     {
       id: 'orcamentos',
       label: 'Orcamentos',
@@ -4699,6 +4712,8 @@ function Tarefas({
             <select value={originFilter} onChange={(event) => onOriginFilterChange(event.target.value as TarefaOriginFilter)}>
               <option value="todas">Todas as origens</option>
               <option value="manual">Manual</option>
+              <option value="atendimento">Atendimento</option>
+              <option value="cliente360">Ficha 360</option>
               <option value="interacao">Interacao</option>
               <option value="orcamento">Orcamento</option>
               <option value="importacao">Importacao</option>
@@ -4812,6 +4827,42 @@ function Tarefas({
         </form>
       )}
       {error && <div className="alert">{error}</div>}
+      <section className="task-commercial-panel">
+        <div className="routine-queue-header">
+          <div>
+            <h2>Fila comercial</h2>
+            <p>Retornos de atendimento, propostas e campanhas organizados por prioridade.</p>
+          </div>
+          <strong>{commercialTasks.length} abertas</strong>
+        </div>
+        <div className="task-commercial-grid">
+          {commercialTasks.slice(0, 6).map((tarefa) => {
+            const sla = taskSla(tarefa)
+            return (
+              <article className={sla.tone === 'danger' ? 'routine-card danger' : 'routine-card'} key={tarefa.id}>
+                <span>
+                  <strong>{tarefa.clienteNome}</strong>
+                  <small>{tarefa.titulo} - {taskOriginLabel(tarefa.origem)} - {dateLabel(tarefa.dataVencimento)}</small>
+                </span>
+                <b>{tarefa.prioridade}</b>
+                <div className="routine-actions">
+                  <span className={`sla-pill ${sla.tone}`}>{sla.label}</span>
+                  <button className="button" type="button" onClick={() => onOpenClient(tarefa.clienteId)}>Ficha</button>
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => onOpenBudgetEditor(tarefa.clienteId, { kind: 'tarefa', sourceId: tarefa.id, label: tarefa.titulo })}
+                  >
+                    Orcar
+                  </button>
+                  <button className="button primary" type="button" onClick={() => onComplete(tarefa.id)}>Concluir</button>
+                </div>
+              </article>
+            )
+          })}
+          {commercialTasks.length === 0 && <div className="empty-state compact">Sem follow-ups comerciais nesta visao.</div>}
+        </div>
+      </section>
       {executionMode && (
         <section className="task-execution-panel">
           {activeExecutionTask ? (
@@ -10405,6 +10456,14 @@ function isCommercialFollowupTask(tarefa: Tarefa) {
     'orcamento',
     'campanha',
   ].some((prefix) => origin.startsWith(prefix))
+}
+
+function taskCommercialPriority(tarefa: Tarefa) {
+  const sla = taskSla(tarefa)
+  const slaBoost = sla.tone === 'danger' ? 40 : sla.tone === 'warn' ? 20 : 0
+  const origin = (tarefa.origem ?? '').toLowerCase()
+  const originBoost = origin.startsWith('campanha') ? 20 : origin.startsWith('orcamento') ? 16 : origin.startsWith('atendimento') ? 12 : 0
+  return tarefa.prioridade + slaBoost + originBoost
 }
 
 function sellerCriticalOrigin(row?: TarefaSlaVendedorResumo) {
