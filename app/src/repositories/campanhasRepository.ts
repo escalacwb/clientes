@@ -47,6 +47,8 @@ export type CampanhaResumo = {
   semResposta: number
   viraramOrcamento: number
   viraramVenda: number
+  perdidos: number
+  naoContatar: number
 }
 
 type CampanhaEnvioRow = {
@@ -325,8 +327,8 @@ export async function upsertCampanhaEnvio(input: {
       status: input.status,
       dataAberturaWhatsapp: input.status === 'pendente' ? new Date().toISOString() : undefined,
       dataMarcadoEnviado: input.status !== 'pendente' ? new Date().toISOString() : undefined,
-      virouOrcamento: input.status === 'virou_orcamento',
-      virouVenda: false,
+      virouOrcamento: input.status === 'virou_orcamento' || input.status === 'ganhou',
+      virouVenda: input.status === 'ganhou',
     }
   }
 
@@ -344,7 +346,8 @@ export async function upsertCampanhaEnvio(input: {
         status: input.status,
         data_abertura_whatsapp: input.status === 'pendente' ? new Date().toISOString() : undefined,
         data_marcado_enviado: input.status !== 'pendente' ? new Date().toISOString() : undefined,
-        virou_orcamento: input.status === 'virou_orcamento',
+        virou_orcamento: input.status === 'virou_orcamento' || input.status === 'ganhou',
+        virou_venda: input.status === 'ganhou',
       },
       { onConflict: 'campanha_id,cliente_id' },
     )
@@ -435,5 +438,7 @@ function mapCampanhaResumo(row: CampanhaRow): CampanhaResumo {
     semResposta: envios.filter((envio) => envio.status === 'nao_respondeu').length,
     viraramOrcamento: envios.filter((envio) => envio.status === 'virou_orcamento' || envio.virou_orcamento).length,
     viraramVenda: envios.filter((envio) => envio.virou_venda).length,
+    perdidos: envios.filter((envio) => envio.status === 'perdido').length,
+    naoContatar: envios.filter((envio) => envio.status === 'nao_contatar').length,
   }
 }

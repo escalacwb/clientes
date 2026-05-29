@@ -547,6 +547,23 @@ Proximo passo tecnico:
 - Relacionar campanha com orcamentos reais criados, para medir receita atribuida.
 - Adicionar status `ganhou/perdeu/nao_contatar` na fila de campanha.
 
+### 2026-05-28 - Fechamento comercial da campanha
+
+Status: concluido.
+
+Entregue:
+- Fila de campanha ganhou status finais: `ganhou`, `perdido` e `nao_contatar`.
+- `ganhou` passa a contar como venda ganha no resumo da campanha.
+- `nao_contatar` atualiza tambem o status comercial do cliente.
+- Contato de campanha pode abrir o editor de orcamento diretamente, mantendo o retorno para campanhas.
+- Resumo da campanha passou a exibir ganhos e perdidos.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Vincular o orcamento criado pela campanha ao envio/campanha para medir receita atribuida automaticamente.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

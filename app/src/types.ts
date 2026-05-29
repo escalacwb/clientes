@@ -178,7 +178,15 @@ export type TarefaInput = Omit<Tarefa, 'id' | 'clienteNome' | 'vendedorNome' | '
   status?: Tarefa['status']
 }
 
-export type CampanhaEnvioStatus = 'pendente' | 'enviado' | 'respondeu' | 'nao_respondeu' | 'virou_orcamento'
+export type CampanhaEnvioStatus =
+  | 'pendente'
+  | 'enviado'
+  | 'respondeu'
+  | 'nao_respondeu'
+  | 'virou_orcamento'
+  | 'ganhou'
+  | 'perdido'
+  | 'nao_contatar'
 
 export type CampanhaEnvio = {
   id: string

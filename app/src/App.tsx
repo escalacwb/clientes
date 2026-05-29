@@ -877,6 +877,14 @@ function App() {
           <Campanhas
             usuarios={usuarios}
             currentUser={session}
+            onOpenBudgetEditor={(cliente) => {
+              setClientes((current) =>
+                current.some((item) => item.id === cliente.id) ? current : [cliente, ...current],
+              )
+              setSelectedClientId(cliente.id)
+              setQuoteSourceView('campanhas')
+              setView('orcamento-editor')
+            }}
             onAddInteraction={async (interacao) => {
               const created = await createInteracao(interacao)
               setInteracoes((current) => [created, ...current])
@@ -3662,11 +3670,13 @@ function Mesclagem({
 function Campanhas({
   usuarios,
   currentUser,
+  onOpenBudgetEditor,
   onAddInteraction,
   onAddTask,
 }: {
   usuarios: Vendedor[]
   currentUser: SessaoUsuario
+  onOpenBudgetEditor: (cliente: Cliente) => void
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
   onAddTask: (task: TarefaInput) => Promise<Tarefa>
 }) {
@@ -3700,7 +3710,7 @@ function Campanhas({
       acc[status] += 1
       return acc
     },
-    { pendente: 0, enviado: 0, respondeu: 0, nao_respondeu: 0, virou_orcamento: 0 },
+    { pendente: 0, enviado: 0, respondeu: 0, nao_respondeu: 0, virou_orcamento: 0, ganhou: 0, perdido: 0, nao_contatar: 0 },
   )
   const filteredClientes = campanhaClientes.filter((cliente) => statusFilter === 'todos' || (statuses[cliente.id] ?? 'pendente') === statusFilter)
 
@@ -3856,6 +3866,11 @@ function Campanhas({
           origem: 'campanha',
         })
       }
+      if (status === 'nao_contatar') {
+        updateClienteComercial(cliente.id, { status: 'Nao contatar' }).catch((exception) => {
+          setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel marcar cliente como nao contatar.')
+        })
+      }
       setStatuses((current) => ({ ...current, [cliente.id]: status }))
       await refreshCampaignResumo()
     } catch (exception) {
@@ -3904,7 +3919,10 @@ function Campanhas({
               <option value="enviado">Enviados</option>
               <option value="respondeu">Responderam</option>
               <option value="virou_orcamento">Virou orcamento</option>
+              <option value="ganhou">Ganhos</option>
+              <option value="perdido">Perdidos</option>
               <option value="nao_respondeu">Nao respondeu</option>
+              <option value="nao_contatar">Nao contatar</option>
             </select>
           </label>
           <Send size={18} />
@@ -3986,13 +4004,15 @@ function Campanhas({
             <strong>{activeCampaignResumo ? activeCampaignResumo.nome : 'Resumo da pagina atual'}</strong>
             <small>{activeCampaignResumo ? `Criada em ${dateLabel(activeCampaignResumo.criadaEm)}` : 'Salve ou selecione uma campanha para ver o resultado global.'}</small>
           </div>
-          {activeCampaignResumo && <span>{conversionRate(activeCampaignResumo.viraramOrcamento, activeCampaignResumo.total)}% conversao</span>}
+          {activeCampaignResumo && <span>{conversionRate(activeCampaignResumo.viraramVenda || activeCampaignResumo.viraramOrcamento, activeCampaignResumo.total)}% conversao</span>}
         </div>
         <div className="info-grid campaign-summary">
           <Info label="Alcance" value={(activeCampaignResumo?.total ?? campanhaClientes.length).toString()} />
           <Info label="Enviados" value={(activeCampaignResumo?.enviados ?? campaignCounts.enviado).toString()} />
           <Info label="Responderam" value={(activeCampaignResumo?.responderam ?? campaignCounts.respondeu).toString()} />
           <Info label="Orcamentos" value={(activeCampaignResumo?.viraramOrcamento ?? campaignCounts.virou_orcamento).toString()} />
+          <Info label="Ganhos" value={(activeCampaignResumo?.viraramVenda ?? campaignCounts.ganhou).toString()} />
+          <Info label="Perdidos" value={(activeCampaignResumo?.perdidos ?? campaignCounts.perdido).toString()} />
         </div>
       </div>
       {nextClient && (
@@ -4024,7 +4044,7 @@ function Campanhas({
               <strong>{resumo.nome}</strong>
               <small>{resumo.total} envios · {resumo.responderam} respostas · {resumo.viraramOrcamento} orcamentos</small>
             </span>
-            <b>{conversionRate(resumo.viraramOrcamento, resumo.total)}%</b>
+            <b>{conversionRate(resumo.viraramVenda || resumo.viraramOrcamento, resumo.total)}%</b>
           </button>
         ))}
       </div>
@@ -4069,7 +4089,19 @@ function Campanhas({
                   Sem resposta
                 </button>
                 <button className="button" type="button" onClick={() => markStatus(cliente, 'virou_orcamento', finalMessage)}>
+                  Virou orc.
+                </button>
+                <button className="button primary" type="button" onClick={() => onOpenBudgetEditor(cliente)}>
                   Orcamento
+                </button>
+                <button className="button" type="button" onClick={() => markStatus(cliente, 'ganhou', finalMessage)}>
+                  Ganhou
+                </button>
+                <button className="button" type="button" onClick={() => markStatus(cliente, 'perdido', finalMessage)}>
+                  Perdido
+                </button>
+                <button className="button" type="button" onClick={() => markStatus(cliente, 'nao_contatar', finalMessage)}>
+                  Nao contatar
                 </button>
               </span>
             </div>
@@ -4098,6 +4130,9 @@ function campaignSummary(status: CampanhaEnvioStatus, mensagem: string) {
     respondeu: 'Cliente respondeu a campanha.',
     nao_respondeu: 'Cliente nao respondeu a campanha.',
     virou_orcamento: 'Campanha virou oportunidade de orcamento.',
+    ganhou: 'Campanha marcada como venda ganha.',
+    perdido: 'Campanha marcada como oportunidade perdida.',
+    nao_contatar: 'Cliente marcado como nao contatar pela campanha.',
   }
   return `${labels[status]} Mensagem: ${mensagem}`
 }
