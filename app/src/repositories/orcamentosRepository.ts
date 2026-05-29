@@ -13,6 +13,9 @@ type OrcamentoRow = {
   previsao_fechamento: string | null
   forma_pagamento: string | null
   motivo_perda: string | null
+  aprovacao_motivo: string | null
+  aprovado_por: string | null
+  aprovado_em: string | null
   observacao: string | null
 }
 
@@ -86,6 +89,9 @@ export async function createOrcamento(input: OrcamentoInput, itens: OrcamentoIte
       previsao_fechamento: input.previsaoFechamento ?? null,
       forma_pagamento: input.formaPagamento ?? null,
       motivo_perda: input.motivoPerda ?? null,
+      aprovacao_motivo: input.aprovacaoMotivo ?? null,
+      aprovado_por: input.aprovadoPor ?? null,
+      aprovado_em: input.aprovadoEm ?? null,
       observacao: input.observacao ?? null,
     })
     .select('*')
@@ -176,6 +182,9 @@ function mapOrcamento(row: OrcamentoRow): Orcamento {
     previsaoFechamento: row.previsao_fechamento ?? undefined,
     formaPagamento: row.forma_pagamento ?? undefined,
     motivoPerda: row.motivo_perda ?? undefined,
+    aprovacaoMotivo: row.aprovacao_motivo ?? undefined,
+    aprovadoPor: row.aprovado_por ?? undefined,
+    aprovadoEm: row.aprovado_em ?? undefined,
     observacao: row.observacao ?? undefined,
   }
 }

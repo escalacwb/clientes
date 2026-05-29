@@ -458,6 +458,25 @@ Validacao local:
 Proximo passo tecnico:
 - Persistir fluxo de aprovacao de desconto no banco e criar status `aguardando_aprovacao` para orcamentos.
 
+### 2026-05-28 - Status de aprovacao de desconto
+
+Status: concluido.
+
+Entregue:
+- Tipo de orcamento passou a aceitar `aguardando_aprovacao`.
+- Schema recebeu `aprovacao_motivo`, `aprovado_por` e `aprovado_em`.
+- Repository salva e mapeia os campos de aprovacao.
+- Editor cria orcamento como `aguardando_aprovacao` quando houver desconto acima do limite do catalogo.
+- Tela de orcamentos mostra o novo status e o motivo de aprovacao.
+
+Validacao:
+- SQL aplicado no Supabase.
+- Build passou com `npm run build`.
+- Teste direto no Supabase criou orcamento `aguardando_aprovacao` com motivo e removeu o registro depois.
+
+Observacao:
+- A lista de precos atual ainda nao possui `desconto_maximo`; o alerta esta pronto e sera ativado automaticamente quando esse campo vier preenchido na importacao.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

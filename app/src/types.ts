@@ -73,12 +73,15 @@ export type Orcamento = {
   clienteId: string
   vendedorId: string
   data: string
-  status: 'aberto' | 'enviado' | 'negociando' | 'ganho' | 'perdido'
+  status: 'aberto' | 'aguardando_aprovacao' | 'enviado' | 'negociando' | 'ganho' | 'perdido'
   valorTotal: number
   validade: string
   previsaoFechamento?: string
   formaPagamento?: string
   motivoPerda?: string
+  aprovacaoMotivo?: string
+  aprovadoPor?: string
+  aprovadoEm?: string
   observacao?: string
   itens?: OrcamentoItem[]
 }

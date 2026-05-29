@@ -131,6 +131,9 @@ alter table public.servicos_itens
 
 alter table public.orcamentos
   add column if not exists forma_pagamento text,
+  add column if not exists aprovacao_motivo text,
+  add column if not exists aprovado_por uuid references public.users(id),
+  add column if not exists aprovado_em timestamptz,
   add column if not exists observacao text;
 
 alter table public.clientes

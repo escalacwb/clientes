@@ -2453,14 +2453,17 @@ function OrcamentoEditor({
     setIsSaving(true)
     setError('')
     setFeedback('')
+    const needsApproval = approvalWarnings.length > 0
     try {
       const created = await onCreate({
         clienteId: cliente.id,
         vendedorId: cliente.vendedorId ?? 'u-1',
+        status: needsApproval ? 'aguardando_aprovacao' : 'aberto',
         valorTotal: total,
         validade,
         previsaoFechamento: previsaoFechamento || undefined,
         formaPagamento,
+        aprovacaoMotivo: needsApproval ? approvalWarnings.join(' ') : undefined,
         observacao,
         itens: validItems,
       })
@@ -3841,7 +3844,7 @@ function Orcamentos({
 }) {
   const [lossReasons, setLossReasons] = useState<Record<string, string>>({})
   const [statusFilter, setStatusFilter] = useState<Orcamento['status'] | 'todos' | 'vencidos'>('todos')
-  const openStatuses: Orcamento['status'][] = ['aberto', 'enviado', 'negociando']
+  const openStatuses: Orcamento['status'][] = ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando']
   const filteredOrcamentos = orcamentos.filter((orcamento) => {
     if (statusFilter === 'todos') return true
     if (statusFilter === 'vencidos') return openStatuses.includes(orcamento.status) && daysSince(orcamento.validade) > 0
@@ -3867,6 +3870,7 @@ function Orcamentos({
             <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Orcamento['status'] | 'todos' | 'vencidos')}>
               <option value="todos">Todos os status</option>
               <option value="aberto">Abertos</option>
+              <option value="aguardando_aprovacao">Aguardando aprovacao</option>
               <option value="enviado">Enviados</option>
               <option value="negociando">Negociando</option>
               <option value="ganho">Ganhos</option>
@@ -3900,6 +3904,7 @@ function Orcamentos({
               <span><strong>{cliente?.nome}</strong></span>
               <span>
                 <span className={isExpired ? 'status-pill danger' : 'status-pill'}>{isExpired ? 'vencido' : orcamento.status}</span>
+                {orcamento.aprovacaoMotivo && <small>{orcamento.aprovacaoMotivo}</small>}
               </span>
               <span>
                 <strong>{money(orcamento.valorTotal)}</strong>

@@ -191,6 +191,9 @@ create table public.orcamentos (
   previsao_fechamento date,
   forma_pagamento text,
   motivo_perda text,
+  aprovacao_motivo text,
+  aprovado_por uuid references public.users(id),
+  aprovado_em timestamptz,
   observacao text,
   criado_em timestamptz not null default now(),
   atualizado_em timestamptz not null default now()
@@ -422,7 +425,7 @@ begin
       'orcamento'
     );
 
-    if new.status in ('ganho', 'perdido') then
+    if new.status in ('ganho', 'perdido', 'aguardando_aprovacao') then
       insert into public.interacoes (
         cliente_id,
         vendedor_id,
@@ -439,6 +442,7 @@ begin
         'orcamento',
         case
           when new.status = 'ganho' then 'Orcamento marcado como ganho.'
+          when new.status = 'aguardando_aprovacao' then 'Orcamento aguardando aprovacao. ' || coalesce(new.aprovacao_motivo, '')
           else 'Orcamento marcado como perdido. Motivo: ' || coalesce(new.motivo_perda, 'nao informado')
         end,
         new.status,
