@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { lazy, type FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
+import capitalLogo from './assets/capital-truck-center-logo.svg'
 import {
   clientes as seedClientes,
   alteracoes as seedAlteracoes,
@@ -236,6 +237,16 @@ const emptyClient: Cliente = {
   totalComprado: 0,
   totalServicos: 0,
   tags: [],
+}
+
+function BrandLogo({ compact = false }: { compact?: boolean }) {
+  return (
+    <img
+      className={compact ? 'brand-logo compact' : 'brand-logo'}
+      src={capitalLogo}
+      alt="Capital Truck Center"
+    />
+  )
 }
 
 type QuoteOriginContext =
@@ -989,9 +1000,7 @@ function App() {
       <main className="login-screen">
         <section className="login-panel">
           <div className="brand login-brand">
-            <div className="brand-mark">
-              <Truck size={22} />
-            </div>
+            <BrandLogo />
             <div>
               <strong>Capital Truck CRM</strong>
               <span>Carregando base do Supabase...</span>
@@ -1010,9 +1019,7 @@ function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">
-            <Truck size={22} />
-          </div>
+          <BrandLogo compact />
           <div>
             <strong>Capital Truck CRM</strong>
             <span>Central de carteira</span>
@@ -1054,9 +1061,12 @@ function App() {
 
       <main className="workspace">
         <header className="topbar">
-          <div>
-            <p className="eyebrow">MVP operacional</p>
-            <h1>{titleFor(view)}</h1>
+          <div className="topbar-title">
+            <BrandLogo compact />
+            <div>
+              <p className="eyebrow">MVP operacional</p>
+              <h1>{titleFor(view)}</h1>
+            </div>
           </div>
           <div className="search">
             <Search size={18} />
@@ -1979,14 +1989,12 @@ function Login({ usuarios, onLogin }: { usuarios: Vendedor[]; onLogin: (session:
 
   return (
     <main className="login-screen">
-      <section className="login-panel">
-        <div className="brand login-brand">
-          <div className="brand-mark">
-            <Truck size={22} />
-          </div>
-          <div>
-            <strong>Capital Truck CRM</strong>
-            <span>Central de carteira</span>
+        <section className="login-panel">
+          <div className="brand login-brand">
+            <BrandLogo />
+            <div>
+              <strong>Capital Truck CRM</strong>
+              <span>Central de carteira</span>
           </div>
         </div>
         <form className="login-form" onSubmit={submit}>

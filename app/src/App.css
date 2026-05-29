@@ -32,6 +32,25 @@
   gap: 12px;
 }
 
+.brand-logo {
+  width: 174px;
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.brand-logo.compact {
+  width: 92px;
+}
+
+.sidebar .brand {
+  align-items: flex-start;
+}
+
+.sidebar .brand-logo {
+  flex: 0 0 auto;
+}
+
 .brand-mark {
   display: grid;
   place-items: center;
@@ -116,6 +135,7 @@
 }
 
 .login-brand {
+  align-items: flex-start;
   color: #12312f;
   margin-bottom: 22px;
 }
@@ -159,6 +179,16 @@
   gap: 24px;
   align-items: flex-start;
   margin-bottom: 24px;
+}
+
+.topbar-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.topbar-title .brand-logo {
+  width: 118px;
 }
 
 .eyebrow {
