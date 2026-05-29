@@ -137,6 +137,8 @@ Ja entregue:
 - Criada tela `Proposta comercial` por orcamento, com resumo, itens, mensagem WhatsApp, condicoes comparativas, versoes e acoes de status.
 - A tela permite aprovar/enviar, negociar, marcar ganho/perdido e revisar proposta com nova versao.
 - Preview da proposta e mensagem WA.ME ficam na mesma area operacional.
+- Criada tabela `orcamento_condicoes` no Supabase para gravar condicoes comerciais por proposta, com RLS alinhado a orcamentos.
+- Criacao e revisao de proposta agora persistem condicoes como dados estruturados, nao apenas no texto do WhatsApp.
 
 Pronto quando:
 - Criar, revisar, enviar e aprovar uma proposta acontece em uma tela unica.

@@ -101,15 +101,30 @@ export type Orcamento = {
   aprovadoEm?: string
   observacao?: string
   itens?: OrcamentoItem[]
+  condicoes?: OrcamentoCondicao[]
 }
 
-export type OrcamentoInput = Omit<Orcamento, 'id' | 'data' | 'status' | 'itens'> & {
+export type OrcamentoInput = Omit<Orcamento, 'id' | 'data' | 'status' | 'itens' | 'condicoes'> & {
   data?: string
   status?: Orcamento['status']
   itens?: OrcamentoItemInput[]
+  condicoes?: OrcamentoCondicaoInput[]
   versaoMensagem?: string
   versaoOrigem?: string
 }
+
+export type OrcamentoCondicao = {
+  id: string
+  orcamentoId: string
+  label: string
+  ajustePercentual: number
+  valorTotal: number
+  parcelas?: number
+  observacao?: string
+  ordem: number
+}
+
+export type OrcamentoCondicaoInput = Omit<OrcamentoCondicao, 'id' | 'orcamentoId'>
 
 export type OrcamentoItem = {
   id: string

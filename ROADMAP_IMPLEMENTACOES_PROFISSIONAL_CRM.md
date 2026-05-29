@@ -175,6 +175,7 @@ Prioridade: maxima.
    - Prazo de entrega/execucao.
    - Observacoes e termos padrao.
    - Versoes da proposta.
+   - Condicoes comerciais passaram a ser gravadas em `orcamento_condicoes`, preservando os valores por proposta.
 
 4. Regras de preco e desconto.
    - Desconto por item.

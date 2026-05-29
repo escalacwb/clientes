@@ -235,6 +235,18 @@ create table public.orcamento_versoes (
   unique (orcamento_id, numero)
 );
 
+create table public.orcamento_condicoes (
+  id uuid primary key default gen_random_uuid(),
+  orcamento_id uuid not null references public.orcamentos(id) on delete cascade,
+  label text not null,
+  ajuste_percentual numeric(8, 2) not null default 0,
+  valor_total numeric(14, 2) not null default 0,
+  parcelas integer,
+  observacao text,
+  ordem integer not null default 0,
+  criado_em timestamptz not null default now()
+);
+
 create table public.produtos (
   id uuid primary key default gen_random_uuid(),
   codigo text not null unique,
@@ -482,6 +494,7 @@ create unique index if not exists tarefas_abertas_cliente_origem_idx
 on public.tarefas (cliente_id, origem)
 where status = 'aberta' and origem is not null;
 create index orcamento_versoes_orcamento_idx on public.orcamento_versoes(orcamento_id, numero desc);
+create index orcamento_condicoes_orcamento_idx on public.orcamento_condicoes(orcamento_id, ordem);
 
 create or replace function public.set_atualizado_em()
 returns trigger
@@ -1624,6 +1637,7 @@ alter table public.oportunidades_cache enable row level security;
 alter table public.orcamentos enable row level security;
 alter table public.orcamento_itens enable row level security;
 alter table public.orcamento_versoes enable row level security;
+alter table public.orcamento_condicoes enable row level security;
 alter table public.produtos enable row level security;
 alter table public.produto_aliases enable row level security;
 alter table public.listas_preco enable row level security;
@@ -1845,6 +1859,36 @@ with check (
   or exists (
     select 1 from public.orcamentos o
     where o.id = orcamento_versoes.orcamento_id
+      and o.vendedor_id = public.current_app_user_id()
+  )
+);
+
+create policy orcamento_condicoes_read_own_or_admin
+on public.orcamento_condicoes for select
+using (
+  public.current_user_is_admin()
+  or exists (
+    select 1 from public.orcamentos o
+    where o.id = orcamento_condicoes.orcamento_id
+      and o.vendedor_id = public.current_app_user_id()
+  )
+);
+
+create policy orcamento_condicoes_write_own_or_admin
+on public.orcamento_condicoes for all
+using (
+  public.current_user_is_admin()
+  or exists (
+    select 1 from public.orcamentos o
+    where o.id = orcamento_condicoes.orcamento_id
+      and o.vendedor_id = public.current_app_user_id()
+  )
+)
+with check (
+  public.current_user_is_admin()
+  or exists (
+    select 1 from public.orcamentos o
+    where o.id = orcamento_condicoes.orcamento_id
       and o.vendedor_id = public.current_app_user_id()
   )
 );

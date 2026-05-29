@@ -1,6 +1,6 @@
 import { orcamentoItens as mockOrcamentoItens, orcamentos as mockOrcamentos } from '../data/mockData'
 import { getSupabase } from '../lib/supabase'
-import type { Orcamento, OrcamentoInput, OrcamentoItem, OrcamentoItemInput, OrcamentoVersao } from '../types'
+import type { Orcamento, OrcamentoCondicao, OrcamentoCondicaoInput, OrcamentoInput, OrcamentoItem, OrcamentoItemInput, OrcamentoVersao } from '../types'
 
 type OrcamentoRow = {
   id: string
@@ -33,6 +33,17 @@ type OrcamentoItemRow = {
   valor_total: number
   desconto_percentual: number | null
   observacao: string | null
+}
+
+type OrcamentoCondicaoRow = {
+  id: string
+  orcamento_id: string
+  label: string
+  ajuste_percentual: number
+  valor_total: number
+  parcelas: number | null
+  observacao: string | null
+  ordem: number
 }
 
 type OrcamentoVersaoRow = {
@@ -68,10 +79,12 @@ export async function listOrcamentos(limit = 100): Promise<Orcamento[]> {
 
   const orcamentos = (data as OrcamentoRow[]).map(mapOrcamento)
   const itens = await listOrcamentoItens(orcamentos.map((orcamento) => orcamento.id))
+  const condicoes = await listOrcamentoCondicoes(orcamentos.map((orcamento) => orcamento.id))
 
   return orcamentos.map((orcamento) => ({
     ...orcamento,
     itens: itens.filter((item) => item.orcamentoId === orcamento.id),
+    condicoes: condicoes.filter((item) => item.orcamentoId === orcamento.id),
   }))
 }
 
@@ -114,11 +127,13 @@ export async function listOrcamentosPage(input: {
 
   const orcamentos = (data as OrcamentoRow[]).map(mapOrcamento)
   const itens = await listOrcamentoItens(orcamentos.map((orcamento) => orcamento.id))
+  const condicoes = await listOrcamentoCondicoes(orcamentos.map((orcamento) => orcamento.id))
 
   return {
     orcamentos: orcamentos.map((orcamento) => ({
       ...orcamento,
       itens: itens.filter((item) => item.orcamentoId === orcamento.id),
+      condicoes: condicoes.filter((item) => item.orcamentoId === orcamento.id),
     })),
     total: count ?? orcamentos.length,
   }
@@ -163,6 +178,11 @@ export async function createOrcamento(input: OrcamentoInput, itens: OrcamentoIte
       status: input.status ?? 'aberto',
       ...input,
       itens: createdItems,
+      condicoes: input.condicoes?.map((condicao, index) => ({
+        id: `oc-${Date.now()}-${index}`,
+        orcamentoId: id,
+        ...condicao,
+      })),
     }
   }
 
@@ -191,7 +211,8 @@ export async function createOrcamento(input: OrcamentoInput, itens: OrcamentoIte
   const orcamento = mapOrcamento(data as OrcamentoRow)
 
   const createdItems = itens.length > 0 ? await createOrcamentoItens(orcamento.id, itens) : []
-  const created = { ...orcamento, itens: createdItems }
+  const createdConditions = input.condicoes?.length ? await createOrcamentoCondicoes(orcamento.id, input.condicoes) : []
+  const created = { ...orcamento, itens: createdItems, condicoes: createdConditions }
 
   await createOrcamentoVersao(created, {
     mensagem: input.versaoMensagem,
@@ -222,6 +243,11 @@ export async function reviseOrcamento(
         valorUnitario: item.valorUnitario,
         valorTotal: item.valorTotal ?? item.quantidade * item.valorUnitario,
         observacao: item.observacao,
+      })),
+      condicoes: input.condicoes?.map((condicao, index) => ({
+        id: `oc-rev-${Date.now()}-${index}`,
+        orcamentoId: id,
+        ...condicao,
       })),
     }
   }
@@ -257,7 +283,15 @@ export async function reviseOrcamento(
   if (deleteError) throw deleteError
 
   const createdItems = itens.length > 0 ? await createOrcamentoItens(id, itens) : []
-  const revised = { ...orcamento, itens: createdItems }
+  const { error: conditionsDeleteError } = await supabase
+    .from('orcamento_condicoes')
+    .delete()
+    .eq('orcamento_id', id)
+
+  if (conditionsDeleteError) throw conditionsDeleteError
+
+  const createdConditions = input.condicoes?.length ? await createOrcamentoCondicoes(id, input.condicoes) : []
+  const revised = { ...orcamento, itens: createdItems, condicoes: createdConditions }
 
   await createOrcamentoVersao(revised, {
     mensagem: input.versaoMensagem,
@@ -308,6 +342,22 @@ async function listOrcamentoItens(orcamentoIds: string[]): Promise<OrcamentoItem
   return (data as OrcamentoItemRow[]).map(mapOrcamentoItem)
 }
 
+async function listOrcamentoCondicoes(orcamentoIds: string[]): Promise<OrcamentoCondicao[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+  if (orcamentoIds.length === 0) return []
+
+  const { data, error } = await supabase
+    .from('orcamento_condicoes')
+    .select('*')
+    .in('orcamento_id', orcamentoIds)
+    .order('ordem', { ascending: true })
+
+  if (error) throw error
+
+  return (data as OrcamentoCondicaoRow[]).map(mapOrcamentoCondicao)
+}
+
 async function createOrcamentoItens(orcamentoId: string, itens: OrcamentoItemInput[]): Promise<OrcamentoItem[]> {
   const supabase = await getSupabase()
   if (!supabase) return []
@@ -333,6 +383,30 @@ async function createOrcamentoItens(orcamentoId: string, itens: OrcamentoItemInp
   if (error) throw error
 
   return (data as OrcamentoItemRow[]).map(mapOrcamentoItem)
+}
+
+async function createOrcamentoCondicoes(orcamentoId: string, condicoes: OrcamentoCondicaoInput[]): Promise<OrcamentoCondicao[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('orcamento_condicoes')
+    .insert(
+      condicoes.map((condicao, index) => ({
+        orcamento_id: orcamentoId,
+        label: condicao.label,
+        ajuste_percentual: condicao.ajustePercentual,
+        valor_total: condicao.valorTotal,
+        parcelas: condicao.parcelas ?? null,
+        observacao: condicao.observacao ?? null,
+        ordem: condicao.ordem ?? index,
+      })),
+    )
+    .select('*')
+
+  if (error) throw error
+
+  return (data as OrcamentoCondicaoRow[]).map(mapOrcamentoCondicao)
 }
 
 async function createOrcamentoVersao(
@@ -417,6 +491,19 @@ function mapOrcamentoItem(row: OrcamentoItemRow): OrcamentoItem {
     valorTotal: row.valor_total,
     descontoPercentual: row.desconto_percentual ?? undefined,
     observacao: row.observacao ?? undefined,
+  }
+}
+
+function mapOrcamentoCondicao(row: OrcamentoCondicaoRow): OrcamentoCondicao {
+  return {
+    id: row.id,
+    orcamentoId: row.orcamento_id,
+    label: row.label,
+    ajustePercentual: row.ajuste_percentual,
+    valorTotal: row.valor_total,
+    parcelas: row.parcelas ?? undefined,
+    observacao: row.observacao ?? undefined,
+    ordem: row.ordem,
   }
 }
 
