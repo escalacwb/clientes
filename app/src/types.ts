@@ -306,6 +306,7 @@ export type Oportunidade = {
   proximaAcao: string
   prioridade: number
   bloqueada: boolean
+  tarefaExistente?: boolean
 }
 
 export type ClienteMesclagem = {

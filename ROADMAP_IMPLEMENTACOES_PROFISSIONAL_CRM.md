@@ -905,6 +905,24 @@ Validacao:
 Proximo passo tecnico:
 - Permitir selecionar multiplos itens historicos antes de abrir a proposta, para repetir compras completas.
 
+### 2026-05-28 - Fila inteligente global no Supabase
+
+Status: concluido.
+
+Entregue:
+- A view `oportunidades_clientes` foi recriada no Supabase com `security_invoker`, respeitando RLS.
+- Oportunidades agora sao calculadas na base inteira: Rodobens sem contato, clientes em risco, recompra, orcamento aberto/vencido, sem vendedor, sem WhatsApp e alto valor sem contato.
+- A tela `Oportunidades` passou a usar repository paginado, com filtros de ativas, bloqueadas e todas.
+- Oportunidade com tarefa aberta da mesma origem aparece bloqueada para evitar duplicidade.
+
+Validacao:
+- SQL aplicado com `node scripts/run-sql-file.mjs supabase/queries/oportunidades_clientes_global.sql`.
+- Build passou com `npm run build`.
+- Consulta de validacao retornou oportunidades globais por tipo.
+
+Proximo passo tecnico:
+- Transformar essa fila em painel gerencial com agrupamento por vendedor/origem e acoes em lote.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

@@ -95,6 +95,7 @@ import { listOrcamentosPage, type OrcamentoListFilter } from './repositories/orc
 import { listOrcamentoVersoes } from './repositories/orcamentosRepository'
 import { reviseOrcamento } from './repositories/orcamentosRepository'
 import { updateOrcamentoStatus } from './repositories/orcamentosRepository'
+import { listOportunidadesPage, type OportunidadeFilter } from './repositories/oportunidadesRepository'
 import {
   completeTarefa,
   createTarefa,
@@ -226,6 +227,10 @@ function App() {
   const [tarefasStatusFilter, setTarefasStatusFilter] = useState<TarefaStatusFilter>('abertas')
   const [tarefasOriginFilter, setTarefasOriginFilter] = useState<TarefaOriginFilter>('todas')
   const [tarefasOwnerFilter, setTarefasOwnerFilter] = useState('todos')
+  const [oportunidades, setOportunidades] = useState<Oportunidade[]>([])
+  const [oportunidadesTotal, setOportunidadesTotal] = useState(0)
+  const [oportunidadesPage, setOportunidadesPage] = useState(1)
+  const [oportunidadesFilter, setOportunidadesFilter] = useState<OportunidadeFilter>('ativas')
   const [vendasItens, setVendasItens] = useState<VendaItem[]>(isSupabaseConfigured ? [] : seedVendasItens)
   const [servicosItens, setServicosItens] = useState<ServicoItem[]>(isSupabaseConfigured ? [] : seedServicosItens)
   const [clienteVeiculos, setClienteVeiculos] = useState<ClienteVeiculoResumo[]>([])
@@ -251,6 +256,7 @@ function App() {
   const [isLoadingClientes, setIsLoadingClientes] = useState(isSupabaseConfigured)
   const [isLoadingOrcamentos, setIsLoadingOrcamentos] = useState(false)
   const [isLoadingTarefas, setIsLoadingTarefas] = useState(false)
+  const [isLoadingOportunidades, setIsLoadingOportunidades] = useState(false)
   const [dataError, setDataError] = useState('')
 
   useEffect(() => {
@@ -484,6 +490,44 @@ function App() {
   useEffect(() => {
     let isMounted = true
 
+    async function loadOportunidadesPage() {
+      if (isCheckingSession) return
+      if (!isSupabaseConfigured) return
+      if (!session) {
+        setOportunidades([])
+        setOportunidadesTotal(0)
+        return
+      }
+      if (view !== 'oportunidades') return
+
+      setIsLoadingOportunidades(true)
+      try {
+        const result = await listOportunidadesPage({
+          page: oportunidadesPage,
+          pageSize: 50,
+          filter: oportunidadesFilter,
+          vendedorId: session.role === 'vendedor' ? session.id : undefined,
+        })
+        if (!isMounted) return
+        setOportunidades(result.oportunidades)
+        setOportunidadesTotal(result.total)
+      } catch (exception) {
+        if (isMounted) setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar oportunidades.')
+      } finally {
+        if (isMounted) setIsLoadingOportunidades(false)
+      }
+    }
+
+    loadOportunidadesPage()
+
+    return () => {
+      isMounted = false
+    }
+  }, [isCheckingSession, oportunidadesFilter, oportunidadesPage, session, view])
+
+  useEffect(() => {
+    let isMounted = true
+
     async function loadRodobens() {
       if (isCheckingSession) return
       if (!session) {
@@ -601,7 +645,9 @@ function App() {
       })
   const carteiraClientes = filterClientes(scoredClientes, carteiraFiltro, scopedOrcamentos)
   const hasActiveClientFilter = clienteFiltro !== 'todos' || Boolean(query.trim())
-  const oportunidades = useMemo(() => buildOportunidades(scopedClientes, scopedOrcamentos), [scopedClientes, scopedOrcamentos])
+  const localOportunidades = useMemo(() => buildOportunidades(scopedClientes, scopedOrcamentos), [scopedClientes, scopedOrcamentos])
+  const visibleOportunidades = isSupabaseConfigured ? oportunidades : localOportunidades
+  const visibleOportunidadesTotal = isSupabaseConfigured ? oportunidadesTotal : localOportunidades.length
 
   if (isCheckingSession) {
     return (
@@ -749,7 +795,7 @@ function App() {
             orcamentos={scopedOrcamentos}
             importacoes={importacoes}
             usuarios={usuarios}
-            oportunidades={oportunidades}
+            oportunidades={visibleOportunidades}
           />
         )}
         {!canUseScopedClientViews && (
@@ -958,7 +1004,17 @@ function App() {
         )}
         {canUseScopedClientViews && view === 'oportunidades' && (
           <Oportunidades
-            oportunidades={oportunidades}
+            oportunidades={visibleOportunidades}
+            page={oportunidadesPage}
+            pageSize={50}
+            total={visibleOportunidadesTotal}
+            filter={oportunidadesFilter}
+            isLoading={isLoadingOportunidades}
+            onPageChange={setOportunidadesPage}
+            onFilterChange={(filter) => {
+              setOportunidadesFilter(filter)
+              setOportunidadesPage(1)
+            }}
             onCreateTask={async (oportunidade) => {
               const cliente = clientes.find((item) => item.id === oportunidade.clienteId)
               const created = await createTarefa({
@@ -978,6 +1034,11 @@ function App() {
                 },
                 ...current,
               ])
+              setOportunidades((current) =>
+                current.map((item) =>
+                  item.id === oportunidade.id ? { ...item, bloqueada: true, tarefaExistente: true } : item,
+                ),
+              )
               return created
             }}
           />
@@ -1755,34 +1816,49 @@ function FilterControl({
 
 function Oportunidades({
   oportunidades,
+  page,
+  pageSize,
+  total,
+  filter,
+  isLoading,
+  onPageChange,
+  onFilterChange,
   onCreateTask,
 }: {
   oportunidades: Oportunidade[]
+  page: number
+  pageSize: number
+  total: number
+  filter: OportunidadeFilter
+  isLoading: boolean
+  onPageChange: (page: number) => void
+  onFilterChange: (filter: OportunidadeFilter) => void
   onCreateTask: (oportunidade: Oportunidade) => Promise<Tarefa>
 }) {
-  const [filter, setFilter] = useState<'ativas' | 'bloqueadas' | 'todas'>('ativas')
   const [createdTasks, setCreatedTasks] = useState<string[]>([])
   const [error, setError] = useState('')
-  const filtered = oportunidades.filter((oportunidade) => {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const filtered = isSupabaseConfigured ? oportunidades : oportunidades.filter((oportunidade) => {
     if (filter === 'bloqueadas') return oportunidade.bloqueada
     if (filter === 'ativas') return !oportunidade.bloqueada
     return true
-  })
+  }).slice((page - 1) * pageSize, page * pageSize)
 
   return (
     <section className="panel wide">
       <div className="panel-header">
         <div>
           <h2>Motor de oportunidades</h2>
-          <p>Regras simples para recompra, inatividade, cadastro incompleto, orcamentos e venda cruzada.</p>
+          <p>{total} oportunidades calculadas no Supabase, com paginacao e bloqueio de duplicidade de tarefa.</p>
         </div>
         <div className="segmented">
-          <button className={filter === 'ativas' ? 'active' : ''} type="button" onClick={() => setFilter('ativas')}>Ativas</button>
-          <button className={filter === 'bloqueadas' ? 'active' : ''} type="button" onClick={() => setFilter('bloqueadas')}>Bloqueadas</button>
-          <button className={filter === 'todas' ? 'active' : ''} type="button" onClick={() => setFilter('todas')}>Todas</button>
+          <button className={filter === 'ativas' ? 'active' : ''} type="button" onClick={() => onFilterChange('ativas')}>Ativas</button>
+          <button className={filter === 'bloqueadas' ? 'active' : ''} type="button" onClick={() => onFilterChange('bloqueadas')}>Bloqueadas</button>
+          <button className={filter === 'todas' ? 'active' : ''} type="button" onClick={() => onFilterChange('todas')}>Todas</button>
         </div>
       </div>
       {error && <div className="alert">{error}</div>}
+      {isLoading && <div className="empty-state">Carregando oportunidades...</div>}
       <div className="table">
         <div className="table-head opportunity">
           <span>Cliente</span>
@@ -1800,8 +1876,10 @@ function Oportunidades({
             <span>{oportunidade.proximaAcao}</span>
             <span className="score">{oportunidade.prioridade}</span>
             <span>
-              {oportunidade.bloqueada ? (
-                <span className="status-pill">nao contatar</span>
+              {oportunidade.tarefaExistente ? (
+                <span className="status-pill">tarefa existente</span>
+              ) : oportunidade.bloqueada ? (
+                <span className="status-pill">bloqueada</span>
               ) : createdTasks.includes(oportunidade.id) ? (
                 <span className="status-pill">tarefa criada</span>
               ) : (
@@ -1824,6 +1902,12 @@ function Oportunidades({
             </span>
           </div>
         ))}
+        {!isLoading && filtered.length === 0 && <div className="empty-state">Nenhuma oportunidade neste filtro.</div>}
+      </div>
+      <div className="pagination">
+        <button className="button" type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>Anterior</button>
+        <span>Pagina {page} de {totalPages}</span>
+        <button className="button" type="button" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>Proxima</button>
       </div>
     </section>
   )

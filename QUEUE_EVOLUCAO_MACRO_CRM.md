@@ -32,17 +32,18 @@ Pronto quando:
 
 ### Q02 - Fila inteligente no Supabase
 
-Status: Em andamento.
+Status: Concluido.
 
 Objetivo:
 Tirar a fila inteligente do browser e gerar oportunidades/tarefas sugeridas pela base inteira.
 
 Entregas:
-- View/RPC para orcamentos vencidos/vencendo.
-- View/RPC para Rodobens sem primeiro contato.
-- View/RPC para clientes em risco sem compra.
-- Repository paginado.
-- Tela de tarefas usando dados globais, nao apenas clientes carregados.
+Ja entregue:
+- View global `oportunidades_clientes` com security invoker.
+- Regras para orcamentos abertos/vencidos, Rodobens sem primeiro contato, clientes em risco, recompra, sem vendedor, sem WhatsApp e alto valor sem contato.
+- Repository paginado com filtros de ativas, bloqueadas e todas.
+- Tela de oportunidades usando dados globais do Supabase, nao apenas clientes carregados.
+- Criar tarefa a partir de sugestao marca a oportunidade como bloqueada por tarefa existente.
 
 Pronto quando:
 - Admin ve a fila da base inteira.
