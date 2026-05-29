@@ -2,7 +2,7 @@ import { getSupabase } from '../lib/supabase'
 import { listClientesPage } from './clientesRepository'
 import type { CampanhaEnvio, CampanhaEnvioStatus, CarteiraFiltro, Cliente } from '../types'
 
-export type CampanhaSegmentoId = 'inativos-90' | 'rodobens-pendentes' | 'sem-contato-60' | 'sem-whatsapp'
+export type CampanhaSegmentoId = 'inativos-90' | 'rodobens-pendentes' | 'sem-contato-60' | 'sem-whatsapp' | 'selecionados'
 
 export type CampanhaSegmento = {
   id: CampanhaSegmentoId
@@ -25,6 +25,8 @@ export type CampanhaFiltroUsado = {
   segmentoId: CampanhaSegmentoId
   filtros?: CampanhaPublicoFiltros
   query?: string
+  clienteIds?: string[]
+  origemLista?: string
 }
 
 export type CampanhaSalva = {
@@ -155,6 +157,15 @@ export const campanhaSegmentos: CampanhaSegmento[] = [
     template:
       'Atualizar cadastro de {primeiro_nome}: cliente sem WhatsApp principal no CRM.',
   },
+  {
+    id: 'selecionados',
+    nome: 'Selecao manual',
+    descricao: 'Lista salva a partir de oportunidades, Inbox Rodobens ou selecao operacional.',
+    campanhaNome: 'Campanha por selecao manual',
+    campanhaId: 'campanha-selecao-manual',
+    template:
+      'Bom dia, {primeiro_nome}. Aqui e {nome_vendedor}, da Capital Truck Center. Separei seu cadastro para uma acao comercial e queria entender como podemos ajudar com pneus ou servicos.',
+  },
 ]
 
 export async function listCampanhaSegmento(input: {
@@ -165,13 +176,21 @@ export async function listCampanhaSegmento(input: {
   filtros?: CampanhaPublicoFiltros
   campanhaId?: string
   campanhaNome?: string
+  clienteIds?: string[]
 }): Promise<{ clientes: Cliente[]; total: number; statuses: Record<string, CampanhaEnvioStatus> }> {
   const segmento = campanhaSegmentos.find((item) => item.id === input.segmentoId) ?? campanhaSegmentos[0]
   const clienteIds = input.filtros?.produtoTerm?.trim()
     ? await findClientesByProdutoOuServico(input.filtros.produtoTerm)
-    : undefined
+    : input.clienteIds
   const result =
-    segmento.id === 'rodobens-pendentes'
+    segmento.id === 'selecionados'
+      ? await listClientesPage({
+          page: input.page,
+          pageSize: input.pageSize,
+          query: input.query,
+          clienteIds: input.clienteIds ?? [],
+        })
+      : segmento.id === 'rodobens-pendentes'
       ? await listClientesPage({
           page: input.page,
           pageSize: input.pageSize,
@@ -259,6 +278,53 @@ export async function createCampanhaSalva(input: {
 
   if (error) throw error
   return mapCampanha(data as CampanhaRow)
+}
+
+export async function createCampanhaFromClienteIds(input: {
+  nome: string
+  descricao?: string
+  objetivo?: string
+  mensagemModelo: string
+  clienteIds: string[]
+  origemLista: string
+  criadaPor?: string
+}): Promise<{ campanha: CampanhaSalva; enviosCriados: number }> {
+  const uniqueClienteIds = [...new Set(input.clienteIds)].filter(Boolean)
+  const campanha = await createCampanhaSalva({
+    nome: input.nome,
+    descricao: input.descricao,
+    objetivo: input.objetivo,
+    mensagemModelo: input.mensagemModelo,
+    filtroUsado: {
+      segmentoId: 'selecionados',
+      clienteIds: uniqueClienteIds,
+      origemLista: input.origemLista,
+    },
+    criadaPor: input.criadaPor,
+  })
+
+  const clientes = await listClientesPage({
+    page: 1,
+    pageSize: Math.max(uniqueClienteIds.length, 1),
+    clienteIds: uniqueClienteIds,
+  })
+
+  let enviosCriados = 0
+  for (const cliente of clientes.clientes) {
+    const mensagemFinal = applyCampaignTemplate(input.mensagemModelo, cliente)
+    await upsertCampanhaEnvio({
+      campanhaId: campanha.id,
+      campanhaNome: campanha.nome,
+      clienteId: cliente.id,
+      vendedorId: cliente.vendedorId,
+      telefone: cliente.whatsapp,
+      mensagemFinal,
+      status: 'pendente',
+    })
+    enviosCriados += 1
+  }
+
+  return { campanha, enviosCriados }
 }
 
 export async function listCampanhasResumo(): Promise<CampanhaResumo[]> {
@@ -578,4 +644,11 @@ function mapCampanhaResumoView(row: CampanhaResumoRow): CampanhaResumo {
 function calculateRoiPercent(receita: number, custo: number) {
   if (!custo) return 0
   return Math.round(((receita - custo) / custo) * 100)
+}
+
+function applyCampaignTemplate(template: string, cliente: Cliente) {
+  const primeiroNome = (cliente.responsavel || cliente.nome).split(' ')[0]
+  return template
+    .replaceAll('{primeiro_nome}', primeiroNome)
+    .replaceAll('{nome_vendedor}', cliente.vendedorNome || 'Capital Truck Center')
 }

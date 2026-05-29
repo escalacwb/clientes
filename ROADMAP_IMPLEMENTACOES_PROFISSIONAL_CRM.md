@@ -1321,6 +1321,24 @@ Validacao:
 Proximo passo tecnico:
 - Criar campanhas salvas diretamente a partir de uma selecao feita em Oportunidades/Rodobens, preservando o segmento e evitando duplicidade por cliente.
 
+### 2026-05-29 - Campanhas a partir de selecao operacional
+
+Status: concluido.
+
+Entregue:
+- O Motor de oportunidades ganhou selecao de oportunidades em qualquer tipo de fila.
+- A selecao pode virar uma campanha salva real, com contatos pendentes ja registrados em `campanha_envios`.
+- A Inbox Rodobens tambem pode transformar leads selecionados em campanha de primeiro contato.
+- Campanhas criadas por selecao usam segmento `Selecao manual`, preservam os `clienteIds` originais no filtro salvo e reaparecem no modulo Campanhas sem remontar filtros.
+- A deduplicacao nativa de `campanha_envios` por `campanha_id, cliente_id` impede repeticao dentro da mesma campanha.
+
+Validacao:
+- Build passou com `npm run build`.
+- Playwright local confirmou os botoes `Gerar campanha` em Oportunidades e Inbox Rodobens e o segmento `Selecao manual` em Campanhas.
+
+Proximo passo tecnico:
+- Criar uma experiencia de follow-up de campanha mais gerencial: fila por status, SLA de resposta, criar orcamento/tarefa em lote e relatorio por vendedor.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

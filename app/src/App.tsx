@@ -19,7 +19,7 @@ import {
   UsersRound,
   WalletCards,
 } from 'lucide-react'
-import { lazy, type FormEvent, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, type FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import {
   clientes as seedClientes,
@@ -54,6 +54,7 @@ import { getCurrentSession, signInWithPassword, signOut } from './repositories/a
 import { listClienteAlteracoes } from './repositories/auditoriaRepository'
 import {
   campanhaSegmentos,
+  createCampanhaFromClienteIds,
   createCampanhaSalva,
   listClienteCampanhaEnvios,
   listCampanhaSegmento,
@@ -294,6 +295,7 @@ function App() {
   const [isLoadingRodobens, setIsLoadingRodobens] = useState(false)
   const [quoteSourceView, setQuoteSourceView] = useState('clientes')
   const [quoteOriginContext, setQuoteOriginContext] = useState<QuoteOriginContext>({ kind: 'cliente', label: 'Ficha do cliente' })
+  const [campaignToOpenId, setCampaignToOpenId] = useState('')
   const [isLoadingData, setIsLoadingData] = useState(isSupabaseConfigured)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [isLoadingClientes, setIsLoadingClientes] = useState(isSupabaseConfigured)
@@ -1159,6 +1161,20 @@ function App() {
                   return rodobensStatusFilter === 'todos' || item.leadQualificacaoStatus === rodobensStatusFilter
                 }))
             }}
+            onCreateCampaignFromSelection={async (clienteIds) => {
+              const { campanha, enviosCriados } = await createCampanhaFromClienteIds({
+                nome: `Rodobens selecionados - ${new Date().toISOString().slice(0, 10)}`,
+                descricao: 'Campanha criada a partir da selecao manual no Inbox Rodobens.',
+                objetivo: 'Primeiro contato e qualificacao de leads Rodobens.',
+                mensagemModelo: campanhaSegmentos.find((item) => item.id === 'rodobens-pendentes')?.template ?? campanhaSegmentos[0].template,
+                clienteIds,
+                origemLista: 'inbox_rodobens',
+                criadaPor: session.id,
+              })
+              setCampaignToOpenId(campanha.id)
+              setView('campanhas')
+              return enviosCriados
+            }}
           />
         )}
         {canUseScopedClientViews && ['cliente360', 'orcamento-editor'].includes(view) && !hasSelectedClient && (
@@ -1238,6 +1254,21 @@ function App() {
                 ),
               )
               return created
+            }}
+            onCreateCampaignFromSelection={async (clienteIds, tipo) => {
+              const tipoLabel = tipo === 'todos' ? 'oportunidades' : opportunityTypeLabel(tipo)
+              const { campanha, enviosCriados } = await createCampanhaFromClienteIds({
+                nome: `${tipoLabel} - ${new Date().toISOString().slice(0, 10)}`,
+                descricao: 'Campanha criada a partir da selecao manual no motor de oportunidades.',
+                objetivo: `Acionar clientes da fila ${tipoLabel}.`,
+                mensagemModelo: campanhaSegmentos.find((item) => item.id === 'selecionados')?.template ?? campanhaSegmentos[0].template,
+                clienteIds,
+                origemLista: `oportunidades:${tipo}`,
+                criadaPor: session.id,
+              })
+              setCampaignToOpenId(campanha.id)
+              setView('campanhas')
+              return enviosCriados
             }}
           />
         )}
@@ -1354,6 +1385,7 @@ function App() {
           <Campanhas
             usuarios={usuarios}
             currentUser={session}
+            initialCampanhaId={campaignToOpenId}
             onOpenBudgetEditor={(cliente, originContext) => {
               setClientes((current) =>
                 current.some((item) => item.id === cliente.id) ? current : [cliente, ...current],
@@ -1982,6 +2014,7 @@ function RodobensInbox({
   onAddInteraction,
   onCreateTask,
   onUpdateQualificacao,
+  onCreateCampaignFromSelection,
 }: {
   leads: Cliente[]
   funil: RodobensFunilResumo[]
@@ -1998,12 +2031,14 @@ function RodobensInbox({
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
   onCreateTask: (task: TarefaInput) => Promise<Tarefa>
   onUpdateQualificacao: (cliente: Cliente, status: LeadQualificacaoStatus, observacao?: string) => Promise<void>
+  onCreateCampaignFromSelection: (clienteIds: string[]) => Promise<number>
 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const safePage = Math.min(page, totalPages)
   const [statusMessage, setStatusMessage] = useState('')
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([])
   const [isCreatingBulkTasks, setIsCreatingBulkTasks] = useState(false)
+  const [isCreatingCampaign, setIsCreatingCampaign] = useState(false)
   const statusTotals = new Map(funil.map((item) => [item.status, item]))
   const selectableLeadIds = leads.map((cliente) => cliente.id)
   const allLeadsSelected = selectableLeadIds.length > 0 && selectableLeadIds.every((id) => selectedLeadIds.includes(id))
@@ -2064,6 +2099,22 @@ function RodobensInbox({
       setStatusMessage(exception instanceof Error ? exception.message : 'Nao foi possivel criar as tarefas em lote.')
     } finally {
       setIsCreatingBulkTasks(false)
+    }
+  }
+
+  async function createCampaignFromSelectedLeads() {
+    if (selectedLeadIds.length === 0) return
+
+    setIsCreatingCampaign(true)
+    setStatusMessage('')
+    try {
+      const totalEnvios = await onCreateCampaignFromSelection(selectedLeadIds)
+      setSelectedLeadIds([])
+      setStatusMessage(`Campanha criada com ${totalEnvios} contatos selecionados.`)
+    } catch (exception) {
+      setStatusMessage(exception instanceof Error ? exception.message : 'Nao foi possivel criar a campanha selecionada.')
+    } finally {
+      setIsCreatingCampaign(false)
     }
   }
 
@@ -2129,6 +2180,14 @@ function RodobensInbox({
             onClick={createBulkContactTasks}
           >
             {isCreatingBulkTasks ? 'Criando...' : `Criar ${selectedLeadIds.length || ''} tarefas`}
+          </button>
+          <button
+            className="button"
+            type="button"
+            disabled={selectedLeadIds.length === 0 || isCreatingCampaign}
+            onClick={createCampaignFromSelectedLeads}
+          >
+            {isCreatingCampaign ? 'Gerando...' : 'Gerar campanha'}
           </button>
           <span className="status-pill">{selectedLeadIds.length} selecionados</span>
         </div>
@@ -2280,6 +2339,7 @@ function Oportunidades({
   onRefresh,
   onAssignSelected,
   onCreateTask,
+  onCreateCampaignFromSelection,
 }: {
   oportunidades: Oportunidade[]
   resumo: OportunidadeResumo[]
@@ -2297,6 +2357,7 @@ function Oportunidades({
   onRefresh: () => Promise<void>
   onAssignSelected: (clienteIds: string[], vendedorId: string) => Promise<number>
   onCreateTask: (oportunidade: Oportunidade) => Promise<Tarefa>
+  onCreateCampaignFromSelection: (clienteIds: string[], tipo: string) => Promise<number>
 }) {
   const [createdTasks, setCreatedTasks] = useState<string[]>([])
   const [error, setError] = useState('')
@@ -2304,6 +2365,7 @@ function Oportunidades({
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [bulkVendedorId, setBulkVendedorId] = useState('')
   const [isAssigning, setIsAssigning] = useState(false)
+  const [isCreatingCampaign, setIsCreatingCampaign] = useState(false)
   const vendedores = usuarios.filter((usuario) => usuario.role === 'vendedor')
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const totalAtivas = resumo.reduce((sum, item) => sum + item.ativas, 0)
@@ -2319,6 +2381,7 @@ function Oportunidades({
     .filter((oportunidade) => !oportunidade.bloqueada && !oportunidade.tarefaExistente)
     .map((oportunidade) => oportunidade.id)
   const allVisibleSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id))
+  const selectedOportunidades = filtered.filter((oportunidade) => selectedIds.includes(oportunidade.id))
 
   useEffect(() => {
     setSelectedIds([])
@@ -2372,8 +2435,8 @@ function Oportunidades({
         </label>
       </div>
       {error && <div className="alert">{error}</div>}
-      {isSemVendedor && (
-        <div className="bulk-action-bar">
+      <div className="bulk-action-bar">
+        {isSemVendedor && (
           <label>
             Vendedor responsavel
             <select value={bulkVendedorId} onChange={(event) => setBulkVendedorId(event.target.value)}>
@@ -2383,16 +2446,18 @@ function Oportunidades({
               ))}
             </select>
           </label>
-          <button
-            className="button"
-            type="button"
-            disabled={selectableIds.length === 0}
-            onClick={() => {
-              setSelectedIds(allVisibleSelected ? [] : selectableIds)
-            }}
-          >
-            {allVisibleSelected ? 'Limpar selecao' : 'Selecionar pagina'}
-          </button>
+        )}
+        <button
+          className="button"
+          type="button"
+          disabled={selectableIds.length === 0}
+          onClick={() => {
+            setSelectedIds(allVisibleSelected ? [] : selectableIds)
+          }}
+        >
+          {allVisibleSelected ? 'Limpar selecao' : 'Selecionar pagina'}
+        </button>
+        {isSemVendedor && (
           <button
             className="button primary"
             type="button"
@@ -2401,7 +2466,7 @@ function Oportunidades({
               setError('')
               setIsAssigning(true)
               try {
-                const clienteIds = selectedIds.map((id) => id.split('-sem_vendedor')[0])
+                const clienteIds = selectedOportunidades.map((oportunidade) => oportunidade.clienteId)
                 const updated = await onAssignSelected(clienteIds, bulkVendedorId)
                 setSelectedIds([])
                 setBulkVendedorId('')
@@ -2415,8 +2480,30 @@ function Oportunidades({
           >
             {isAssigning ? 'Atribuindo...' : `Atribuir ${selectedIds.length || ''}`}
           </button>
-        </div>
-      )}
+        )}
+        <button
+          className="button"
+          type="button"
+          disabled={selectedIds.length === 0 || isCreatingCampaign}
+          onClick={async () => {
+            setError('')
+            setIsCreatingCampaign(true)
+            try {
+              const clienteIds = selectedOportunidades.map((oportunidade) => oportunidade.clienteId)
+              const totalEnvios = await onCreateCampaignFromSelection(clienteIds, tipoFilter)
+              setSelectedIds([])
+              setError(`Campanha criada com ${totalEnvios} contatos selecionados.`)
+            } catch (exception) {
+              setError(exception instanceof Error ? exception.message : 'Nao foi possivel criar a campanha.')
+            } finally {
+              setIsCreatingCampaign(false)
+            }
+          }}
+        >
+          {isCreatingCampaign ? 'Gerando...' : 'Gerar campanha'}
+        </button>
+        <span className="status-pill">{selectedIds.length} selecionados</span>
+      </div>
       <div className="opportunity-summary-strip">
         <div className="opportunity-summary-card">
           <strong>{totalAtivas || total}</strong>
@@ -2438,8 +2525,8 @@ function Oportunidades({
       </div>
       {isLoading && filtered.length === 0 && <div className="empty-state">Carregando oportunidades...</div>}
       <div className="table">
-        <div className={isSemVendedor ? 'table-head opportunity assign-opportunity' : 'table-head opportunity'}>
-          {isSemVendedor && <span>Sel.</span>}
+        <div className="table-head opportunity assign-opportunity">
+          <span>Sel.</span>
           <span>Cliente</span>
           <span>Tipo</span>
           <span>Motivo</span>
@@ -2448,27 +2535,22 @@ function Oportunidades({
           <span>Acoes</span>
         </div>
         {filtered.map((oportunidade) => (
-          <div className={isSemVendedor
-            ? oportunidade.bloqueada ? 'table-row opportunity assign-opportunity blocked' : 'table-row opportunity assign-opportunity'
-            : oportunidade.bloqueada ? 'table-row opportunity blocked' : 'table-row opportunity'
-          } key={oportunidade.id}>
-            {isSemVendedor && (
-              <span>
-                <input
-                  type="checkbox"
-                  checked={selectedIds.includes(oportunidade.id)}
-                  disabled={oportunidade.bloqueada || oportunidade.tarefaExistente}
-                  onChange={(event) => {
-                    setSelectedIds((current) =>
-                      event.target.checked
-                        ? [...new Set([...current, oportunidade.id])]
-                        : current.filter((id) => id !== oportunidade.id),
-                    )
-                  }}
-                  aria-label={`Selecionar ${oportunidade.clienteNome}`}
-                />
-              </span>
-            )}
+          <div className={oportunidade.bloqueada ? 'table-row opportunity assign-opportunity blocked' : 'table-row opportunity assign-opportunity'} key={oportunidade.id}>
+            <span>
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(oportunidade.id)}
+                disabled={oportunidade.bloqueada || oportunidade.tarefaExistente}
+                onChange={(event) => {
+                  setSelectedIds((current) =>
+                    event.target.checked
+                      ? [...new Set([...current, oportunidade.id])]
+                      : current.filter((id) => id !== oportunidade.id),
+                  )
+                }}
+                aria-label={`Selecionar ${oportunidade.clienteNome}`}
+              />
+            </span>
             <span><strong>{oportunidade.clienteNome}</strong></span>
             <span>{oportunidade.tipo}</span>
             <span>{oportunidade.motivo}</span>
@@ -5519,12 +5601,14 @@ function Mesclagem({
 function Campanhas({
   usuarios,
   currentUser,
+  initialCampanhaId,
   onOpenBudgetEditor,
   onAddInteraction,
   onAddTask,
 }: {
   usuarios: Vendedor[]
   currentUser: SessaoUsuario
+  initialCampanhaId?: string
   onOpenBudgetEditor: (cliente: Cliente, originContext: QuoteOriginContext) => void
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
   onAddTask: (task: TarefaInput) => Promise<Tarefa>
@@ -5551,6 +5635,7 @@ function Campanhas({
   const [campaignError, setCampaignError] = useState('')
   const [selectedCampaignClientIds, setSelectedCampaignClientIds] = useState<string[]>([])
   const [isBulkCampaignUpdating, setIsBulkCampaignUpdating] = useState(false)
+  const appliedInitialCampanhaIdRef = useRef('')
   const segmento = campanhaSegmentos.find((item) => item.id === segmentoId) ?? campanhaSegmentos[0]
   const activeCampaignResumo = campanhasResumo.find((resumo) => resumo.campanhaId === activeCampanhaId)
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
@@ -5575,7 +5660,16 @@ function Campanhas({
     setIsLoading(true)
     setCampaignError('')
 
-    listCampanhaSegmento({ segmentoId, page, pageSize, query, filtros: publicoFiltros, campanhaId: activeCampanhaId })
+    const activeSavedCampaign = campanhasSalvas.find((campanha) => campanha.id === activeCampanhaId)
+    listCampanhaSegmento({
+      segmentoId,
+      page,
+      pageSize,
+      query,
+      filtros: publicoFiltros,
+      campanhaId: activeCampanhaId,
+      clienteIds: activeSavedCampaign?.filtroUsado.clienteIds,
+    })
       .then((result) => {
         if (cancelled) return
         setClientes(result.clientes)
@@ -5610,6 +5704,13 @@ function Campanhas({
       })
       .catch((exception) => setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar campanhas salvas.'))
   }, [])
+
+  useEffect(() => {
+    if (!initialCampanhaId || appliedInitialCampanhaIdRef.current === initialCampanhaId) return
+    if (!campanhasSalvas.some((campanha) => campanha.id === initialCampanhaId)) return
+    appliedInitialCampanhaIdRef.current = initialCampanhaId
+    applySavedCampaign(initialCampanhaId)
+  }, [initialCampanhaId, campanhasSalvas])
 
   async function refreshCampaignResumo() {
     try {
@@ -5676,6 +5777,7 @@ function Campanhas({
     setIsSaving(true)
     setCampaignError('')
     try {
+      const activeSavedCampaign = campanhasSalvas.find((campanha) => campanha.id === activeCampanhaId)
       const created = await createCampanhaSalva({
         nome,
         descricao: segmento.descricao,
@@ -5687,6 +5789,8 @@ function Campanhas({
           segmentoId,
           filtros: publicoFiltros,
           query,
+          clienteIds: activeSavedCampaign?.filtroUsado.clienteIds,
+          origemLista: activeSavedCampaign?.filtroUsado.origemLista,
         },
         criadaPor: currentUser.id,
       })
