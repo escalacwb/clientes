@@ -356,6 +356,43 @@ export type Oportunidade = {
   tarefaExistente?: boolean
 }
 
+export type OportunidadeEstagio =
+  | 'novo_lead'
+  | 'contato_iniciado'
+  | 'qualificado'
+  | 'orcamento'
+  | 'negociacao'
+  | 'ganho'
+  | 'perdido'
+
+export type OportunidadePipeline = {
+  id: string
+  clienteId: string
+  clienteNome: string
+  titulo: string
+  estagio: OportunidadeEstagio
+  origem: string
+  valorEstimado: number
+  probabilidade: number
+  previsaoFechamento?: string
+  responsavelId?: string
+  responsavelNome?: string
+  campanhaId?: string
+  orcamentoId?: string
+  motivoPerda?: string
+  observacao?: string
+  criadoEm: string
+  atualizadoEm: string
+  encerradaEm?: string
+}
+
+export type OportunidadePipelineInput = Omit<
+  OportunidadePipeline,
+  'id' | 'clienteNome' | 'responsavelNome' | 'criadoEm' | 'atualizadoEm' | 'encerradaEm'
+> & {
+  encerradaEm?: string
+}
+
 export type ClienteMesclagem = {
   id: string
   clientePrincipalId: string

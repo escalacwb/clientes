@@ -98,7 +98,7 @@ Pronto quando:
 
 ### M03 - Pipeline comercial real
 
-Status: Pendente.
+Status: Parcial.
 
 Objetivo:
 Separar oportunidade/deal de cliente, permitindo medir funil completo.
@@ -110,6 +110,13 @@ Entregas:
 - Valor estimado, probabilidade, previsao de fechamento e responsavel.
 - Motivo de perda obrigatorio.
 - Conversao por origem e vendedor.
+
+Ja entregue:
+- Criada tabela real `oportunidades` no Supabase com estagio, origem, valor estimado, probabilidade, previsao, responsavel, vinculos com campanha/orcamento e encerramento.
+- Criada view `vw_oportunidades_pipeline` com cliente, responsavel, valor ponderado e status de prazo.
+- Tela `Oportunidades` ganhou resumo de pipeline aberto, forecast e distribuicao por estagio.
+- Sugestoes da fila cacheada agora podem virar deal real em um clique.
+- Estagio do deal pode ser atualizado direto pela tela.
 
 Pronto quando:
 - Cada venda potencial pode ser acompanhada ate ganhar ou perder.

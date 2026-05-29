@@ -137,6 +137,7 @@ import { listOrcamentoVersoes } from './repositories/orcamentosRepository'
 import { reviseOrcamento } from './repositories/orcamentosRepository'
 import { updateOrcamentoStatus } from './repositories/orcamentosRepository'
 import { listOportunidadesPage, listOportunidadesResumo, markOportunidadeComTarefa, refreshOportunidadesCache, type OportunidadeFilter, type OportunidadeResumo } from './repositories/oportunidadesRepository'
+import { createPipelineFromSuggestion, listPipelineOportunidades, updatePipelineStage } from './repositories/pipelineRepository'
 import {
   completeTarefa,
   createTarefa,
@@ -170,6 +171,8 @@ import type {
   OrcamentoItemInput,
   OrcamentoVersao,
   Oportunidade,
+  OportunidadeEstagio,
+  OportunidadePipeline,
   PossivelDuplicado,
   ServicoItem,
   SessaoUsuario,
@@ -313,6 +316,7 @@ function App() {
   const [oportunidades, setOportunidades] = useState<Oportunidade[]>([])
   const [oportunidadesTotal, setOportunidadesTotal] = useState(0)
   const [oportunidadesResumo, setOportunidadesResumo] = useState<OportunidadeResumo[]>([])
+  const [pipelineOportunidades, setPipelineOportunidades] = useState<OportunidadePipeline[]>([])
   const [oportunidadesPage, setOportunidadesPage] = useState(1)
   const [oportunidadesFilter, setOportunidadesFilter] = useState<OportunidadeFilter>('ativas')
   const [oportunidadesTipoFilter, setOportunidadesTipoFilter] = useState('todos')
@@ -771,7 +775,7 @@ function App() {
       setIsLoadingOportunidades(true)
       try {
         const vendedorId = session.role === 'vendedor' ? session.id : undefined
-        const [result, resumo] = await Promise.all([
+        const [result, resumo, pipeline] = await Promise.all([
           listOportunidadesPage({
             page: oportunidadesPage,
             pageSize: 50,
@@ -780,11 +784,15 @@ function App() {
             vendedorId,
           }),
           listOportunidadesResumo(vendedorId),
+          listPipelineOportunidades(120),
         ])
         if (!isMounted) return
         setOportunidades(result.oportunidades)
         setOportunidadesTotal(result.total)
         setOportunidadesResumo(resumo)
+        setPipelineOportunidades(
+          vendedorId ? pipeline.filter((item) => item.responsavelId === vendedorId) : pipeline,
+        )
         clearModuleError('oportunidades')
       } catch (exception) {
         if (isMounted) setModuleError('oportunidades', exception instanceof Error ? exception.message : 'Nao foi possivel carregar oportunidades.')
@@ -1701,6 +1709,7 @@ function App() {
         {canUseScopedClientViews && view === 'oportunidades' && (
           <Oportunidades
             oportunidades={visibleOportunidades}
+            pipeline={pipelineOportunidades}
             resumo={oportunidadesResumo}
             page={oportunidadesPage}
             pageSize={50}
@@ -1760,6 +1769,17 @@ function App() {
                 ),
               )
               return created
+            }}
+            onCreatePipeline={async (oportunidade) => {
+              const cliente = clientes.find((item) => item.id === oportunidade.clienteId)
+              const created = await createPipelineFromSuggestion(oportunidade, cliente?.vendedorId ?? session.id)
+              setPipelineOportunidades((current) => [created, ...current])
+              return created
+            }}
+            onUpdatePipelineStage={async (dealId, estagio, motivoPerda) => {
+              const updated = await updatePipelineStage(dealId, estagio, motivoPerda)
+              setPipelineOportunidades((current) => current.map((item) => (item.id === dealId ? updated : item)))
+              return updated
             }}
             onCreateCampaignFromSelection={async (clienteIds, tipo) => {
               const tipoLabel = tipo === 'todos' ? 'oportunidades' : opportunityTypeLabel(tipo)
@@ -3699,8 +3719,32 @@ function opportunityTypeLabel(type: string) {
   return labels[type] ?? type.replaceAll('_', ' ')
 }
 
+function pipelineStageLabel(stage: OportunidadeEstagio) {
+  const labels: Record<OportunidadeEstagio, string> = {
+    novo_lead: 'Novo lead',
+    contato_iniciado: 'Contato iniciado',
+    qualificado: 'Qualificado',
+    orcamento: 'Orcamento',
+    negociacao: 'Negociacao',
+    ganho: 'Ganho',
+    perdido: 'Perdido',
+  }
+  return labels[stage]
+}
+
+const pipelineStages: OportunidadeEstagio[] = [
+  'novo_lead',
+  'contato_iniciado',
+  'qualificado',
+  'orcamento',
+  'negociacao',
+  'ganho',
+  'perdido',
+]
+
 function Oportunidades({
   oportunidades,
+  pipeline,
   resumo,
   page,
   pageSize,
@@ -3716,9 +3760,12 @@ function Oportunidades({
   onRefresh,
   onAssignSelected,
   onCreateTask,
+  onCreatePipeline,
+  onUpdatePipelineStage,
   onCreateCampaignFromSelection,
 }: {
   oportunidades: Oportunidade[]
+  pipeline: OportunidadePipeline[]
   resumo: OportunidadeResumo[]
   page: number
   pageSize: number
@@ -3734,9 +3781,12 @@ function Oportunidades({
   onRefresh: () => Promise<void>
   onAssignSelected: (clienteIds: string[], vendedorId: string) => Promise<number>
   onCreateTask: (oportunidade: Oportunidade) => Promise<Tarefa>
+  onCreatePipeline: (oportunidade: Oportunidade) => Promise<OportunidadePipeline>
+  onUpdatePipelineStage: (dealId: string, estagio: OportunidadeEstagio, motivoPerda?: string) => Promise<OportunidadePipeline>
   onCreateCampaignFromSelection: (clienteIds: string[], tipo: string) => Promise<number>
 }) {
   const [createdTasks, setCreatedTasks] = useState<string[]>([])
+  const [createdPipeline, setCreatedPipeline] = useState<string[]>([])
   const [error, setError] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -3748,6 +3798,9 @@ function Oportunidades({
   const totalAtivas = resumo.reduce((sum, item) => sum + item.ativas, 0)
   const totalBloqueadas = resumo.reduce((sum, item) => sum + item.bloqueadas, 0)
   const topResumo = resumo.slice(0, 6)
+  const pipelineAberto = pipeline.filter((item) => item.estagio !== 'ganho' && item.estagio !== 'perdido')
+  const pipelineValor = pipelineAberto.reduce((sum, item) => sum + item.valorEstimado, 0)
+  const pipelineForecast = pipelineAberto.reduce((sum, item) => sum + (item.valorEstimado * item.probabilidade) / 100, 0)
   const filtered = isSupabaseConfigured ? oportunidades : oportunidades.filter((oportunidade) => {
     if (filter === 'bloqueadas') return oportunidade.bloqueada
     if (filter === 'ativas') return !oportunidade.bloqueada
@@ -3818,6 +3871,51 @@ function Oportunidades({
           </select>
         </label>
       </div>
+      <div className="pipeline-overview">
+        <div className="pipeline-summary-card">
+          <span>Pipeline real</span>
+          <strong>{pipelineAberto.length}</strong>
+          <small>{money(pipelineValor)} em aberto - forecast {money(pipelineForecast)}</small>
+        </div>
+        {pipelineStages.slice(0, 5).map((stage) => {
+          const stageDeals = pipelineAberto.filter((item) => item.estagio === stage)
+          return (
+            <div className="pipeline-stage-card" key={stage}>
+              <span>{pipelineStageLabel(stage)}</span>
+              <strong>{stageDeals.length}</strong>
+              <small>{money(stageDeals.reduce((sum, item) => sum + item.valorEstimado, 0))}</small>
+            </div>
+          )
+        })}
+      </div>
+      {pipelineAberto.length > 0 && (
+        <div className="pipeline-list">
+          {pipelineAberto.slice(0, 6).map((deal) => (
+            <div className="pipeline-deal-row" key={deal.id}>
+              <span>
+                <strong>{deal.titulo}</strong>
+                <small>{deal.clienteNome || 'Cliente'} - {deal.responsavelNome || 'Sem responsavel'} - {deal.previsaoFechamento ? dateLabel(deal.previsaoFechamento) : 'Sem previsao'}</small>
+              </span>
+              <select
+                value={deal.estagio}
+                onChange={async (event) => {
+                  setError('')
+                  try {
+                    await onUpdatePipelineStage(deal.id, event.target.value as OportunidadeEstagio)
+                  } catch (exception) {
+                    setError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o pipeline.')
+                  }
+                }}
+              >
+                {pipelineStages.map((stage) => (
+                  <option value={stage} key={stage}>{pipelineStageLabel(stage)}</option>
+                ))}
+              </select>
+              <b>{deal.valorEstimado > 0 ? money(deal.valorEstimado) : `${deal.probabilidade}%`}</b>
+            </div>
+          ))}
+        </div>
+      )}
       {error && <div className="alert">{error}</div>}
       <div className="work-batch-grid">
         {workBatches.map((batch) => (
@@ -3967,21 +4065,39 @@ function Oportunidades({
               ) : createdTasks.includes(oportunidade.id) ? (
                 <span className="status-pill">tarefa criada</span>
               ) : (
-                <button
-                  className="button primary"
-                  type="button"
-                  onClick={async () => {
-                    setError('')
-                    try {
-                      await onCreateTask(oportunidade)
-                      setCreatedTasks((current) => [...current, oportunidade.id])
-                    } catch (exception) {
-                      setError(exception instanceof Error ? exception.message : 'Nao foi possivel criar a tarefa.')
-                    }
-                  }}
-                >
-                  Criar tarefa
-                </button>
+                <span className="row-actions">
+                  <button
+                    className="button primary"
+                    type="button"
+                    onClick={async () => {
+                      setError('')
+                      try {
+                        await onCreateTask(oportunidade)
+                        setCreatedTasks((current) => [...current, oportunidade.id])
+                      } catch (exception) {
+                        setError(exception instanceof Error ? exception.message : 'Nao foi possivel criar a tarefa.')
+                      }
+                    }}
+                  >
+                    Tarefa
+                  </button>
+                  <button
+                    className="button"
+                    type="button"
+                    disabled={createdPipeline.includes(oportunidade.id)}
+                    onClick={async () => {
+                      setError('')
+                      try {
+                        await onCreatePipeline(oportunidade)
+                        setCreatedPipeline((current) => [...current, oportunidade.id])
+                      } catch (exception) {
+                        setError(exception instanceof Error ? exception.message : 'Nao foi possivel criar o deal.')
+                      }
+                    }}
+                  >
+                    {createdPipeline.includes(oportunidade.id) ? 'Deal criado' : 'Deal'}
+                  </button>
+                </span>
               )}
             </span>
           </div>

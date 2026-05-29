@@ -61,15 +61,19 @@ Proximos pontos:
 
 ## Sprint C - Pipeline real e oportunidades persistidas
 
-Status: Pendente.
+Status: Parcial.
 
 Proximos pontos:
-- Criar tabela `oportunidades`.
-- Estagios: novo lead, contato iniciado, qualificado, orcamento, negociacao, ganho, perdido.
-- Origem: Rodobens, campanha, recompra, importacao, vendedor, manual.
-- Valor estimado, probabilidade, previsao, responsavel e motivo de perda.
-- Sincronizar orcamentos e campanhas com oportunidades reais.
-- Tela kanban/lista de oportunidades com gargalo por etapa.
+- Criar tela kanban/lista completa de oportunidades com gargalo por etapa.
+- Sincronizar automaticamente orcamentos e campanhas com oportunidades reais.
+- Exigir motivo de perda ao mover deal para perdido.
+- Permitir editar valor estimado, probabilidade, previsao e responsavel.
+
+Entregue nesta rodada:
+- Tabela `oportunidades` real criada no Supabase.
+- View `vw_oportunidades_pipeline` criada para forecast e acompanhamento.
+- Motor de oportunidades passa a converter sugestao cacheada em deal persistido.
+- Tela de oportunidades mostra pipeline aberto, valor em aberto, forecast e estagios.
 
 ## Sprint D - Automacoes e sequencias
 
