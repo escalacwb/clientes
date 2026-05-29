@@ -4774,6 +4774,19 @@ function Tarefas({
     .filter((tarefa) => tarefa.status === 'aberta')
     .sort((a, b) => b.prioridade - a.prioridade || daysSince(b.dataVencimento) - daysSince(a.dataVencimento))
   const activeExecutionTask = executionQueue[Math.min(executionIndex, Math.max(executionQueue.length - 1, 0))]
+  const taskClientById = new Map(clientes.map((cliente) => [cliente.id, cliente]))
+
+  function taskWhatsAppHref(tarefa: Tarefa) {
+    const cliente = taskClientById.get(tarefa.clienteId)
+    if (!cliente?.whatsapp) return ''
+    const message = [
+      `Ola, ${cliente.nome}. Tudo bem?`,
+      `Aqui e da Capital Truck Center.`,
+      `Estou retomando sobre: ${tarefa.titulo}.`,
+      tarefa.descricao ? `Observacao: ${tarefa.descricao}` : '',
+    ].filter(Boolean).join('\n\n')
+    return `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(message)}`
+  }
 
   async function saveTaskReschedule(tarefa: Tarefa) {
     const draft = rescheduleDrafts[tarefa.id]
@@ -4793,6 +4806,19 @@ function Tarefas({
       setError(`${updated.titulo} reagendada para ${dateLabel(updated.dataVencimento)}.`)
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Nao foi possivel reagendar a tarefa.')
+    }
+  }
+
+  async function quickReschedule(tarefa: Tarefa, days: number, motivo: string) {
+    setError('')
+    setReschedulingId(tarefa.id)
+    try {
+      const updated = await onReschedule(tarefa.id, addDays(new Date().toISOString().slice(0, 10), days), motivo)
+      setError(`${updated.titulo} reagendada para ${dateLabel(updated.dataVencimento)}.`)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel reagendar a tarefa.')
+    } finally {
+      setReschedulingId('')
     }
   }
 
@@ -4945,6 +4971,11 @@ function Tarefas({
                 <b>{tarefa.prioridade}</b>
                 <div className="routine-actions">
                   <span className={`sla-pill ${sla.tone}`}>{sla.label}</span>
+                  {taskWhatsAppHref(tarefa) && (
+                    <a className="button" href={taskWhatsAppHref(tarefa)} target="_blank" rel="noreferrer">
+                      WhatsApp
+                    </a>
+                  )}
                   <button className="button" type="button" onClick={() => onOpenClient(tarefa.clienteId)}>Ficha</button>
                   <button
                     className="button"
@@ -4978,6 +5009,11 @@ function Tarefas({
               </div>
               <div className="task-execution-actions">
                 <span>{Math.min(executionIndex + 1, executionQueue.length)} de {executionQueue.length}</span>
+                {taskWhatsAppHref(activeExecutionTask) && (
+                  <a className="button primary" href={taskWhatsAppHref(activeExecutionTask)} target="_blank" rel="noreferrer">
+                    Abrir WhatsApp
+                  </a>
+                )}
                 <button className="button" type="button" onClick={() => onOpenClient(activeExecutionTask.clienteId)}>Ficha</button>
                 <button
                   className="button"
@@ -4989,6 +5025,22 @@ function Tarefas({
                   })}
                 >
                   Orcamento
+                </button>
+                <button
+                  className="button"
+                  type="button"
+                  disabled={reschedulingId === activeExecutionTask.id}
+                  onClick={() => quickReschedule(activeExecutionTask, 1, 'Cliente ficou para retorno amanha')}
+                >
+                  Amanhã
+                </button>
+                <button
+                  className="button"
+                  type="button"
+                  disabled={reschedulingId === activeExecutionTask.id}
+                  onClick={() => quickReschedule(activeExecutionTask, 3, 'Retorno comercial em 3 dias')}
+                >
+                  +3 dias
                 </button>
                 <button
                   className="button"
@@ -5143,6 +5195,21 @@ function Tarefas({
             <span>
               {tarefa.status === 'aberta' ? (
                 <div className="task-action-stack">
+                  {taskWhatsAppHref(tarefa) && (
+                    <a className="button" href={taskWhatsAppHref(tarefa)} target="_blank" rel="noreferrer">
+                      WhatsApp
+                    </a>
+                  )}
+                  <button className="button" onClick={() => onOpenClient(tarefa.clienteId)} type="button">
+                    Ficha
+                  </button>
+                  <button
+                    className="button"
+                    onClick={() => onOpenBudgetEditor(tarefa.clienteId, { kind: 'tarefa', sourceId: tarefa.id, label: tarefa.titulo })}
+                    type="button"
+                  >
+                    Orcar
+                  </button>
                   <button className="button primary" onClick={() => onComplete(tarefa.id)} type="button">
                     Concluir
                   </button>

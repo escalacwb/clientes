@@ -1580,6 +1580,21 @@ Validacao:
 Proximo passo tecnico:
 - Criar historico formal de aprovacoes/rejeicoes com tabela propria e levar isso para a tela de proposta.
 
+### 2026-05-29 - Tarefas em modo de execucao comercial
+
+Status: concluido - refinamento da rotina diaria.
+
+Entregue:
+- A fila comercial de tarefas ganhou WhatsApp direto quando o cliente tem telefone.
+- O modo `Iniciar fila` passou a permitir abrir WhatsApp, ficha, orcamento e reagendar rapido para amanha ou +3 dias.
+- A tabela de tarefas tambem ganhou acoes diretas de WhatsApp, Ficha 360 e Orcar, reduzindo troca de telas.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Evoluir o registro de resultado da tarefa para criar interacao estruturada e atualizar status do cliente automaticamente.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:
