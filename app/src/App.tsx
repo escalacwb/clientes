@@ -5552,7 +5552,6 @@ function OrcamentoEditor({
             {catalogQuickResults.map((catalogItem) => (
               <button className="catalog-pick-item" type="button" key={catalogItem.id} onClick={() => {
                 addCatalogItem(catalogItem)
-                setCatalogSearch('')
                 void loadCatalogSuggestions(catalogItem.id)
               }}>
                 <span>
