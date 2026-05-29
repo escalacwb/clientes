@@ -1339,6 +1339,7 @@ function App() {
             tarefas={cockpitTarefas}
             tarefasVencidas={cockpitTarefasVencidas}
             orcamentos={cockpitOrcamentos}
+            clientes={scoredClientes}
             rodobens={cockpitRodobens}
             oportunidades={cockpitOportunidades}
             campanhas={cockpitCampanhas}
@@ -1377,6 +1378,12 @@ function App() {
               setCockpitTarefas((current) => current.map((tarefa) => tarefa.id === id ? updated : tarefa).filter((tarefa) => tarefa.status === 'aberta'))
               setCockpitTarefasVencidas((current) => current.filter((tarefa) => tarefa.id !== id))
               setTarefas((current) => current.map((tarefa) => tarefa.id === id ? updated : tarefa))
+            }}
+            onCreateTask={async (task) => {
+              const created = await createTarefa(task)
+              setCockpitTarefas((current) => [created, ...current])
+              setTarefas((current) => [created, ...current])
+              return created
             }}
             onRunFollowupAutomations={async () => {
               const result = await runFollowupAutomations()
@@ -2444,6 +2451,7 @@ function Cockpit({
   tarefas,
   tarefasVencidas,
   orcamentos,
+  clientes,
   rodobens,
   oportunidades,
   campanhas,
@@ -2454,6 +2462,7 @@ function Cockpit({
   onOpenModule,
   onCompleteTask,
   onRescheduleTask,
+  onCreateTask,
   onRunFollowupAutomations,
 }: {
   currentUser: SessaoUsuario
@@ -2461,6 +2470,7 @@ function Cockpit({
   tarefas: Tarefa[]
   tarefasVencidas: Tarefa[]
   orcamentos: Orcamento[]
+  clientes: Array<Cliente & { score?: number; motivo?: string; proximaMelhorAcao?: string }>
   rodobens: Cliente[]
   oportunidades: Oportunidade[]
   campanhas: CampanhaInboxItem[]
@@ -2471,9 +2481,11 @@ function Cockpit({
   onOpenModule: (target: 'tarefas' | 'orcamentos' | 'rodobens' | 'oportunidades' | 'campanhas') => void
   onCompleteTask: (id: string) => Promise<void>
   onRescheduleTask: (id: string, dataVencimento: string, motivo: string) => Promise<void>
+  onCreateTask: (task: TarefaInput) => Promise<Tarefa>
   onRunFollowupAutomations: () => Promise<{ total: number; orcamentos: number; campanhas: number }>
 }) {
   const [busyTaskId, setBusyTaskId] = useState('')
+  const [creatingTaskClientId, setCreatingTaskClientId] = useState('')
   const [rescheduleTarget, setRescheduleTarget] = useState<Tarefa | null>(null)
   const [rescheduleDate, setRescheduleDate] = useState(tomorrowDate())
   const [rescheduleReason, setRescheduleReason] = useState('')
@@ -2486,6 +2498,23 @@ function Cockpit({
     .filter((tarefa) => isCommercialFollowupTask(tarefa))
     .sort((a, b) => b.prioridade - a.prioridade || a.dataVencimento.localeCompare(b.dataVencimento))
     .slice(0, 12)
+  const openTaskClientIds = new Set([...tarefas, ...tarefasVencidas].filter((tarefa) => tarefa.status === 'aberta').map((tarefa) => tarefa.clienteId))
+  const openBudgetClientIds = new Set(orcamentos.map((orcamento) => orcamento.clienteId))
+  const clientesSemProximaAcao = clientes
+    .filter((cliente) => {
+      if (cliente.status === 'Nao contatar' || cliente.leadQualificacaoStatus === 'nao_contatar') return false
+      if (openTaskClientIds.has(cliente.id) || openBudgetClientIds.has(cliente.id)) return false
+      const score = Number(cliente.score ?? opportunityScore(cliente, []))
+      const ultimaCompra = daysSince(cliente.ultimaCompraEm)
+      const ultimoContato = daysSince(cliente.ultimoContatoEm)
+      return cliente.status === 'Orcamento aberto'
+        || cliente.status === 'Reativar'
+        || score >= 62
+        || ultimaCompra >= 90
+        || ultimoContato >= 45
+    })
+    .sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0))
+    .slice(0, 8)
   const highPriorityTasks = tarefas
     .filter((tarefa) => tarefa.prioridade >= 80 && !todayTasks.some((item) => item.id === tarefa.id))
     .slice(0, 4)
@@ -2618,6 +2647,28 @@ function Cockpit({
     }
   }
 
+  async function createNoNextActionTask(cliente: Cliente & { score?: number; motivo?: string; proximaMelhorAcao?: string }) {
+    setCreatingTaskClientId(cliente.id)
+    try {
+      const score = Number(cliente.score ?? opportunityScore(cliente, []))
+      await onCreateTask({
+        clienteId: cliente.id,
+        vendedorId: cliente.vendedorId || currentUser.id,
+        titulo: 'Definir proxima acao comercial',
+        descricao: [
+          cliente.proximaMelhorAcao ?? bestNextAction(cliente),
+          cliente.motivo ? `Motivo: ${cliente.motivo}` : '',
+          cliente.whatsapp ? `WhatsApp: ${cliente.whatsapp}` : '',
+        ].filter(Boolean).join('\n'),
+        dataVencimento: tomorrowDate(),
+        prioridade: Math.min(95, Math.max(65, score)),
+        origem: 'cockpit:sem_proxima_acao',
+      })
+    } finally {
+      setCreatingTaskClientId('')
+    }
+  }
+
   return (
     <section className="cockpit-layout">
       <section className="panel wide cockpit-hero">
@@ -2632,6 +2683,7 @@ function Cockpit({
           <Info label="Respostas campanha" value={campanhas.length.toString()} />
           <Info label="Orc. vencidos" value={orcamentos.length.toString()} />
           <Info label="Sem cadastro" value={rodobens.length.toString()} />
+          <Info label="Sem prox. acao" value={clientesSemProximaAcao.length.toString()} />
         </div>
       </section>
 
@@ -2717,6 +2769,42 @@ function Cockpit({
             </article>
           ))}
           {nextActions.length === 0 && <div className="empty-state compact">Nenhuma acao urgente agora.</div>}
+        </div>
+      </section>
+
+      <section className="panel wide cockpit-followups">
+        <div className="panel-header">
+          <div>
+            <h2>Clientes sem proxima acao</h2>
+            <p>Clientes com potencial ou risco, mas sem tarefa aberta nem proposta vencida na fila.</p>
+          </div>
+          <button className="button" type="button" onClick={() => onOpenModule('tarefas')}>Abrir tarefas</button>
+        </div>
+        <div className="cockpit-list two-col">
+          {clientesSemProximaAcao.map((cliente) => (
+            <article className="cockpit-card" key={cliente.id}>
+              <div>
+                <strong>{cliente.nome}</strong>
+                <small>
+                  {cliente.cidade}/{cliente.uf} - {cliente.status} - score {Math.round(Number(cliente.score ?? opportunityScore(cliente, [])))}
+                </small>
+              </div>
+              <p>{cliente.proximaMelhorAcao ?? bestNextAction(cliente)}</p>
+              {cliente.motivo && <small className="muted">{cliente.motivo}</small>}
+              <div className="row-actions">
+                <button className="button" type="button" onClick={() => onOpenClient(cliente.id)}>Ficha</button>
+                <button
+                  className="button primary"
+                  type="button"
+                  disabled={creatingTaskClientId === cliente.id}
+                  onClick={() => createNoNextActionTask(cliente)}
+                >
+                  {creatingTaskClientId === cliente.id ? 'Criando...' : 'Criar follow-up'}
+                </button>
+              </div>
+            </article>
+          ))}
+          {clientesSemProximaAcao.length === 0 && <div className="empty-state compact">Todos os clientes prioritarios ja tem proxima acao.</div>}
         </div>
       </section>
 
