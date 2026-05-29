@@ -5549,6 +5549,8 @@ function Campanhas({
   const [statuses, setStatuses] = useState<Record<string, CampanhaEnvioStatus>>({})
   const [statusFilter, setStatusFilter] = useState<CampanhaEnvioStatus | 'todos'>('todos')
   const [campaignError, setCampaignError] = useState('')
+  const [selectedCampaignClientIds, setSelectedCampaignClientIds] = useState<string[]>([])
+  const [isBulkCampaignUpdating, setIsBulkCampaignUpdating] = useState(false)
   const segmento = campanhaSegmentos.find((item) => item.id === segmentoId) ?? campanhaSegmentos[0]
   const activeCampaignResumo = campanhasResumo.find((resumo) => resumo.campanhaId === activeCampanhaId)
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
@@ -5565,6 +5567,8 @@ function Campanhas({
     { pendente: 0, enviado: 0, respondeu: 0, nao_respondeu: 0, virou_orcamento: 0, ganhou: 0, perdido: 0, nao_contatar: 0 },
   )
   const filteredClientes = campanhaClientes.filter((cliente) => statusFilter === 'todos' || (statuses[cliente.id] ?? 'pendente') === statusFilter)
+  const selectableCampaignIds = filteredClientes.map((cliente) => cliente.id)
+  const allCampaignRowsSelected = selectableCampaignIds.length > 0 && selectableCampaignIds.every((id) => selectedCampaignClientIds.includes(id))
 
   useEffect(() => {
     let cancelled = false
@@ -5593,6 +5597,10 @@ function Campanhas({
       cancelled = true
     }
   }, [segmentoId, page, query, publicoFiltros, activeCampanhaId, campanhasSalvas])
+
+  useEffect(() => {
+    setSelectedCampaignClientIds([])
+  }, [activeCampanhaId, page, query, segmentoId, statusFilter, publicoFiltros])
 
   useEffect(() => {
     Promise.all([listCampanhasSalvas(), listCampanhasResumo()])
@@ -5733,6 +5741,24 @@ function Campanhas({
       await refreshCampaignResumo()
     } catch (exception) {
       setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o envio.')
+    }
+  }
+
+  async function markSelectedCampaignStatus(status: CampanhaEnvioStatus) {
+    const selectedClientes = filteredClientes.filter((cliente) => selectedCampaignClientIds.includes(cliente.id))
+    if (selectedClientes.length === 0) return
+
+    setIsBulkCampaignUpdating(true)
+    setCampaignError('')
+    try {
+      for (const cliente of selectedClientes) {
+        await markStatus(cliente, status, messageFor(cliente))
+      }
+      setSelectedCampaignClientIds([])
+    } catch (exception) {
+      setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar a campanha em lote.')
+    } finally {
+      setIsBulkCampaignUpdating(false)
     }
   }
 
@@ -5947,9 +5973,38 @@ function Campanhas({
       </div>
       {campaignError && <div className="alert">{campaignError}</div>}
       {isLoading && <div className="empty-state">Carregando segmento de campanha...</div>}
+      {!isLoading && filteredClientes.length > 0 && (
+        <div className="bulk-action-bar">
+          <button
+            className="button"
+            type="button"
+            onClick={() => setSelectedCampaignClientIds(allCampaignRowsSelected ? [] : selectableCampaignIds)}
+          >
+            {allCampaignRowsSelected ? 'Limpar selecao' : 'Selecionar pagina'}
+          </button>
+          <button
+            className="button primary"
+            type="button"
+            disabled={selectedCampaignClientIds.length === 0 || isBulkCampaignUpdating}
+            onClick={() => markSelectedCampaignStatus('enviado')}
+          >
+            {isBulkCampaignUpdating ? 'Atualizando...' : `Marcar ${selectedCampaignClientIds.length || ''} enviados`}
+          </button>
+          <button
+            className="button"
+            type="button"
+            disabled={selectedCampaignClientIds.length === 0 || isBulkCampaignUpdating}
+            onClick={() => markSelectedCampaignStatus('nao_respondeu')}
+          >
+            Sem resposta
+          </button>
+          <span className="status-pill">{selectedCampaignClientIds.length} selecionados</span>
+        </div>
+      )}
       {!isLoading && (
       <div className="table">
-        <div className="table-head campaign">
+        <div className="table-head campaign campaign-bulk-row">
+          <span>Sel.</span>
           <span>Cliente</span>
           <span>Mensagem</span>
           <span>Status</span>
@@ -5960,7 +6015,21 @@ function Campanhas({
           const waUrl = `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(finalMessage)}`
 
           return (
-            <div className="table-row campaign" key={cliente.id}>
+            <div className="table-row campaign campaign-bulk-row" key={cliente.id}>
+              <span>
+                <input
+                  type="checkbox"
+                  checked={selectedCampaignClientIds.includes(cliente.id)}
+                  onChange={(event) => {
+                    setSelectedCampaignClientIds((current) =>
+                      event.target.checked
+                        ? [...new Set([...current, cliente.id])]
+                        : current.filter((id) => id !== cliente.id),
+                    )
+                  }}
+                  aria-label={`Selecionar ${cliente.nome}`}
+                />
+              </span>
               <span>
                 <strong>{cliente.nome}</strong>
                 <small>{cliente.whatsapp}</small>

@@ -1267,6 +1267,24 @@ Validacao:
 Proximo passo tecnico:
 - Criar geracao de campanha a partir de selecao de oportunidades/leads e permitir acompanhar envio/resposta sem duplicar clientes.
 
+### 2026-05-29 - Atualizacao em lote de campanhas
+
+Status: concluido.
+
+Entregue:
+- Tela de Campanhas ganhou selecao de clientes da pagina.
+- Admin pode selecionar a pagina atual e marcar os selecionados como `enviado` em lote.
+- Admin tambem pode marcar selecionados como `nao_respondeu` em lote.
+- Acoes em lote reaproveitam a mesma trilha de auditoria/interacao usada nas acoes individuais.
+
+Validacao:
+- Build passou com `npm run build`.
+- Playwright local validou selecao de 50 clientes na campanha e habilitacao de `Marcar 50 enviados`.
+- O teste nao gravou envios reais.
+
+Proximo passo tecnico:
+- Criar campanhas salvas diretamente a partir de uma selecao feita em Oportunidades/Rodobens, preservando o segmento e evitando duplicidade por cliente.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:
