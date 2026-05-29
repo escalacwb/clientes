@@ -58,10 +58,12 @@ import {
   createCampanhaSalva,
   listClienteCampanhaEnvios,
   listCampanhaSegmento,
+  listCampanhaInbox,
   listCampanhasResumo,
   listCampanhasSalvas,
   upsertCampanhaEnvio,
   type CampanhaPublicoFiltros,
+  type CampanhaInboxItem,
   type CampanhaResumo,
   type CampanhaSalva,
   type CampanhaSegmentoId,
@@ -166,6 +168,7 @@ import type {
 const SalesChart = lazy(() => import('./components/SalesChart'))
 
 const nav = [
+  { id: 'cockpit', label: 'Cockpit', icon: Gauge },
   { id: 'dashboard', label: 'Dashboard', icon: Gauge },
   { id: 'clientes', label: 'Clientes', icon: UsersRound },
   { id: 'rodobens', label: 'Inbox Rodobens', icon: UserCheck },
@@ -230,7 +233,7 @@ function App() {
   const clientePageSize = 50
   const [session, setSession] = useState<SessaoUsuario | null>(null)
   const [isCheckingSession, setIsCheckingSession] = useState(true)
-  const [view, setView] = useState(() => localStorage.getItem('capital-crm:last-view') ?? 'dashboard')
+  const [view, setView] = useState(() => localStorage.getItem('capital-crm:last-view') ?? 'cockpit')
   const [clientes, setClientes] = useState<Cliente[]>(isSupabaseConfigured ? [] : seedClientes)
   const [clientesTotal, setClientesTotal] = useState(isSupabaseConfigured ? 0 : seedClientes.length)
   const [clientesPage, setClientesPage] = useState(1)
@@ -293,6 +296,13 @@ function App() {
   const [rodobensQuery, setRodobensQuery] = useState('')
   const [rodobensStatusFilter, setRodobensStatusFilter] = useState<LeadQualificacaoStatus | 'todos'>('todos')
   const [isLoadingRodobens, setIsLoadingRodobens] = useState(false)
+  const [cockpitTarefas, setCockpitTarefas] = useState<Tarefa[]>([])
+  const [cockpitTarefasVencidas, setCockpitTarefasVencidas] = useState<Tarefa[]>([])
+  const [cockpitOrcamentos, setCockpitOrcamentos] = useState<Orcamento[]>([])
+  const [cockpitRodobens, setCockpitRodobens] = useState<Cliente[]>([])
+  const [cockpitOportunidades, setCockpitOportunidades] = useState<Oportunidade[]>([])
+  const [cockpitCampanhas, setCockpitCampanhas] = useState<CampanhaInboxItem[]>([])
+  const [isLoadingCockpit, setIsLoadingCockpit] = useState(false)
   const [quoteSourceView, setQuoteSourceView] = useState('clientes')
   const [quoteOriginContext, setQuoteOriginContext] = useState<QuoteOriginContext>({ kind: 'cliente', label: 'Ficha do cliente' })
   const [campaignToOpenId, setCampaignToOpenId] = useState('')
@@ -477,6 +487,65 @@ function App() {
       window.clearTimeout(handle)
     }
   }, [clienteFiltro, clientesPage, isCheckingSession, query, session])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadCockpit() {
+      if (isCheckingSession) return
+      if (isSupabaseConfigured && !session) {
+        setCockpitTarefas([])
+        setCockpitTarefasVencidas([])
+        setCockpitOrcamentos([])
+        setCockpitRodobens([])
+        setCockpitOportunidades([])
+        setCockpitCampanhas([])
+        return
+      }
+      if (view !== 'cockpit') return
+
+      setIsLoadingCockpit(true)
+      clearModuleError('cockpit')
+      try {
+        const vendedorId = session?.role === 'vendedor' ? session.id : undefined
+        const [
+          tarefasHoje,
+          tarefasVencidas,
+          orcamentosVencidos,
+          rodobensNovos,
+          oportunidadesAtivas,
+          campanhasInbox,
+        ] = await Promise.all([
+          listTarefasPage({ page: 1, pageSize: 8, status: 'abertas', origem: 'todas', vendedorId }),
+          listTarefasPage({ page: 1, pageSize: 5, status: 'vencidas', origem: 'todas', vendedorId }),
+          listOrcamentosPage({ page: 1, pageSize: 5, status: 'vencidos', vendedorId }),
+          listRodobensLeads({ page: 1, pageSize: 5, status: 'novo' }),
+          isSupabaseConfigured
+            ? listOportunidadesPage({ page: 1, pageSize: 6, filter: 'ativas', tipo: 'todos' })
+            : Promise.resolve({ oportunidades: [], total: 0 }),
+          listCampanhaInbox({ statuses: ['respondeu', 'virou_orcamento'], vendedorId, limit: 8 }),
+        ])
+
+        if (!isMounted) return
+        setCockpitTarefas(tarefasHoje.tarefas)
+        setCockpitTarefasVencidas(tarefasVencidas.tarefas)
+        setCockpitOrcamentos(orcamentosVencidos.orcamentos)
+        setCockpitRodobens(rodobensNovos.clientes)
+        setCockpitOportunidades(oportunidadesAtivas.oportunidades)
+        setCockpitCampanhas(campanhasInbox)
+      } catch (exception) {
+        if (isMounted) setModuleError('cockpit', exception instanceof Error ? exception.message : 'Nao foi possivel carregar o cockpit.')
+      } finally {
+        if (isMounted) setIsLoadingCockpit(false)
+      }
+    }
+
+    loadCockpit()
+
+    return () => {
+      isMounted = false
+    }
+  }, [isCheckingSession, session, view])
 
   useEffect(() => {
     let isMounted = true
@@ -784,6 +853,30 @@ function App() {
   const visibleOportunidades = isSupabaseConfigured ? oportunidades : localOportunidades
   const visibleOportunidadesTotal = isSupabaseConfigured ? oportunidadesTotal : localOportunidades.length
 
+  async function ensureClientInMemory(clienteId: string) {
+    if (!clienteId || clientes.some((cliente) => cliente.id === clienteId)) return
+    const result = await listClientesPage({ page: 1, pageSize: 1, clienteIds: [clienteId] })
+    if (result.clientes[0]) {
+      setClientes((current) =>
+        current.some((cliente) => cliente.id === clienteId) ? current : [result.clientes[0], ...current],
+      )
+    }
+  }
+
+  async function openClientFromCockpit(clienteId: string) {
+    await ensureClientInMemory(clienteId)
+    setSelectedClientId(clienteId)
+    setView('cliente360')
+  }
+
+  async function openBudgetFromCockpit(clienteId: string, originContext: QuoteOriginContext) {
+    await ensureClientInMemory(clienteId)
+    setSelectedClientId(clienteId)
+    setQuoteSourceView('cockpit')
+    setQuoteOriginContext(originContext)
+    setView('orcamento-editor')
+  }
+
   if (isCheckingSession) {
     return (
       <div className="login-screen">
@@ -796,7 +889,7 @@ function App() {
     return <Login usuarios={usuarios} onLogin={(nextSession) => {
       setSession(nextSession)
       localStorage.setItem('capital-crm:last-email', nextSession.email)
-      setView(nextSession.role === 'admin' ? 'dashboard' : 'carteira')
+      setView('cockpit')
     }} />
   }
 
@@ -921,6 +1014,47 @@ function App() {
           {dataError && <strong>{dataError}</strong>}
         </div>
 
+        {view === 'cockpit' && (
+          <Cockpit
+            currentUser={session}
+            usuarios={usuarios}
+            tarefas={cockpitTarefas}
+            tarefasVencidas={cockpitTarefasVencidas}
+            orcamentos={cockpitOrcamentos}
+            rodobens={cockpitRodobens}
+            oportunidades={cockpitOportunidades}
+            campanhas={cockpitCampanhas}
+            isLoading={isLoadingCockpit}
+            onOpenClient={openClientFromCockpit}
+            onOpenBudget={openBudgetFromCockpit}
+            onOpenModule={(target) => {
+              if (target === 'tarefas') {
+                setTarefasStatusFilter('abertas')
+                setTarefasOriginFilter('todas')
+                setTarefasPage(1)
+              }
+              if (target === 'orcamentos') {
+                setOrcamentosFilter('vencidos')
+                setOrcamentosPage(1)
+              }
+              if (target === 'rodobens') {
+                setRodobensStatusFilter('novo')
+                setRodobensPage(1)
+              }
+              if (target === 'oportunidades') {
+                setOportunidadesFilter('ativas')
+                setOportunidadesPage(1)
+              }
+              setView(target)
+            }}
+            onCompleteTask={async (id) => {
+              await completeTarefa(id)
+              setCockpitTarefas((current) => current.filter((tarefa) => tarefa.id !== id))
+              setCockpitTarefasVencidas((current) => current.filter((tarefa) => tarefa.id !== id))
+              setTarefas((current) => current.map((tarefa) => tarefa.id === id ? { ...tarefa, status: 'concluida', concluidaEm: new Date().toISOString() } : tarefa))
+            }}
+          />
+        )}
         {view === 'dashboard' && (
           <Dashboard
             scoredClientes={scoredClientes}
@@ -1559,6 +1693,7 @@ function App() {
 
 function titleFor(view: string) {
   const titles: Record<string, string> = {
+    cockpit: 'Cockpit diario',
     dashboard: 'Painel comercial',
     clientes: 'Base unica de clientes',
     rodobens: 'Inbox Rodobens',
@@ -1650,6 +1785,241 @@ function Login({ usuarios, onLogin }: { usuarios: Vendedor[]; onLogin: (session:
         </p>
       </section>
     </main>
+  )
+}
+
+function Cockpit({
+  currentUser,
+  usuarios,
+  tarefas,
+  tarefasVencidas,
+  orcamentos,
+  rodobens,
+  oportunidades,
+  campanhas,
+  isLoading,
+  onOpenClient,
+  onOpenBudget,
+  onOpenModule,
+  onCompleteTask,
+}: {
+  currentUser: SessaoUsuario
+  usuarios: Vendedor[]
+  tarefas: Tarefa[]
+  tarefasVencidas: Tarefa[]
+  orcamentos: Orcamento[]
+  rodobens: Cliente[]
+  oportunidades: Oportunidade[]
+  campanhas: CampanhaInboxItem[]
+  isLoading: boolean
+  onOpenClient: (clienteId: string) => Promise<void>
+  onOpenBudget: (clienteId: string, originContext: QuoteOriginContext) => Promise<void>
+  onOpenModule: (target: 'tarefas' | 'orcamentos' | 'rodobens' | 'oportunidades' | 'campanhas') => void
+  onCompleteTask: (id: string) => Promise<void>
+}) {
+  const [busyTaskId, setBusyTaskId] = useState('')
+  const todayTasks = tarefas.filter((tarefa) => daysSince(tarefa.dataVencimento) >= 0)
+  const highPriorityTasks = tarefas
+    .filter((tarefa) => tarefa.prioridade >= 80 && !todayTasks.some((item) => item.id === tarefa.id))
+    .slice(0, 4)
+  const ownerLabel = currentUser.role === 'admin' ? 'Visao gerencial' : `Fila de ${currentUser.nome.split(' ')[0]}`
+  const workload = usuarios
+    .filter((usuario) => usuario.role === 'vendedor')
+    .map((usuario) => ({
+      id: usuario.id,
+      nome: usuario.nome,
+      tarefas: [...tarefas, ...tarefasVencidas].filter((tarefa) => tarefa.vendedorId === usuario.id).length,
+      atrasadas: tarefasVencidas.filter((tarefa) => tarefa.vendedorId === usuario.id).length,
+      campanhas: campanhas.filter((envio) => envio.vendedorId === usuario.id).length,
+    }))
+    .sort((a, b) => b.atrasadas - a.atrasadas || b.tarefas - a.tarefas)
+
+  async function complete(id: string) {
+    setBusyTaskId(id)
+    try {
+      await onCompleteTask(id)
+    } finally {
+      setBusyTaskId('')
+    }
+  }
+
+  return (
+    <section className="cockpit-layout">
+      <section className="panel wide cockpit-hero">
+        <div>
+          <p className="eyebrow">Cockpit diario</p>
+          <h2>{ownerLabel}</h2>
+          <p>Priorize respostas, propostas vencidas, tarefas e leads sem precisar procurar modulo por modulo.</p>
+        </div>
+        <div className="cockpit-kpis">
+          <Info label="Atrasadas" value={tarefasVencidas.length.toString()} />
+          <Info label="Hoje/prioridade" value={todayTasks.length.toString()} />
+          <Info label="Respostas campanha" value={campanhas.length.toString()} />
+          <Info label="Orc. vencidos" value={orcamentos.length.toString()} />
+          <Info label="Rodobens novos" value={rodobens.length.toString()} />
+        </div>
+      </section>
+
+      {isLoading && <div className="empty-state compact">Carregando cockpit comercial...</div>}
+
+      <section className="panel cockpit-section">
+        <div className="panel-header">
+          <div>
+            <h2>Responder agora</h2>
+            <p>Campanhas com resposta ou pedido de orcamento.</p>
+          </div>
+          <button className="button" type="button" onClick={() => onOpenModule('campanhas')}>Abrir campanhas</button>
+        </div>
+        <div className="cockpit-list">
+          {campanhas.map((envio) => (
+            <article className="cockpit-card" key={envio.id}>
+              <div>
+                <strong>{envio.clienteNome}</strong>
+                <small>{envio.campanhaNome ?? 'Campanha'} - {campaignStatusLabel(envio.status)}</small>
+              </div>
+              <p>{envio.mensagemFinal}</p>
+              <div className="row-actions">
+                <button className="button" type="button" onClick={() => onOpenClient(envio.clienteId)}>Ficha</button>
+                <button
+                  className="button primary"
+                  type="button"
+                  onClick={() => onOpenBudget(envio.clienteId, { kind: 'campanha', sourceId: envio.campanhaId, label: envio.campanhaNome ?? 'Campanha' })}
+                >
+                  Orcamento
+                </button>
+              </div>
+            </article>
+          ))}
+          {campanhas.length === 0 && <div className="empty-state compact">Nenhuma resposta de campanha pendente.</div>}
+        </div>
+      </section>
+
+      <section className="panel cockpit-section">
+        <div className="panel-header">
+          <div>
+            <h2>Tarefas criticas</h2>
+            <p>Atrasadas, vencendo hoje e alta prioridade.</p>
+          </div>
+          <button className="button" type="button" onClick={() => onOpenModule('tarefas')}>Abrir tarefas</button>
+        </div>
+        <div className="cockpit-list">
+          {[...tarefasVencidas, ...todayTasks, ...highPriorityTasks].slice(0, 10).map((tarefa) => (
+            <article className={daysSince(tarefa.dataVencimento) > 0 ? 'cockpit-card danger' : 'cockpit-card'} key={tarefa.id}>
+              <div>
+                <strong>{tarefa.titulo}</strong>
+                <small>{tarefa.clienteNome} - {dateLabel(tarefa.dataVencimento)} - prioridade {tarefa.prioridade}</small>
+              </div>
+              {tarefa.descricao && <p>{tarefa.descricao}</p>}
+              <div className="row-actions">
+                <button className="button" type="button" onClick={() => onOpenClient(tarefa.clienteId)}>Ficha</button>
+                <button
+                  className="button primary"
+                  type="button"
+                  disabled={busyTaskId === tarefa.id}
+                  onClick={() => complete(tarefa.id)}
+                >
+                  {busyTaskId === tarefa.id ? 'Concluindo...' : 'Concluir'}
+                </button>
+              </div>
+            </article>
+          ))}
+          {[...tarefasVencidas, ...todayTasks, ...highPriorityTasks].length === 0 && <div className="empty-state compact">Sem tarefas criticas agora.</div>}
+        </div>
+      </section>
+
+      <section className="panel cockpit-section">
+        <div className="panel-header">
+          <div>
+            <h2>Propostas para retomar</h2>
+            <p>Orcamentos vencidos ainda abertos.</p>
+          </div>
+          <button className="button" type="button" onClick={() => onOpenModule('orcamentos')}>Abrir orcamentos</button>
+        </div>
+        <div className="cockpit-list">
+          {orcamentos.map((orcamento) => (
+            <article className="cockpit-card" key={orcamento.id}>
+              <div>
+                <strong>{orcamento.clienteNome ?? 'Cliente'}</strong>
+                <small>{money(orcamento.valorTotal)} - venceu {dateLabel(orcamento.validade)}</small>
+              </div>
+              <div className="row-actions">
+                <button className="button" type="button" onClick={() => onOpenClient(orcamento.clienteId)}>Ficha</button>
+                <button
+                  className="button primary"
+                  type="button"
+                  onClick={() => onOpenBudget(orcamento.clienteId, { kind: 'cliente', sourceId: orcamento.id, label: 'Retomada de proposta vencida' })}
+                >
+                  Revisar proposta
+                </button>
+              </div>
+            </article>
+          ))}
+          {orcamentos.length === 0 && <div className="empty-state compact">Nenhum orcamento vencido na fila.</div>}
+        </div>
+      </section>
+
+      <section className="panel cockpit-section">
+        <div className="panel-header">
+          <div>
+            <h2>Leads e oportunidades</h2>
+            <p>Rodobens novos e oportunidades cacheadas.</p>
+          </div>
+          <div className="toolbar-actions">
+            <button className="button" type="button" onClick={() => onOpenModule('rodobens')}>Rodobens</button>
+            <button className="button" type="button" onClick={() => onOpenModule('oportunidades')}>Oportunidades</button>
+          </div>
+        </div>
+        <div className="cockpit-list two-col">
+          {rodobens.map((cliente) => (
+            <article className="cockpit-card" key={cliente.id}>
+              <div>
+                <strong>{cliente.nome}</strong>
+                <small>{cliente.cidade}/{cliente.uf} - {cliente.whatsapp ?? 'sem WhatsApp'}</small>
+              </div>
+              <button className="button primary" type="button" onClick={() => onOpenClient(cliente.id)}>Qualificar</button>
+            </article>
+          ))}
+          {oportunidades.map((oportunidade) => (
+            <article className="cockpit-card" key={oportunidade.id}>
+              <div>
+                <strong>{oportunidade.clienteNome}</strong>
+                <small>{opportunityTypeLabel(oportunidade.tipo)} - prioridade {oportunidade.prioridade}</small>
+              </div>
+              <p>{oportunidade.proximaAcao}</p>
+            </article>
+          ))}
+          {rodobens.length + oportunidades.length === 0 && <div className="empty-state compact">Sem leads ou oportunidades novas agora.</div>}
+        </div>
+      </section>
+
+      {currentUser.role === 'admin' && (
+        <section className="panel wide">
+          <div className="panel-header">
+            <div>
+              <h2>Carga por vendedor</h2>
+              <p>Primeiro sinal gerencial de atraso e respostas em aberto.</p>
+            </div>
+            <UserRound size={18} />
+          </div>
+          <div className="table">
+            <div className="table-head four">
+              <span>Vendedor</span>
+              <span>Tarefas</span>
+              <span>Atrasadas</span>
+              <span>Respostas</span>
+            </div>
+            {workload.map((item) => (
+              <div className="table-row four" key={item.id}>
+                <span><strong>{item.nome}</strong></span>
+                <span>{item.tarefas}</span>
+                <span className={item.atrasadas > 0 ? 'score danger' : 'score'}>{item.atrasadas}</span>
+                <span>{item.campanhas}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </section>
   )
 }
 

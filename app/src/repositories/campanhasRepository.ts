@@ -61,6 +61,12 @@ export type CampanhaResumo = {
   roiPercent: number
 }
 
+export type CampanhaInboxItem = CampanhaEnvio & {
+  clienteNome: string
+  clienteCidade?: string
+  clienteUf?: string
+}
+
 type CampanhaEnvioRow = {
   id: string
   campanha_id: string
@@ -77,6 +83,11 @@ type CampanhaEnvioRow = {
   orcamento_id: string | null
   receita_atribuida: number | null
   campanhas?: { nome: string | null } | null
+  clientes?: {
+    nome: string | null
+    cidade: string | null
+    uf: string | null
+  } | null
 }
 
 type CampanhaRow = {
@@ -356,6 +367,29 @@ export async function listClienteCampanhaEnvios(clienteId: string, limit = 50): 
   return (data ?? []).map((row) => mapEnvio(row as CampanhaEnvioRow))
 }
 
+export async function listCampanhaInbox(input: {
+  statuses?: CampanhaEnvioStatus[]
+  vendedorId?: string
+  limit?: number
+} = {}): Promise<CampanhaInboxItem[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  let query = supabase
+    .from('campanha_envios')
+    .select('*, campanhas(nome), clientes(nome,cidade,uf)')
+    .order('data_marcado_enviado', { ascending: true, nullsFirst: false })
+    .limit(input.limit ?? 20)
+
+  if (input.statuses?.length) query = query.in('status', input.statuses)
+  if (input.vendedorId) query = query.eq('vendedor_id', input.vendedorId)
+
+  const { data, error } = await query
+  if (error) throw error
+
+  return (data ?? []).map((row) => mapInboxItem(row as CampanhaEnvioRow))
+}
+
 async function listCampanhasResumoFallback(): Promise<CampanhaResumo[]> {
   const supabase = await getSupabase()
   if (!supabase) return []
@@ -576,6 +610,15 @@ function mapEnvio(row: CampanhaEnvioRow): CampanhaEnvio {
     virouVenda: row.virou_venda,
     orcamentoId: row.orcamento_id ?? undefined,
     receitaAtribuida: row.receita_atribuida ?? undefined,
+  }
+}
+
+function mapInboxItem(row: CampanhaEnvioRow): CampanhaInboxItem {
+  return {
+    ...mapEnvio(row),
+    clienteNome: row.clientes?.nome ?? 'Cliente',
+    clienteCidade: row.clientes?.cidade ?? undefined,
+    clienteUf: row.clientes?.uf ?? undefined,
   }
 }
 

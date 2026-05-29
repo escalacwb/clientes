@@ -1357,6 +1357,27 @@ Validacao:
 Proximo passo tecnico:
 - Evoluir relatorio por vendedor dentro de campanhas: enviados, respostas, tarefas abertas, orcamentos e receita atribuida por responsavel.
 
+### 2026-05-29 - Cockpit diario do vendedor
+
+Status: concluido - primeira versao.
+
+Entregue:
+- Nova tela `Cockpit` no menu principal e como destino inicial apos login.
+- Carregamento enxuto com blocos de respostas de campanha, tarefas criticas, propostas vencidas, Rodobens novos e oportunidades.
+- Acoes diretas para abrir Ficha 360, iniciar orcamento e concluir tarefas.
+- Visao admin inclui carga por vendedor com tarefas, atrasos e respostas de campanha.
+- Criado repository `listCampanhaInbox` para buscar respostas de campanhas sem carregar todos os envios.
+
+Validacao:
+- Build passou com `npm run build`.
+- Playwright local validou os blocos `Responder agora`, `Tarefas criticas`, `Propostas para retomar` e `Leads e oportunidades`.
+
+Observacao:
+- Durante a sessao local apareceram erros 500 ja existentes em views gerenciais (`vw_funil_gerencial` e `vw_ranking_servicos_recorrentes`), fora do fluxo novo do Cockpit. Devem entrar em uma rodada de saude das views gerenciais.
+
+Proximo passo tecnico:
+- Avancar para M02: SLA/follow-up com reagendamento, prazos por origem e alerta gerencial.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

@@ -26,7 +26,7 @@ Fontes analisadas:
 
 ### M01 - Cockpit diario do vendedor
 
-Status: Pendente.
+Status: Concluido - primeira versao.
 
 Objetivo:
 Criar uma tela unica de execucao diaria com o que o vendedor precisa fazer hoje.
@@ -38,9 +38,22 @@ Entregas:
 - Filtro automatico por vendedor logado.
 - Visao gerente com seletor de vendedor.
 
+Ja entregue:
+- Tela `Cockpit` no menu principal e como destino inicial apos login.
+- Blocos de respostas de campanha, tarefas criticas, propostas vencidas, Rodobens novos e oportunidades.
+- Carregamento enxuto por queries paginadas, sem puxar base inteira.
+- Concluir tarefa direto pelo cockpit.
+- Abrir Ficha 360 ou iniciar orcamento a partir dos itens do cockpit.
+- Visao admin com carga por vendedor.
+
 Pronto quando:
 - Um vendedor consegue trabalhar o dia inteiro por essa tela.
 - Nenhuma acao importante exige entrar em tres modulos diferentes.
+
+Proximas melhorias:
+- Reagendamento de tarefa direto no cockpit.
+- WhatsApp direto quando o bloco tiver telefone disponivel.
+- Filtro gerente por vendedor.
 
 Dependencias:
 - Tarefas paginadas.

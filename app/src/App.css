@@ -498,6 +498,71 @@ h3 {
   gap: 16px;
 }
 
+.cockpit-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.cockpit-hero {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1.6fr);
+  gap: 18px;
+  align-items: center;
+}
+
+.cockpit-hero p:not(.eyebrow) {
+  color: #64736f;
+  margin-top: 6px;
+}
+
+.cockpit-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.cockpit-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 360px;
+}
+
+.cockpit-list {
+  display: grid;
+  gap: 10px;
+}
+
+.cockpit-list.two-col {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.cockpit-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #dfe4de;
+  border-radius: 8px;
+  background: #f8faf7;
+  padding: 12px;
+}
+
+.cockpit-card.danger {
+  border-color: #f2b8b5;
+  background: #fff7f7;
+}
+
+.cockpit-card strong,
+.cockpit-card small {
+  display: block;
+}
+
+.cockpit-card small,
+.cockpit-card p {
+  color: #64736f;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 .metric-grid {
   grid-column: 1 / -1;
   display: grid;
@@ -922,6 +987,11 @@ h3 {
   background: #dff3ec;
   color: #0f766e;
   font-weight: 800;
+}
+
+.score.danger {
+  background: #ffe8e6;
+  color: #b42318;
 }
 
 .row-actions {
@@ -2288,6 +2358,10 @@ h3 {
 
   .client-layout,
   .grid-layout,
+  .cockpit-layout,
+  .cockpit-hero,
+  .cockpit-kpis,
+  .cockpit-list.two-col,
   .metric-grid,
   .agenda-board,
   .task-insight,
