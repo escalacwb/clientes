@@ -864,6 +864,19 @@ h3 {
   background: #f0f2ef;
 }
 
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .client-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) minmax(340px, 0.8fr);

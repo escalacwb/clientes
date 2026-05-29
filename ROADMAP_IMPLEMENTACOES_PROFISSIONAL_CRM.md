@@ -1149,6 +1149,27 @@ Validacao:
 Proximo passo tecnico:
 - Materializar ou otimizar a view de oportunidades para reduzir o tempo de primeira resposta e criar filtros por tipo de oportunidade.
 
+### 2026-05-28 - Oportunidades em cache operacional
+
+Status: concluido.
+
+Entregue:
+- Criada tabela `oportunidades_cache` com chave por cliente/tipo e indices para status, tipo, vendedor e geracao.
+- Criada funcao `refresh_oportunidades_cache()` para recalcular a fila a partir das regras atuais de oportunidade.
+- Criada view `vw_oportunidades_resumo_cache` para cards de resumo sem depender da view pesada original.
+- Tela de Oportunidades passou a consultar o cache, com paginacao de 50, contagem exata, filtro por tipo e botao admin `Atualizar fila`.
+- Criada funcao `marcar_oportunidade_com_tarefa()`; ao transformar oportunidade em tarefa, o cache ja marca `tarefa_existente` e evita repetir a acao.
+
+Validacao:
+- SQL aplicado com `node scripts/run-sql-file.mjs supabase/queries/oportunidades_cache.sql`.
+- Consulta autenticada como Wagner retornou 50 registros paginados e 43.605 oportunidades ativas no cache.
+- Playwright local validou a tela `Oportunidades`, o botao `Atualizar fila`, cards por tipo e linhas de acao.
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Disparar `refresh_oportunidades_cache()` automaticamente ao terminar a importacao diaria e apos reprocessamentos grandes.
+- Evoluir Dashboard para usar somente agregados de banco, sem depender da pagina atual de clientes.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

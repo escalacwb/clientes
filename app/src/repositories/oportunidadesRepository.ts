@@ -39,7 +39,7 @@ export async function listOportunidades(clientes: Cliente[], orcamentos: Orcamen
   if (!supabase) return buildOportunidades(clientes, orcamentos)
 
   const { data, error } = await supabase
-    .from('oportunidades_clientes')
+    .from('oportunidades_cache')
     .select('*')
     .order('bloqueada', { ascending: true })
     .order('prioridade', { ascending: false })
@@ -72,8 +72,8 @@ export async function listOportunidadesPage(input: {
   const from = (input.page - 1) * input.pageSize
   const to = from + input.pageSize - 1
   let query = supabase
-    .from('oportunidades_clientes')
-    .select('*', { count: 'planned' })
+    .from('oportunidades_cache')
+    .select('*', { count: 'exact' })
     .order('bloqueada', { ascending: true })
     .order('tarefa_existente', { ascending: true })
     .order('prioridade', { ascending: false })
@@ -100,7 +100,7 @@ export async function listOportunidadesResumo(vendedorId?: string): Promise<Opor
   if (!supabase) return []
 
   let query = supabase
-    .from('vw_oportunidades_resumo')
+    .from('vw_oportunidades_resumo_cache')
     .select('*')
     .order('ativas', { ascending: false })
     .order('prioridade_maxima', { ascending: false })
@@ -133,6 +133,26 @@ export async function listOportunidadesResumo(vendedorId?: string): Promise<Opor
   })
 
   return [...grouped.values()].sort((a, b) => b.ativas - a.ativas || b.prioridadeMaxima - a.prioridadeMaxima)
+}
+
+export async function refreshOportunidadesCache(): Promise<number> {
+  const supabase = await getSupabase()
+  if (!supabase) return 0
+
+  const { data, error } = await supabase.rpc('refresh_oportunidades_cache')
+  if (error) throw error
+  return Number(data ?? 0)
+}
+
+export async function markOportunidadeComTarefa(clienteId: string, tipo: string): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase) return
+
+  const { error } = await supabase.rpc('marcar_oportunidade_com_tarefa', {
+    p_cliente_id: clienteId,
+    p_tipo: tipo,
+  })
+  if (error) throw error
 }
 
 function mapOportunidade(row: OportunidadeRow): Oportunidade {

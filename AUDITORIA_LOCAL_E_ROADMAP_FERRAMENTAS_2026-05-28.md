@@ -51,16 +51,21 @@ Acao recomendada:
 
 ### A4 - Oportunidades pode demorar e aparentar travamento
 
-Status: parcial.
+Status: corrigido na primeira camada.
 
 Sintoma:
 - Tela mostrou `Carregando oportunidades...` mesmo com a view tendo dezenas de milhares de registros.
 
 Acao recomendada:
 - Adicionados cards de resumo por tipo usando view agregada.
-- Listagem passou a usar contagem planejada.
 - Adicionado filtro por tipo de oportunidade.
-- Ainda falta materializar/otimizar a view para reduzir o tempo de primeira resposta.
+- Criada tabela `oportunidades_cache` com indices por status, tipo e vendedor.
+- Criada funcao `refresh_oportunidades_cache()` para recalcular a fila apos importacoes ou mudancas grandes.
+- O app passou a ler a fila cacheada com paginacao de 50 registros e contagem exata.
+- Ao criar tarefa por oportunidade, `marcar_oportunidade_com_tarefa()` bloqueia o item no cache para evitar duplicidade.
+
+Risco residual:
+- Ainda falta automatizar o refresh do cache no final do fluxo de importacao diaria.
 
 ### A5 - William entra mas nao ve carteira
 
@@ -187,8 +192,8 @@ Acao recomendada:
 
 ## Proxima ordem sugerida
 
-1. Corrigir erro global por modulo e metricas baseadas em pagina atual.
-2. Criar views agregadas para Usuarios/Vendedores e Dashboard.
-3. Evoluir CPQ com kits de pneu + servicos e itens opcionais.
+1. Automatizar refresh de oportunidades apos importacao diaria.
+2. Criar views agregadas restantes para Dashboard.
+3. Evoluir CPQ com kits de pneu + servicos, prazos e itens opcionais.
 4. Criar campanhas por produto/medida/marca usando catalogo e historico.
 5. Criar agenda de servicos e Veiculo 360.

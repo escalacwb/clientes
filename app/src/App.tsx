@@ -9,6 +9,7 @@ import {
   Gauge,
   MessageCircle,
   Phone,
+  RefreshCw,
   Search,
   Send,
   ShieldCheck,
@@ -119,7 +120,7 @@ import { listOrcamentosPage, type OrcamentoListFilter } from './repositories/orc
 import { listOrcamentoVersoes } from './repositories/orcamentosRepository'
 import { reviseOrcamento } from './repositories/orcamentosRepository'
 import { updateOrcamentoStatus } from './repositories/orcamentosRepository'
-import { listOportunidadesPage, listOportunidadesResumo, type OportunidadeFilter, type OportunidadeResumo } from './repositories/oportunidadesRepository'
+import { listOportunidadesPage, listOportunidadesResumo, markOportunidadeComTarefa, refreshOportunidadesCache, type OportunidadeFilter, type OportunidadeResumo } from './repositories/oportunidadesRepository'
 import {
   completeTarefa,
   createTarefa,
@@ -259,6 +260,7 @@ function App() {
   const [oportunidadesPage, setOportunidadesPage] = useState(1)
   const [oportunidadesFilter, setOportunidadesFilter] = useState<OportunidadeFilter>('ativas')
   const [oportunidadesTipoFilter, setOportunidadesTipoFilter] = useState('todos')
+  const [oportunidadesRefreshKey, setOportunidadesRefreshKey] = useState(0)
   const [vendasItens, setVendasItens] = useState<VendaItem[]>(isSupabaseConfigured ? [] : seedVendasItens)
   const [servicosItens, setServicosItens] = useState<ServicoItem[]>(isSupabaseConfigured ? [] : seedServicosItens)
   const [clienteVeiculos, setClienteVeiculos] = useState<ClienteVeiculoResumo[]>([])
@@ -596,7 +598,7 @@ function App() {
     return () => {
       isMounted = false
     }
-  }, [isCheckingSession, oportunidadesFilter, oportunidadesPage, oportunidadesTipoFilter, session, view])
+  }, [isCheckingSession, oportunidadesFilter, oportunidadesPage, oportunidadesRefreshKey, oportunidadesTipoFilter, session, view])
 
   useEffect(() => {
     let isMounted = true
@@ -1156,6 +1158,7 @@ function App() {
             filter={oportunidadesFilter}
             tipoFilter={oportunidadesTipoFilter}
             isLoading={isLoadingOportunidades}
+            canRefresh={session.role === 'admin'}
             onPageChange={setOportunidadesPage}
             onFilterChange={(filter) => {
               setOportunidadesFilter(filter)
@@ -1164,6 +1167,11 @@ function App() {
             onTipoFilterChange={(tipo) => {
               setOportunidadesTipoFilter(tipo)
               setOportunidadesPage(1)
+            }}
+            onRefresh={async () => {
+              await refreshOportunidadesCache()
+              setOportunidadesPage(1)
+              setOportunidadesRefreshKey((current) => current + 1)
             }}
             onCreateTask={async (oportunidade) => {
               const cliente = clientes.find((item) => item.id === oportunidade.clienteId)
@@ -1176,6 +1184,7 @@ function App() {
                 prioridade: oportunidade.prioridade,
                 origem: `oportunidade:${oportunidade.tipo}`,
               })
+              await markOportunidadeComTarefa(oportunidade.clienteId, oportunidade.tipo)
               setTarefas((current) => [
                 {
                   ...created,
@@ -2088,9 +2097,11 @@ function Oportunidades({
   filter,
   tipoFilter,
   isLoading,
+  canRefresh,
   onPageChange,
   onFilterChange,
   onTipoFilterChange,
+  onRefresh,
   onCreateTask,
 }: {
   oportunidades: Oportunidade[]
@@ -2101,13 +2112,16 @@ function Oportunidades({
   filter: OportunidadeFilter
   tipoFilter: string
   isLoading: boolean
+  canRefresh: boolean
   onPageChange: (page: number) => void
   onFilterChange: (filter: OportunidadeFilter) => void
   onTipoFilterChange: (tipo: string) => void
+  onRefresh: () => Promise<void>
   onCreateTask: (oportunidade: Oportunidade) => Promise<Tarefa>
 }) {
   const [createdTasks, setCreatedTasks] = useState<string[]>([])
   const [error, setError] = useState('')
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const totalAtivas = resumo.reduce((sum, item) => sum + item.ativas, 0)
   const totalBloqueadas = resumo.reduce((sum, item) => sum + item.bloqueadas, 0)
@@ -2123,12 +2137,35 @@ function Oportunidades({
       <div className="panel-header">
         <div>
           <h2>Motor de oportunidades</h2>
-          <p>{total} oportunidades calculadas no Supabase, com paginacao e bloqueio de duplicidade de tarefa.</p>
+          <p>{total} oportunidades na fila cacheada, com paginacao e bloqueio de duplicidade de tarefa.</p>
         </div>
-        <div className="segmented">
-          <button className={filter === 'ativas' ? 'active' : ''} type="button" onClick={() => onFilterChange('ativas')}>Ativas</button>
-          <button className={filter === 'bloqueadas' ? 'active' : ''} type="button" onClick={() => onFilterChange('bloqueadas')}>Bloqueadas</button>
-          <button className={filter === 'todas' ? 'active' : ''} type="button" onClick={() => onFilterChange('todas')}>Todas</button>
+        <div className="panel-actions">
+          {canRefresh && (
+            <button
+              className="button"
+              type="button"
+              disabled={isRefreshing}
+              onClick={async () => {
+                setError('')
+                setIsRefreshing(true)
+                try {
+                  await onRefresh()
+                } catch (exception) {
+                  setError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar a fila.')
+                } finally {
+                  setIsRefreshing(false)
+                }
+              }}
+            >
+              <RefreshCw size={16} />
+              {isRefreshing ? 'Atualizando...' : 'Atualizar fila'}
+            </button>
+          )}
+          <div className="segmented">
+            <button className={filter === 'ativas' ? 'active' : ''} type="button" onClick={() => onFilterChange('ativas')}>Ativas</button>
+            <button className={filter === 'bloqueadas' ? 'active' : ''} type="button" onClick={() => onFilterChange('bloqueadas')}>Bloqueadas</button>
+            <button className={filter === 'todas' ? 'active' : ''} type="button" onClick={() => onFilterChange('todas')}>Todas</button>
+          </div>
         </div>
       </div>
       <div className="filter-row compact-filter-row">
