@@ -822,6 +822,15 @@ h3 {
   grid-template-columns: minmax(190px, 1.2fr) 80px 80px 70px 70px 70px 120px 80px;
 }
 
+.forecast-report {
+  grid-template-columns: minmax(190px, 1.2fr) 120px 120px 120px 80px 80px minmax(190px, 1fr);
+}
+
+.forecast-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
 .funnel-report small {
   display: block;
   color: #66736f;
@@ -2546,6 +2555,7 @@ h3 {
   .campaign-filter-grid,
   .campaign-summary,
   .budget-summary,
+  .forecast-summary,
   .client360-filters,
   .detail-grid {
     grid-template-columns: 1fr;
@@ -2579,6 +2589,10 @@ h3 {
   .quote-version-summary,
   .quote-version-grid {
     grid-template-columns: 1fr;
+  }
+
+  .forecast-report {
+    grid-template-columns: minmax(180px, 1fr) 110px 110px 110px 70px 70px minmax(180px, 1fr);
   }
 
   .import-flow {

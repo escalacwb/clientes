@@ -199,7 +199,7 @@ Pronto quando:
 
 ### M08 - Regras de frequencia e opt-out de WhatsApp
 
-Status: Pendente.
+Status: Parcial.
 
 Objetivo:
 Proteger reputacao e evitar excesso de mensagens.
@@ -210,6 +210,11 @@ Entregas:
 - Motivo e data do opt-out.
 - Bloqueio visual quando cliente foi acionado recentemente.
 - Indicador de qualidade: sem WhatsApp, opt-out, contato recente, mensagem pendente.
+
+Ja entregue:
+- Campanhas agora calculam qualidade do publico por pagina: bloqueados, sem WhatsApp e opt-out.
+- Envio e selecao em lote bloqueiam clientes sem WhatsApp, `Nao contatar` ou com contato recente.
+- Proximo contato sugerido ignora clientes bloqueados por regra comercial.
 
 Pronto quando:
 - O sistema impede campanha indevida antes de abrir WhatsApp.
@@ -286,7 +291,7 @@ Pronto quando:
 
 ### M13 - Forecast e metas
 
-Status: Pendente.
+Status: Parcial.
 
 Objetivo:
 Dar previsao comercial por vendedor e periodo.
@@ -297,6 +302,10 @@ Entregas:
 - Previsto vs realizado.
 - Orcamentos vencendo/vencidos afetando forecast.
 - Ranking de gargalos: sem follow-up, sem proposta, aguardando aprovacao.
+
+Ja entregue:
+- Criada view `vw_forecast_vendedor` com pipeline aberto, forecast ponderado, ganho do mes, propostas vencidas, propostas vencendo em 7 dias e gargalo principal.
+- Tela de Relatorios ganhou painel `Forecast e gargalos` com resumo executivo e ranking por vendedor.
 
 Pronto quando:
 - Gerente consegue conduzir reuniao semanal pelo forecast do CRM.

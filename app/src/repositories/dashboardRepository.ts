@@ -95,6 +95,19 @@ export type TarefaSlaVendedorResumo = {
   ultimoVencimento?: string
 }
 
+export type ForecastVendedorResumo = {
+  vendedorId: string
+  vendedorNome: string
+  propostasAbertas: number
+  pipelineAberto: number
+  forecastPonderado: number
+  ganhoMes: number
+  vencidas: number
+  vencem7d: number
+  ultimoMovimento?: string
+  gargaloPrincipal: string
+}
+
 type DashboardResumoRow = {
   clientes_total: number
   clientes_ativos_90: number
@@ -188,6 +201,19 @@ type TarefaSlaVendedorRow = {
   rodobens_atrasados: number
   oportunidades_atrasadas: number
   ultimo_vencimento: string | null
+}
+
+type ForecastVendedorRow = {
+  vendedor_id: string
+  vendedor_nome: string
+  propostas_abertas: number
+  pipeline_aberto: number
+  forecast_ponderado: number
+  ganho_mes: number
+  vencidas: number
+  vencem_7d: number
+  ultimo_movimento: string | null
+  gargalo_principal: string
 }
 
 export async function getDashboardResumo(): Promise<DashboardResumo | undefined> {
@@ -310,6 +336,30 @@ export async function listTarefasSlaVendedor(): Promise<TarefaSlaVendedorResumo[
     rodobensAtrasados: Number(row.rodobens_atrasados ?? 0),
     oportunidadesAtrasadas: Number(row.oportunidades_atrasadas ?? 0),
     ultimoVencimento: row.ultimo_vencimento ?? undefined,
+  }))
+}
+
+export async function listForecastVendedor(): Promise<ForecastVendedorResumo[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('vw_forecast_vendedor')
+    .select('*')
+    .order('forecast_ponderado', { ascending: false })
+
+  if (error) throw error
+  return (data as ForecastVendedorRow[] | null ?? []).map((row) => ({
+    vendedorId: row.vendedor_id,
+    vendedorNome: row.vendedor_nome,
+    propostasAbertas: Number(row.propostas_abertas ?? 0),
+    pipelineAberto: Number(row.pipeline_aberto ?? 0),
+    forecastPonderado: Number(row.forecast_ponderado ?? 0),
+    ganhoMes: Number(row.ganho_mes ?? 0),
+    vencidas: Number(row.vencidas ?? 0),
+    vencem7d: Number(row.vencem_7d ?? 0),
+    ultimoMovimento: row.ultimo_movimento ?? undefined,
+    gargaloPrincipal: row.gargalo_principal,
   }))
 }
 

@@ -96,6 +96,7 @@ import { updateClienteComercial } from './repositories/clientesRepository'
 import { listConflitos, resolveConflito } from './repositories/conflitosRepository'
 import {
   getDashboardResumo,
+  listForecastVendedor,
   listAtividadesDia,
   listFunilGerencial,
   listMotivosPerda,
@@ -104,6 +105,7 @@ import {
   listTarefasSlaVendedor,
   listVendedoresResumo,
   type DashboardResumo,
+  type ForecastVendedorResumo,
   type AtividadeDiaResumo,
   type FunilGerencialResumo,
   type MotivoPerdaResumo,
@@ -295,6 +297,7 @@ function App() {
   const [funilGerencial, setFunilGerencial] = useState<FunilGerencialResumo[]>([])
   const [motivosPerda, setMotivosPerda] = useState<MotivoPerdaResumo[]>([])
   const [atividadesDia, setAtividadesDia] = useState<AtividadeDiaResumo[]>([])
+  const [forecastVendedor, setForecastVendedor] = useState<ForecastVendedorResumo[]>([])
   const [rodobensLeads, setRodobensLeads] = useState<Cliente[]>([])
   const [rodobensTotal, setRodobensTotal] = useState(0)
   const [rodobensFunil, setRodobensFunil] = useState<RodobensFunilResumo[]>([])
@@ -398,6 +401,7 @@ function App() {
           loadedFunilGerencial,
           loadedMotivosPerda,
           loadedAtividadesDia,
+          loadedForecastVendedor,
         ] = await Promise.all([
           listInteracoes(),
           listOrcamentos(),
@@ -417,6 +421,7 @@ function App() {
           listFunilGerencial(),
           listMotivosPerda(),
           listAtividadesDia(),
+          listForecastVendedor(),
         ])
 
         if (!isMounted) return
@@ -438,6 +443,7 @@ function App() {
         setFunilGerencial(loadedFunilGerencial)
         setMotivosPerda(loadedMotivosPerda)
         setAtividadesDia(loadedAtividadesDia)
+        setForecastVendedor(loadedForecastVendedor)
       } catch (exception) {
         if (!isMounted) return
         setModuleError('dashboard', exception instanceof Error ? exception.message : 'Nao foi possivel carregar os dados.')
@@ -1710,6 +1716,7 @@ function App() {
             funilGerencial={funilGerencial}
             motivosPerda={motivosPerda}
             atividadesDia={atividadesDia}
+            forecastVendedor={forecastVendedor}
             interacoes={interacoes}
             orcamentos={orcamentos}
             importacoes={importacoes}
@@ -6349,8 +6356,18 @@ function Campanhas({
   const activeCampaignResumo = campanhasResumo.find((resumo) => resumo.campanhaId === activeCampanhaId)
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const campanhaClientes = clientes
+  const campaignQuality = campanhaClientes.reduce(
+    (acc, cliente) => {
+      const readiness = campaignContactReadiness(cliente)
+      if (readiness.blocked) acc.bloqueados += 1
+      if (!cliente.whatsapp) acc.semWhatsapp += 1
+      if (cliente.status === 'Nao contatar' || cliente.leadQualificacaoStatus === 'nao_contatar') acc.optOut += 1
+      return acc
+    },
+    { bloqueados: 0, semWhatsapp: 0, optOut: 0 },
+  )
   const nextClient = campanhaClientes
-    .filter((cliente) => (statuses[cliente.id] ?? 'pendente') === 'pendente')
+    .filter((cliente) => (statuses[cliente.id] ?? 'pendente') === 'pendente' && !campaignContactReadiness(cliente).blocked)
     .sort((a, b) => (b.totalComprado + b.totalServicos) - (a.totalComprado + a.totalServicos))[0]
   const campaignCounts = campanhaClientes.reduce<Record<CampanhaEnvioStatus, number>>(
     (acc, cliente) => {
@@ -6361,7 +6378,7 @@ function Campanhas({
     { pendente: 0, enviado: 0, respondeu: 0, nao_respondeu: 0, virou_orcamento: 0, ganhou: 0, perdido: 0, nao_contatar: 0 },
   )
   const filteredClientes = campanhaClientes.filter((cliente) => statusFilter === 'todos' || (statuses[cliente.id] ?? 'pendente') === statusFilter)
-  const selectableCampaignIds = filteredClientes.map((cliente) => cliente.id)
+  const selectableCampaignIds = filteredClientes.filter((cliente) => !campaignContactReadiness(cliente).blocked).map((cliente) => cliente.id)
   const allCampaignRowsSelected = selectableCampaignIds.length > 0 && selectableCampaignIds.every((id) => selectedCampaignClientIds.includes(id))
 
   useEffect(() => {
@@ -6780,6 +6797,9 @@ function Campanhas({
           <Info label="ROI" value={`${activeCampaignResumo?.roiPercent ?? 0}%`} />
           <Info label="Meta" value={money(activeCampaignResumo?.metaReceita ?? numberFromInput(campaignRevenueGoal))} />
           <Info label="Perdidos" value={(activeCampaignResumo?.perdidos ?? campaignCounts.perdido).toString()} />
+          <Info label="Bloqueados" value={campaignQuality.bloqueados.toString()} />
+          <Info label="Sem WhatsApp" value={campaignQuality.semWhatsapp.toString()} />
+          <Info label="Opt-out" value={campaignQuality.optOut.toString()} />
         </div>
       </div>
       {nextClient && (
@@ -6865,6 +6885,7 @@ function Campanhas({
         {filteredClientes.map((cliente) => {
           const finalMessage = messageFor(cliente)
           const waUrl = `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(finalMessage)}`
+          const readiness = campaignContactReadiness(cliente)
 
           return (
             <div className="table-row campaign campaign-bulk-row" key={cliente.id}>
@@ -6872,6 +6893,7 @@ function Campanhas({
                 <input
                   type="checkbox"
                   checked={selectedCampaignClientIds.includes(cliente.id)}
+                  disabled={readiness.blocked}
                   onChange={(event) => {
                     setSelectedCampaignClientIds((current) =>
                       event.target.checked
@@ -6885,19 +6907,20 @@ function Campanhas({
               <span>
                 <strong>{cliente.nome}</strong>
                 <small>{cliente.whatsapp}</small>
+                {readiness.blocked && <small className="score danger">{readiness.reason}</small>}
               </span>
               <span>{finalMessage}</span>
               <span className="status-pill">{statuses[cliente.id] ?? 'pendente'}</span>
               <span className="campaign-actions">
                 <a
-                  className="button"
-                  href={waUrl}
+                  className={readiness.blocked ? 'button disabled' : 'button'}
+                  href={readiness.blocked ? undefined : waUrl}
                   target="_blank"
                   rel="noreferrer"
                 >
                   <MessageCircle size={16} /> Abrir
                 </a>
-                <button className="button" type="button" onClick={() => markStatus(cliente, 'enviado', finalMessage)}>
+                <button className="button" type="button" disabled={readiness.blocked} onClick={() => markStatus(cliente, 'enviado', finalMessage)}>
                   Enviado
                 </button>
                 <button className="button" type="button" onClick={() => markStatus(cliente, 'respondeu', finalMessage)}>
@@ -6982,6 +7005,15 @@ function campaignTaskPriority(status: CampanhaEnvioStatus) {
   if (status === 'pendente' || status === 'enviado') return 80
   if (status === 'nao_respondeu') return 70
   return 50
+}
+
+function campaignContactReadiness(cliente: Cliente) {
+  if (cliente.status === 'Nao contatar' || cliente.leadQualificacaoStatus === 'nao_contatar') {
+    return { blocked: true, reason: 'Nao contatar' }
+  }
+  if (!cliente.whatsapp) return { blocked: true, reason: 'Sem WhatsApp' }
+  if (daysSince(cliente.ultimoContatoEm) <= 7) return { blocked: true, reason: 'Contato recente' }
+  return { blocked: false, reason: 'Apto' }
 }
 
 function tomorrowDate() {
@@ -7903,6 +7935,7 @@ function Relatorios({
   funilGerencial,
   motivosPerda,
   atividadesDia,
+  forecastVendedor,
   interacoes,
   orcamentos,
   importacoes,
@@ -7921,6 +7954,7 @@ function Relatorios({
   funilGerencial: FunilGerencialResumo[]
   motivosPerda: MotivoPerdaResumo[]
   atividadesDia: AtividadeDiaResumo[]
+  forecastVendedor: ForecastVendedorResumo[]
   interacoes: Interacao[]
   orcamentos: Orcamento[]
   importacoes: Importacao[]
@@ -7943,6 +7977,9 @@ function Relatorios({
   const conflitosPendentes = conflitos.filter((conflito) => !conflito.resolvido).length
   const tarefasVencidas = resumo?.tarefasVencidas ?? tarefas.filter((tarefa) => tarefa.status === 'aberta' && daysSince(tarefa.dataVencimento) > 0).length
   const oportunidadesBloqueadas = oportunidades.filter((oportunidade) => oportunidade.bloqueada).length
+  const forecastTotal = forecastVendedor.reduce((total, row) => total + row.forecastPonderado, 0)
+  const pipelineForecast = forecastVendedor.reduce((total, row) => total + row.pipelineAberto, 0)
+  const propostasVencidasForecast = forecastVendedor.reduce((total, row) => total + row.vencidas, 0)
   const medidas = rankingMedidas.length > 0
     ? rankingMedidas.map((item) => ({ label: item.label, count: item.itens }))
     : rankBy(vendasItens, (venda) => venda.medida ?? venda.produtoNome)
@@ -8013,7 +8050,47 @@ function Relatorios({
         <Metric icon={FileUp} label="Conflitos pendentes" value={conflitosPendentes.toString()} tone="amber" />
         <Metric icon={CalendarClock} label="Tarefas vencidas" value={tarefasVencidas.toString()} tone="red" />
         <Metric icon={ShieldCheck} label="Oport. bloqueadas" value={oportunidadesBloqueadas.toString()} tone="blue" />
+        <Metric icon={BarChart3} label="Forecast ponderado" value={money(forecastTotal)} tone="green" />
       </div>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Forecast e gargalos</h2>
+            <p>Pipeline ponderado por etapa, propostas vencidas e proxima acao gerencial.</p>
+          </div>
+          <Gauge size={18} />
+        </div>
+        <div className="info-grid forecast-summary">
+          <Info label="Pipeline aberto" value={money(pipelineForecast)} />
+          <Info label="Forecast ponderado" value={money(forecastTotal)} />
+          <Info label="Propostas vencidas" value={propostasVencidasForecast.toString()} />
+          <Info label="Ganho no mes" value={money(forecastVendedor.reduce((total, row) => total + row.ganhoMes, 0))} />
+        </div>
+        <div className="table">
+          <div className="table-head forecast-report">
+            <span>Vendedor</span>
+            <span>Aberto</span>
+            <span>Forecast</span>
+            <span>Ganho mes</span>
+            <span>Vencidas</span>
+            <span>7 dias</span>
+            <span>Gargalo</span>
+          </div>
+          {forecastVendedor.map((row) => (
+            <div className="table-row forecast-report" key={row.vendedorId}>
+              <span><strong>{row.vendedorNome}</strong><small>{row.propostasAbertas} propostas abertas</small></span>
+              <span>{money(row.pipelineAberto)}</span>
+              <span><strong>{money(row.forecastPonderado)}</strong></span>
+              <span>{money(row.ganhoMes)}</span>
+              <span className={row.vencidas > 0 ? 'score danger' : 'score'}>{row.vencidas}</span>
+              <span>{row.vencem7d}</span>
+              <span><strong>{row.gargaloPrincipal}</strong><small>{dateLabel(row.ultimoMovimento)}</small></span>
+            </div>
+          ))}
+          {forecastVendedor.length === 0 && <div className="empty-state">Sem dados de forecast ainda.</div>}
+        </div>
+      </section>
 
       <section className="panel wide">
         <div className="panel-header">

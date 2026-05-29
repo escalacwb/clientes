@@ -104,6 +104,7 @@ Aplicacao para a Capital:
 - Campanhas ainda sao uma reativacao fixa, nao um modulo de segmentacao.
 - Tarefas ja tem automacao inicial de follow-up, mas ainda nao tem calendario/kanban nem motor configuravel de regras.
 - Relatorios ainda misturam muito indicador agregado e pouco funil acionavel.
+- Relatorios ganharam forecast ponderado inicial por vendedor, mas ainda faltam metas configuraveis.
 - Nao ha Inbox Rodobens/leads separado.
 - Nao ha aprovacao de desconto, margem, estoque, validade de tabela ou versao da proposta.
 
@@ -220,6 +221,7 @@ Prioridade: alta.
    - Status por cliente: pendente, aberto, enviado, respondeu, virou orcamento, ganhou, perdido, nao contatar.
    - Evitar duplicidade dentro da mesma campanha.
    - Janela minima entre campanhas.
+   - Primeira trava visual entregue: sem WhatsApp, nao contatar e contato recente ficam bloqueados antes do WA.ME.
 
 4. Relatorio de campanha.
    - Alcance.
