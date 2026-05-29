@@ -3010,6 +3010,20 @@ h3 {
   resize: vertical;
 }
 
+.whatsapp-interpret-box {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+  border: 1px solid #dbe6df;
+  border-radius: 8px;
+  background: #f7fbf8;
+  padding: 12px;
+}
+
+.whatsapp-interpret-box .client360-contact-note textarea {
+  min-height: 112px;
+}
+
 .client360-outcome-buttons {
   display: flex;
   flex-wrap: wrap;

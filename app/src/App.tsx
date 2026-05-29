@@ -6855,6 +6855,8 @@ function Cliente360({
   const [contactNextActionText, setContactNextActionText] = useState('')
   const [contactBudgetId, setContactBudgetId] = useState('')
   const [nextActionDate, setNextActionDate] = useState('')
+  const [whatsappHistoryPaste, setWhatsappHistoryPaste] = useState('')
+  const [interpretationFeedback, setInterpretationFeedback] = useState('')
   const [isSavingContact, setIsSavingContact] = useState(false)
   const [contactFeedback, setContactFeedback] = useState('')
   const [isEditingClient, setIsEditingClient] = useState(false)
@@ -6978,6 +6980,22 @@ function Cliente360({
     } finally {
       setIsSavingContact(false)
     }
+  }
+
+  function applyWhatsAppInterpretation() {
+    const interpretation = interpretWhatsAppConversation(whatsappHistoryPaste, cliente.nome)
+    if (!interpretation.summary) {
+      setInterpretationFeedback('Cole um trecho maior da conversa para interpretar.')
+      return
+    }
+    setContactChannel('WhatsApp')
+    setContactReason(interpretation.reason)
+    setContactResult(interpretation.result)
+    setContactTemperature(interpretation.temperature)
+    setContactNote(interpretation.summary)
+    setContactNextActionText(interpretation.nextAction)
+    setNextActionDate(interpretation.nextAction ? addDays(new Date().toISOString().slice(0, 10), interpretation.nextActionDays) : '')
+    setInterpretationFeedback('Conversa interpretada. Revise os campos antes de salvar no historico.')
   }
 
   async function saveClientDraft() {
@@ -7107,6 +7125,28 @@ function Cliente360({
             </div>
           </div>
           {contactFeedback && <div className="readiness ok">{contactFeedback}</div>}
+          {interpretationFeedback && <div className="readiness ok">{interpretationFeedback}</div>}
+          <div className="whatsapp-interpret-box">
+            <label className="client360-contact-note">
+              Colar conversa do WhatsApp
+              <textarea
+                value={whatsappHistoryPaste}
+                onChange={(event) => setWhatsappHistoryPaste(event.target.value)}
+                placeholder="Cole aqui o trecho do ultimo atendimento. O sistema resume e preenche os campos abaixo para revisao."
+              />
+            </label>
+            <div className="client360-save-bar">
+              <button className="button primary" type="button" onClick={applyWhatsAppInterpretation}>
+                Interpretar conversa
+              </button>
+              <button className="button" type="button" disabled={!whatsappHistoryPaste.trim()} onClick={() => {
+                setWhatsappHistoryPaste('')
+                setInterpretationFeedback('')
+              }}>
+                Limpar conversa
+              </button>
+            </div>
+          </div>
           <div className="client360-contact-grid">
             <label>
               Canal
@@ -7650,6 +7690,83 @@ function buildContactSummary(input: {
     input.nextAction.trim() ? `Proxima acao: ${input.nextAction.trim()}` : '',
   ]
   return lines.filter(Boolean).join('\n')
+}
+
+function interpretWhatsAppConversation(rawText: string, clienteNome: string) {
+  const text = rawText.trim()
+  const normalized = removeAccents(text).toLowerCase()
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const cleanLines = lines
+    .map((line) => line.replace(/^\[?\d{1,2}\/\d{1,2}\/\d{2,4},?\s*\d{1,2}:\d{2}(?::\d{2})?\]?\s*-?\s*/u, '').trim())
+    .filter(Boolean)
+  const customerSignals = cleanLines
+    .filter((line) => !removeAccents(line).toLowerCase().includes('capital truck'))
+    .slice(-6)
+
+  const wantsQuote = /\b(cotar|cotacao|orcar|orcamento|preco|valor|quanto fica|quanto sai|passa.*valor|me ve|manda.*preco)\b/u.test(normalized)
+  const closedDeal = /\b(fechou|pode emitir|vou querer|pode fazer|aprovado|manda a ordem|pedido fechado)\b/u.test(normalized)
+  const noInterest = /\b(sem interesse|nao tenho interesse|nao preciso|nao quero|ja comprei|comprei em outro|obrigado.*nao)\b/u.test(normalized)
+  const later = /\b(mais tarde|depois|mes que vem|semana que vem|vou ver|vou analisar|retorno|te aviso|falo depois)\b/u.test(normalized)
+  const complaint = /\b(reclamacao|problema|defeito|garantia|atrasou|nao chegou|ruim|insatisfeito)\b/u.test(normalized)
+  const invalidNumber = /\b(numero errado|nao conheco|nao sou|engano)\b/u.test(normalized)
+  const payment = Array.from(new Set(text.match(/\b(?:a vista|à vista|pix|boleto|cart[aã]o|30\/60(?:\/90)?|30 dias|60 dias|90 dias|parcelad[oa]|entrada)\b/giu) ?? []))
+  const measures = Array.from(new Set(text.match(/\b\d{3}\/\d{2}\s*r?\s*\d{2}(?:[.,]\d)?\b/giu) ?? []))
+  const plates = Array.from(new Set(text.match(/\b[A-Z]{3}\d[A-Z0-9]\d{2}\b/giu) ?? []))
+  const km = Array.from(new Set(text.match(/\b\d{2,3}(?:\.\d{3})+\s*km\b/giu) ?? []))
+  const quantities = Array.from(new Set(text.match(/\b\d+\s*(?:pneus?|un|unidades?|pecas?|peças?)\b/giu) ?? []))
+
+  const result = closedDeal
+    ? 'fechou pedido'
+    : complaint
+      ? 'reclamacao'
+      : invalidNumber
+        ? 'numero invalido'
+        : wantsQuote
+          ? 'pediu orcamento'
+          : later
+            ? 'comprar depois'
+            : noInterest
+              ? 'sem interesse'
+              : 'respondeu'
+  const reason = wantsQuote || closedDeal ? 'orcamento' : complaint ? 'pos-venda' : later || noInterest ? 'follow-up' : 'prospeccao'
+  const temperature = closedDeal || wantsQuote ? 'quente' : later ? 'morno' : noInterest || invalidNumber ? 'frio' : complaint ? 'quente' : 'morno'
+  const nextAction = closedDeal
+    ? 'Confirmar disponibilidade, condicoes e emissao do pedido'
+    : complaint
+      ? 'Tratar reclamacao e retornar com solucao'
+      : wantsQuote
+        ? 'Montar e enviar proposta'
+        : later
+          ? 'Retomar contato no prazo combinado'
+          : noInterest
+            ? 'Registrar baixa prioridade e acompanhar futuramente'
+            : invalidNumber
+              ? 'Corrigir cadastro e validar contato'
+              : 'Continuar atendimento'
+  const nextActionDays = closedDeal || wantsQuote || complaint || invalidNumber ? 1 : later ? 7 : noInterest ? 30 : 2
+  const details = [
+    measures.length ? `Medidas citadas: ${measures.join(', ')}.` : '',
+    quantities.length ? `Quantidades citadas: ${quantities.join(', ')}.` : '',
+    payment.length ? `Condicoes/pagamento citados: ${payment.join(', ')}.` : '',
+    plates.length ? `Placas citadas: ${plates.join(', ')}.` : '',
+    km.length ? `KM citado: ${km.join(', ')}.` : '',
+  ].filter(Boolean)
+  const excerpt = customerSignals.slice(-3).join(' / ')
+  const summary = [
+    `Conversa WhatsApp com ${clienteNome}.`,
+    `Interpretacao: ${result}.`,
+    ...details,
+    excerpt ? `Trecho relevante: ${excerpt}` : '',
+  ].filter(Boolean).join('\n')
+
+  return { reason, result, temperature, nextAction, nextActionDays, summary }
+}
+
+function removeAccents(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
 function buildClientServiceTimeline(
