@@ -4403,6 +4403,25 @@ function conversionRate(conversions: number, total: number) {
   return Math.round((conversions / total) * 100)
 }
 
+function lossReasonLabel(reason: string) {
+  const labels: Record<string, string> = {
+    preco: 'Preco',
+    prazo: 'Prazo',
+    concorrente: 'Concorrente',
+    sem_estoque: 'Sem estoque',
+    nao_respondeu: 'Nao respondeu',
+    aprovacao_rejeitada: 'Aprovacao rejeitada',
+    desconto_excessivo: 'Aprovacao rejeitada - desconto excessivo',
+    margem_insuficiente: 'Aprovacao rejeitada - margem insuficiente',
+    preco_desatualizado: 'Aprovacao rejeitada - preco desatualizado',
+    revisar_comercial: 'Aprovacao rejeitada - revisar condicao comercial',
+  }
+  if (reason.startsWith('aprovacao_rejeitada:')) {
+    return labels[reason.split(':')[1]] ?? labels.aprovacao_rejeitada
+  }
+  return labels[reason] ?? reason
+}
+
 function Orcamentos({
   clientes,
   orcamentos,
@@ -4417,6 +4436,7 @@ function Orcamentos({
   onStatusChange: (id: string, status: Orcamento['status'], motivoPerda?: string) => void
 }) {
   const [lossReasons, setLossReasons] = useState<Record<string, string>>({})
+  const [approvalRejectReasons, setApprovalRejectReasons] = useState<Record<string, string>>({})
   const [statusFilter, setStatusFilter] = useState<Orcamento['status'] | 'todos' | 'vencidos'>('todos')
   const openStatuses: Orcamento['status'][] = ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando']
   const filteredOrcamentos = orcamentos.filter((orcamento) => {
@@ -4482,6 +4502,7 @@ function Orcamentos({
               <span>
                 <span className={isExpired ? 'status-pill danger' : 'status-pill'}>{isExpired ? 'vencido' : orcamento.status}</span>
                 {orcamento.aprovacaoMotivo && <small>{orcamento.aprovacaoMotivo}</small>}
+                {orcamento.motivoPerda && <small>Motivo: {lossReasonLabel(orcamento.motivoPerda)}</small>}
                 {orcamento.aprovadoEm && <small>Aprovado em {dateLabel(orcamento.aprovadoEm)}</small>}
               </span>
               <span>
@@ -4499,6 +4520,30 @@ function Orcamentos({
                     <button className="button primary" type="button" onClick={() => onStatusChange(orcamento.id, 'enviado')}>
                       Aprovar e enviar
                     </button>
+                  )}
+                  {orcamento.status === 'aguardando_aprovacao' && canApprove && (
+                    <>
+                      <select
+                        className="assign-select"
+                        value={approvalRejectReasons[orcamento.id] ?? ''}
+                        onChange={(event) => setApprovalRejectReasons({ ...approvalRejectReasons, [orcamento.id]: event.target.value })}
+                      >
+                        <option value="">Motivo rejeicao</option>
+                        <option value="desconto_excessivo">Desconto excessivo</option>
+                        <option value="margem_insuficiente">Margem insuficiente</option>
+                        <option value="preco_desatualizado">Preco desatualizado</option>
+                        <option value="sem_estoque">Sem estoque</option>
+                        <option value="revisar_comercial">Revisar condicao comercial</option>
+                      </select>
+                      <button
+                        className="button danger"
+                        disabled={!approvalRejectReasons[orcamento.id]}
+                        type="button"
+                        onClick={() => onStatusChange(orcamento.id, 'perdido', `aprovacao_rejeitada:${approvalRejectReasons[orcamento.id]}`)}
+                      >
+                        Rejeitar
+                      </button>
+                    </>
                   )}
                   {orcamento.status === 'enviado' && (
                     <button className="button" type="button" onClick={() => onStatusChange(orcamento.id, 'negociando')}>
@@ -4522,11 +4567,13 @@ function Orcamentos({
                     <option value="concorrente">Concorrente</option>
                     <option value="sem_estoque">Sem estoque</option>
                     <option value="nao_respondeu">Nao respondeu</option>
+                    <option value="aprovacao_rejeitada">Aprovacao rejeitada</option>
                   </select>
                   <button
                     className="button"
+                    disabled={!lossReasons[orcamento.id]}
                     type="button"
-                    onClick={() => onStatusChange(orcamento.id, 'perdido', lossReasons[orcamento.id] || 'outro')}
+                    onClick={() => onStatusChange(orcamento.id, 'perdido', lossReasons[orcamento.id])}
                   >
                     Perdido
                   </button>

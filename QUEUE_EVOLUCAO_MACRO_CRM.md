@@ -64,12 +64,12 @@ Ja entregue:
 - Condicoes comparativas e follow-up automatico.
 - Acao `Criar e enviar`, marcando status `enviado` quando nao exige aprovacao.
 - Follow-up automatico especifico para proposta enviada.
+- Rejeicao de aprovacao com motivo padronizado.
+- Motivo de perda padronizado e obrigatorio.
 
 Proximas entregas:
 - Vincular orcamento criado a campanha/tarefa de origem.
 - Historico de versoes de proposta.
-- Rejeitar aprovacao com motivo.
-- Motivo de perda padronizado e obrigatorio.
 
 Pronto quando:
 - Gerente enxerga pipeline por status e vendedor.

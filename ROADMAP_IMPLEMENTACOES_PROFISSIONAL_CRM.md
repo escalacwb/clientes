@@ -619,6 +619,23 @@ Validacao:
 Proximo passo tecnico:
 - Vincular o orcamento criado pela tela a campanha/tarefa de origem.
 
+### 2026-05-28 - Rejeicao e perda estruturada de orcamento
+
+Status: concluido.
+
+Entregue:
+- Admin pode rejeitar uma proposta em aprovacao com motivo padronizado.
+- Rejeicao grava o orcamento como `perdido` com motivo `aprovacao_rejeitada`.
+- Perda comum agora exige motivo selecionado antes de habilitar a acao.
+- Listagem mostra o motivo de perda/rejeicao em texto legivel.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Criar historico dedicado de aprovacoes/rejeicoes em tabela propria.
+- Vincular orcamento a campanha/tarefa de origem.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:
