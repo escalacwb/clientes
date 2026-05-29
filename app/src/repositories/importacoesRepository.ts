@@ -39,6 +39,10 @@ export type ReferenceImportResult = {
     precosAlterados?: number
     precosInalterados?: number
   }
+  postProcess?: {
+    clientes_atualizados?: number
+    oportunidades_geradas?: number
+  }
   movimentosComVeiculo: number
   movimentosSemVeiculo: number
 }

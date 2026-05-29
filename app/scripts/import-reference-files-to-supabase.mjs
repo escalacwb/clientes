@@ -107,7 +107,7 @@ try {
   const servicosResult = await step('importando itens de servicos', () => upsertServicos(movimentosComVeiculo.filter((item) => item.tipo === 'servico'), clienteIndex, veiculoIndex, ordemIndex, importacao.id))
   const catalogoResult = await step('importando catalogo/precos', () => upsertCatalogo([...precosProdutos, ...precosServicos], arquivos))
 
-  await step('atualizando estatisticas dos clientes', () => updateClienteStats())
+  const postProcessResult = await step('finalizando importacao e oportunidades', () => finalizarImportacaoDiaria())
   await updateImportacao(importacao.id, {
     total_linhas: clientes.length + carros.length + movimentos.length + precosProdutos.length + precosServicos.length,
     clientes_encontrados: clientes.length,
@@ -126,6 +126,7 @@ try {
     vendas: vendasResult,
     servicos: servicosResult,
     catalogo: catalogoResult,
+    postProcess: postProcessResult,
   }, null, 2))
 } catch (error) {
   if (importacao?.id) {
@@ -652,53 +653,10 @@ function nullableNumber(value) {
   return Number(value)
 }
 
-async function updateClienteStats() {
-  await runSql(`
-    update public.clientes c
-    set
-      primeira_compra_em = stats.primeira_compra,
-      ultima_compra_em = stats.ultima_compra,
-      ultimo_servico_em = stats.ultimo_servico,
-      total_comprado = coalesce(stats.total_produtos, 0),
-      total_servicos = coalesce(stats.total_servicos, 0),
-      status_comercial = case
-        when stats.ultima_compra is null and stats.ultimo_servico is null then 'novo'::cliente_status
-        when greatest(coalesce(stats.ultima_compra, date '1900-01-01'), coalesce(stats.ultimo_servico, date '1900-01-01')) < current_date - 180 then 'reativar'::cliente_status
-        else 'ativo'::cliente_status
-      end
-    from (
-      select
-        c.id,
-        v.primeira_compra,
-        v.ultima_compra,
-        s.ultimo_servico,
-        coalesce(v.total_produtos, 0) as total_produtos,
-        coalesce(s.total_servicos, 0) as total_servicos
-      from public.clientes c
-      left join (
-        select cliente_id, min(data_venda) as primeira_compra, max(data_venda) as ultima_compra, sum(valor_total) as total_produtos
-        from public.vendas_itens
-        group by cliente_id
-      ) v on v.cliente_id = c.id
-      left join (
-        select cliente_id, max(data_servico) as ultimo_servico, sum(valor_total) as total_servicos
-        from public.servicos_itens
-        group by cliente_id
-      ) s on s.cliente_id = c.id
-    ) stats
-    where stats.id = c.id;
-  `)
-}
-
-async function runSql(sql) {
-  const { error } = await supabase.rpc('exec_sql', { sql })
-  if (!error) return
-  const client = await createPgClient()
-  try {
-    await client.query(sql)
-  } finally {
-    await client.end()
-  }
+async function finalizarImportacaoDiaria() {
+  const { data, error } = await supabase.rpc('finalizar_importacao_diaria')
+  if (error) throw error
+  return data
 }
 
 async function createPgClient() {

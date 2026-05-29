@@ -1170,6 +1170,27 @@ Proximo passo tecnico:
 - Disparar `refresh_oportunidades_cache()` automaticamente ao terminar a importacao diaria e apos reprocessamentos grandes.
 - Evoluir Dashboard para usar somente agregados de banco, sem depender da pagina atual de clientes.
 
+### 2026-05-28 - Pos-processamento automatico da importacao diaria
+
+Status: concluido.
+
+Entregue:
+- Criada funcao `refresh_clientes_comercial_stats()` para recalcular primeira compra, ultima compra, ultimo servico, total comprado, total de servicos e status comercial.
+- Criada funcao `finalizar_importacao_diaria()` para executar, em sequencia, estatisticas comerciais e refresh da fila `oportunidades_cache`.
+- Edge Function `import-reference-files` passou a chamar o pos-processamento antes de retornar sucesso.
+- Script local `import-reference-files-to-supabase.mjs` passou a usar a mesma funcao de finalizacao, evitando divergencia entre importacao pelo app e importacao por terminal.
+- Tela de Importacoes agora mostra quantos clientes foram recalculados e quantas oportunidades ficaram na fila.
+- Script de deploy da Edge Function passou a usar `npx supabase`, sem depender de CLI global.
+
+Validacao:
+- SQL aplicado com `node scripts/run-sql-file.mjs supabase/queries/importacao_postprocess.sql`.
+- Chamada direta de `finalizar_importacao_diaria()` retornou 21.575 clientes recalculados e 43.605 oportunidades geradas.
+- Edge Function `import-reference-files` foi redeployada no projeto Supabase.
+
+Proximo passo tecnico:
+- Criar uma tela/acao de manutencao para reprocessar pos-importacao manualmente se a Edge Function cair no meio de uma importacao grande.
+- Evoluir o Dashboard para alertar quando a fila de oportunidades estiver desatualizada.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

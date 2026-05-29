@@ -4624,8 +4624,11 @@ function Importacoes({
       const catalogoResumo = result.catalogo
         ? ` Catalogo: ${result.catalogo.itens} itens, ${result.catalogo.precosNovos ?? 0} precos novos, ${result.catalogo.precosAlterados ?? 0} alterados, ${result.catalogo.precosInalterados ?? 0} inalterados.`
         : ''
+      const postProcessResumo = result.postProcess
+        ? ` Pos-processamento: ${result.postProcess.clientes_atualizados ?? 0} clientes recalculados e ${result.postProcess.oportunidades_geradas ?? 0} oportunidades na fila.`
+        : ''
       setReferenceImportResult(
-        `Importacao concluida: ${result.clientes} clientes, ${result.veiculos} veiculos, ${result.ordens} ordens, ${result.vendas.created + result.servicos.created} itens.${catalogoResumo}`,
+        `Importacao concluida: ${result.clientes} clientes, ${result.veiculos} veiculos, ${result.ordens} ordens, ${result.vendas.created + result.servicos.created} itens.${catalogoResumo}${postProcessResumo}`,
       )
       const updated = await listImportacoes()
       const created = updated.find((item) => item.id === result.importacaoId)

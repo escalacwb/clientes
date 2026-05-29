@@ -154,6 +154,7 @@ Deno.serve(async (request) => {
     const vendas = await upsertVendas(service, movimentosComVeiculo.filter((item) => item.tipo === 'produto'), clienteIndex, veiculoIndex, ordemIndex, importacao.id)
     const servicos = await upsertServicos(service, movimentosComVeiculo.filter((item) => item.tipo === 'servico'), clienteIndex, veiculoIndex, ordemIndex, importacao.id)
     const catalogo = await upsertCatalogo(service, [...parsed.precosProdutos, ...parsed.precosServicos], arquivos)
+    const postProcess = await finalizarImportacaoDiaria(service)
 
     await service
       .from('importacoes')
@@ -177,6 +178,7 @@ Deno.serve(async (request) => {
       vendas,
       servicos,
       catalogo,
+      postProcess,
       movimentosComVeiculo: movimentosComVeiculo.filter((item) => item.veiculo_ref).length,
       movimentosSemVeiculo: movimentosComVeiculo.filter((item) => !item.veiculo_ref).length,
     })
@@ -197,6 +199,12 @@ async function assertAdmin(token: string, service: ReturnType<typeof createClien
     .maybeSingle()
   if (error) throw error
   if (!data?.ativo || data.role !== 'admin') throw new HttpError('Apenas administradores podem importar arquivos.', 403)
+}
+
+async function finalizarImportacaoDiaria(service: ReturnType<typeof createClient>) {
+  const { data, error } = await service.rpc('finalizar_importacao_diaria')
+  if (error) throw error
+  return data as { clientes_atualizados?: number; oportunidades_geradas?: number }
 }
 
 async function parseFiles(files: File[]) {

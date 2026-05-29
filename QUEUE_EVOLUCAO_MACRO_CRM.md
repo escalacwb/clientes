@@ -24,6 +24,8 @@ Entregas:
 - Deduplicacao idempotente para clientes, veiculos, ordens, vendas, servicos e precos.
 - Resumo claro: novos, atualizados, ignorados, conflitos e erros.
 - Logs por arquivo e por importacao.
+- Pos-processamento automatico apos importacao: recalcula estatisticas comerciais dos clientes e atualiza a fila de oportunidades.
+- Mesma rotina disponivel para app, Edge Function e script local.
 
 Pronto quando:
 - Reimportar o mesmo pacote nao duplica dados.
