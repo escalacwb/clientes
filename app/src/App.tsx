@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 import { lazy, type FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
-import capitalLogo from './assets/capital-truck-center-logo.jpg'
+import capitalLogo from './assets/capital-truck-center-logo.svg'
 import {
   clientes as seedClientes,
   alteracoes as seedAlteracoes,
