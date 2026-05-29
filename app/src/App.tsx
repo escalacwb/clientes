@@ -1505,6 +1505,10 @@ function App() {
             tarefas={clienteTarefas}
             campanhaEnvios={clienteCampanhas}
             currentUser={session}
+            onUpdateClient={async (patch) => {
+              await updateClienteComercial(selectedClient.id, patch)
+              setClientes((current) => current.map((cliente) => cliente.id === selectedClient.id ? { ...cliente, ...patch } : cliente))
+            }}
             onAddInteraction={async (interacao) => {
               const created = await createInteracao(interacao)
               setInteracoes((current) => [created, ...current])
@@ -1522,6 +1526,39 @@ function App() {
                 setClienteTarefas((current) => [tarefa, ...current])
               }
               return created
+            }}
+            onOpenBudget={(orcamentoId) => {
+              setSelectedOrcamentoId(orcamentoId)
+              setView('orcamento-detalhe')
+            }}
+            onUpdateBudgetStatus={async (orcamentoId, status, motivoPerda) => {
+              const changedOrcamento = orcamentos.find((orcamento) => orcamento.id === orcamentoId)
+              await updateOrcamentoStatus(orcamentoId, status, motivoPerda, status === 'enviado' ? session.id : undefined)
+              if (status === 'ganho' && changedOrcamento) {
+                await attributeCampanhaRevenueByOrcamento(orcamentoId, changedOrcamento.valorTotal)
+              }
+              setOrcamentos((current) => current.map((orcamento) => orcamento.id === orcamentoId
+                ? { ...orcamento, status, motivoPerda, aprovadoPor: status === 'enviado' ? session.id : orcamento.aprovadoPor, aprovadoEm: status === 'enviado' ? new Date().toISOString() : orcamento.aprovadoEm }
+                : orcamento))
+            }}
+            onCompleteTask={async (tarefaId) => {
+              await completeTarefa(tarefaId)
+              setTarefas((current) => current.map((tarefa) => tarefa.id === tarefaId ? { ...tarefa, status: 'concluida', concluidaEm: new Date().toISOString() } : tarefa))
+              setClienteTarefas((current) => current.map((tarefa) => tarefa.id === tarefaId ? { ...tarefa, status: 'concluida', concluidaEm: new Date().toISOString() } : tarefa))
+            }}
+            onUpdateCampaignStatus={async (envio, status) => {
+              const updated = await upsertCampanhaEnvio({
+                campanhaId: envio.campanhaId,
+                campanhaNome: envio.campanhaNome,
+                clienteId: envio.clienteId,
+                vendedorId: envio.vendedorId ?? selectedClient.vendedorId ?? session.id,
+                telefone: envio.telefone ?? selectedClient.whatsapp,
+                mensagemFinal: envio.mensagemFinal,
+                status,
+                orcamentoId: envio.orcamentoId,
+                receitaAtribuida: envio.receitaAtribuida,
+              })
+              setClienteCampanhas((current) => current.map((item) => item.id === envio.id ? updated : item))
             }}
             onCreateTask={async () => {
               const created = await createTarefa({
@@ -6468,7 +6505,12 @@ function Cliente360({
   tarefas,
   campanhaEnvios,
   currentUser,
+  onUpdateClient,
   onAddInteraction,
+  onOpenBudget,
+  onUpdateBudgetStatus,
+  onCompleteTask,
+  onUpdateCampaignStatus,
   onCreateTask,
   onCreateQuote,
   onBack,
@@ -6482,7 +6524,12 @@ function Cliente360({
   tarefas: Tarefa[]
   campanhaEnvios: CampanhaEnvio[]
   currentUser: SessaoUsuario
+  onUpdateClient: (patch: Partial<Cliente>) => Promise<void>
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
+  onOpenBudget: (orcamentoId: string) => void
+  onUpdateBudgetStatus: (orcamentoId: string, status: Orcamento['status'], motivoPerda?: string) => Promise<void>
+  onCompleteTask: (tarefaId: string) => Promise<void>
+  onUpdateCampaignStatus: (envio: CampanhaEnvio, status: CampanhaEnvioStatus) => Promise<void>
   onCreateTask: () => Promise<Tarefa>
   onCreateQuote: (initialItems?: OrcamentoItemInput[]) => void
   onBack: () => void
@@ -6499,6 +6546,18 @@ function Cliente360({
   const [nextActionDate, setNextActionDate] = useState('')
   const [isSavingContact, setIsSavingContact] = useState(false)
   const [contactFeedback, setContactFeedback] = useState('')
+  const [isEditingClient, setIsEditingClient] = useState(false)
+  const [isSavingClient, setIsSavingClient] = useState(false)
+  const [clientDraft, setClientDraft] = useState(() => ({
+    responsavel: cliente.responsavel ?? '',
+    whatsapp: cliente.whatsapp ?? '',
+    telefone: cliente.telefone ?? '',
+    email: cliente.email ?? '',
+    status: cliente.status,
+    observacoes: cliente.observacoes ?? '',
+  }))
+  const [clientFeedback, setClientFeedback] = useState('')
+  const [busyActionId, setBusyActionId] = useState('')
 
   const clienteVendas = vendasItens.filter((venda) => venda.clienteId === cliente.id)
   const clienteServicos = servicosItens.filter((servico) => servico.clienteId === cliente.id)
@@ -6550,6 +6609,18 @@ function Cliente360({
     ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(buildServiceOpeningMessage(cliente))}`
     : undefined
 
+  useEffect(() => {
+    setClientDraft({
+      responsavel: cliente.responsavel ?? '',
+      whatsapp: cliente.whatsapp ?? '',
+      telefone: cliente.telefone ?? '',
+      email: cliente.email ?? '',
+      status: cliente.status,
+      observacoes: cliente.observacoes ?? '',
+    })
+    setIsEditingClient(false)
+  }, [cliente.id, cliente.responsavel, cliente.whatsapp, cliente.telefone, cliente.email, cliente.status, cliente.observacoes])
+
   async function handleCreateTask() {
     setIsCreatingTask(true)
     try {
@@ -6583,6 +6654,49 @@ function Cliente360({
     }
   }
 
+  async function saveClientDraft() {
+    setIsSavingClient(true)
+    setClientFeedback('')
+    try {
+      const patch: Partial<Cliente> = {
+        responsavel: clientDraft.responsavel || undefined,
+        whatsapp: clientDraft.whatsapp || undefined,
+        telefone: clientDraft.telefone || undefined,
+        email: clientDraft.email || undefined,
+        status: clientDraft.status,
+        observacoes: clientDraft.observacoes || undefined,
+      }
+      await onUpdateClient(patch)
+      setClientFeedback('Cadastro atualizado.')
+      setIsEditingClient(false)
+    } finally {
+      setIsSavingClient(false)
+    }
+  }
+
+  async function openWhatsappAndRegister() {
+    if (!whatsappUrl) return
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer')
+    const created = await onAddInteraction({
+      clienteId: cliente.id,
+      vendedorId: cliente.vendedorId ?? currentUser.id,
+      canal: 'WhatsApp',
+      tipo: 'atendimento',
+      resumo: 'WhatsApp aberto pela central de atendimento.',
+      resultado: 'whatsapp aberto',
+    })
+    setContactFeedback(`WhatsApp aberto e registrado em ${dateLabel(created.data)}.`)
+  }
+
+  async function runAction(id: string, action: () => Promise<void>) {
+    setBusyActionId(id)
+    try {
+      await action()
+    } finally {
+      setBusyActionId('')
+    }
+  }
+
   return (
     <section className="client360">
       <div className="panel wide client360-hero">
@@ -6594,13 +6708,16 @@ function Cliente360({
         </div>
         <div className="client360-actions">
           {whatsappUrl && (
-            <a className="button primary" href={whatsappUrl} target="_blank" rel="noreferrer">
+            <button className="button primary" type="button" onClick={() => void openWhatsappAndRegister()}>
               <MessageCircle size={16} /> Abrir WhatsApp
-            </a>
+            </button>
           )}
           <button className="button primary" type="button" onClick={() => onCreateQuote()}>Criar orcamento</button>
           <button className="button" type="button" onClick={handleCreateTask} disabled={isCreatingTask}>
             {isCreatingTask ? 'Criando...' : 'Criar tarefa'}
+          </button>
+          <button className="button" type="button" onClick={() => setIsEditingClient((current) => !current)}>
+            {isEditingClient ? 'Fechar cadastro' : 'Editar cadastro'}
           </button>
         </div>
         <div className="info-grid">
@@ -6613,6 +6730,46 @@ function Cliente360({
           <Info label="Orcamentos abertos" value={orcamentosAbertos.length.toString()} />
           <Info label="Ultimo orcamento" value={ultimoOrcamento ? `${money(ultimoOrcamento.valorTotal)} · ${ultimoOrcamento.status}` : 'Sem historico'} />
         </div>
+        {clientFeedback && <div className="readiness ok">{clientFeedback}</div>}
+        {isEditingClient && (
+          <div className="client360-edit-grid">
+            <label>
+              Responsavel
+              <input value={clientDraft.responsavel} onChange={(event) => setClientDraft((current) => ({ ...current, responsavel: event.target.value }))} />
+            </label>
+            <label>
+              WhatsApp
+              <input value={clientDraft.whatsapp} onChange={(event) => setClientDraft((current) => ({ ...current, whatsapp: event.target.value }))} />
+            </label>
+            <label>
+              Telefone
+              <input value={clientDraft.telefone} onChange={(event) => setClientDraft((current) => ({ ...current, telefone: event.target.value }))} />
+            </label>
+            <label>
+              Email
+              <input value={clientDraft.email} onChange={(event) => setClientDraft((current) => ({ ...current, email: event.target.value }))} />
+            </label>
+            <label>
+              Status
+              <select value={clientDraft.status} onChange={(event) => setClientDraft((current) => ({ ...current, status: event.target.value as ClienteStatus }))}>
+                <option value="Novo">Novo</option>
+                <option value="Ativo">Ativo</option>
+                <option value="Em acompanhamento">Em acompanhamento</option>
+                <option value="Orcamento aberto">Orcamento aberto</option>
+                <option value="Reativar">Reativar</option>
+                <option value="Inativo">Inativo</option>
+                <option value="Nao contatar">Nao contatar</option>
+              </select>
+            </label>
+            <label className="wide-field">
+              Observacoes comerciais
+              <textarea value={clientDraft.observacoes} onChange={(event) => setClientDraft((current) => ({ ...current, observacoes: event.target.value }))} />
+            </label>
+            <button className="button primary" type="button" disabled={isSavingClient} onClick={() => void saveClientDraft()}>
+              {isSavingClient ? 'Salvando...' : 'Salvar cadastro'}
+            </button>
+          </div>
+        )}
       </div>
 
       <section className="client360-workbench">
@@ -6884,6 +7041,22 @@ function Cliente360({
               <div className="status-row" key={orcamento.id}>
                 <span>{dateLabel(orcamento.data)} · {orcamento.status}</span>
                 <strong>{money(orcamento.valorTotal)}</strong>
+                <div className="row-actions">
+                  <button className="button compact-button" type="button" onClick={() => onOpenBudget(orcamento.id)}>Abrir</button>
+                  <button className="button compact-button" type="button" onClick={() => onCreateQuote(orcamento.itens?.map((item) => ({ ...item, valorTotal: undefined })))}>Revisar</button>
+                  {cliente.whatsapp && (
+                    <a
+                      className="button compact-button"
+                      href={`https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(buildQuoteMessage(cliente, orcamento.itens?.map((item) => ({ ...item, valorTotal: item.valorTotal ?? quoteItemTotal(item) })) ?? [], orcamento.validade, orcamento.observacao, quoteScenariosFromBudget(orcamento)))}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Reenviar
+                    </a>
+                  )}
+                  <button className="button compact-button" type="button" disabled={busyActionId === `budget-${orcamento.id}-enviado`} onClick={() => runAction(`budget-${orcamento.id}-enviado`, () => onUpdateBudgetStatus(orcamento.id, 'enviado'))}>Enviado</button>
+                  <button className="button compact-button" type="button" disabled={busyActionId === `budget-${orcamento.id}-ganho`} onClick={() => runAction(`budget-${orcamento.id}-ganho`, () => onUpdateBudgetStatus(orcamento.id, 'ganho'))}>Ganho</button>
+                </div>
               </div>
             ))}
             {clienteOrcamentos.length === 0 && <div className="empty-state">Sem orcamentos.</div>}
@@ -6909,6 +7082,7 @@ function Cliente360({
               <span>Responsavel</span>
               <span>Origem</span>
               <span>Status</span>
+              <span>Acao</span>
             </div>
             {clienteTarefas.map((tarefa) => (
               <div className="table-row client360-task" key={tarefa.id}>
@@ -6917,6 +7091,9 @@ function Cliente360({
                 <span>{tarefa.vendedorNome || 'Sem responsavel'}</span>
                 <span>{tarefa.origem}</span>
                 <strong>{tarefa.status}</strong>
+                <button className="button compact-button" type="button" disabled={tarefa.status !== 'aberta' || busyActionId === `task-${tarefa.id}`} onClick={() => runAction(`task-${tarefa.id}`, () => onCompleteTask(tarefa.id))}>
+                  Concluir
+                </button>
               </div>
             ))}
             {clienteTarefas.length === 0 && <div className="empty-state">Nenhuma tarefa criada para este cliente.</div>}
@@ -6939,6 +7116,7 @@ function Cliente360({
               <span>Telefone</span>
               <span>Orcamento</span>
               <span>Receita</span>
+              <span>Acao</span>
             </div>
             {clienteCampanhas.map((envio) => (
               <div className="table-row client360-campaign" key={envio.id}>
@@ -6947,6 +7125,10 @@ function Cliente360({
                 <span>{envio.telefone || 'Sem telefone'}</span>
                 <span>{envio.virouOrcamento ? 'Sim' : 'Nao'}</span>
                 <strong>{money(envio.receitaAtribuida ?? 0)}</strong>
+                <div className="row-actions">
+                  <button className="button compact-button" type="button" disabled={busyActionId === `campaign-${envio.id}-respondeu`} onClick={() => runAction(`campaign-${envio.id}-respondeu`, () => onUpdateCampaignStatus(envio, 'respondeu'))}>Respondeu</button>
+                  <button className="button compact-button" type="button" disabled={busyActionId === `campaign-${envio.id}-orcamento`} onClick={() => runAction(`campaign-${envio.id}-orcamento`, () => onUpdateCampaignStatus(envio, 'virou_orcamento'))}>Orcamento</button>
+                </div>
               </div>
             ))}
             {clienteCampanhas.length === 0 && <div className="empty-state">Nenhum envio de campanha registrado para este cliente.</div>}

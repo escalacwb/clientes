@@ -2701,7 +2701,8 @@ h3 {
 }
 
 .client360-contact-grid label,
-.client360-contact-note {
+.client360-contact-note,
+.client360-edit-grid label {
   display: grid;
   gap: 6px;
   color: #52625d;
@@ -2711,7 +2712,10 @@ h3 {
 
 .client360-contact-grid select,
 .client360-contact-grid input,
-.client360-contact-note textarea {
+.client360-contact-note textarea,
+.client360-edit-grid input,
+.client360-edit-grid select,
+.client360-edit-grid textarea {
   width: 100%;
   min-width: 0;
   border: 1px solid #cfd8d3;
@@ -2730,6 +2734,36 @@ h3 {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.client360-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.client360-edit-grid .wide-field {
+  grid-column: span 2;
+}
+
+.client360-edit-grid textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.client360-budget-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  border-bottom: 1px solid #eef1ee;
+  padding-bottom: 12px;
+}
+
+.client360-budget-card small {
+  display: block;
+  color: #64736f;
+  margin-top: 3px;
 }
 
 .compact-button {
@@ -2803,12 +2837,12 @@ h3 {
 
 .table-head.client360-task,
 .table-row.client360-task {
-  grid-template-columns: 120px minmax(260px, 1.5fr) minmax(140px, 0.8fr) 110px 90px;
+  grid-template-columns: 120px minmax(260px, 1.5fr) minmax(140px, 0.8fr) 110px 90px 92px;
 }
 
 .table-head.client360-campaign,
 .table-row.client360-campaign {
-  grid-template-columns: minmax(260px, 1.6fr) 130px 130px 100px 110px;
+  grid-template-columns: minmax(260px, 1.6fr) 130px 130px 100px 110px 150px;
 }
 
 .client360-vehicle small,
