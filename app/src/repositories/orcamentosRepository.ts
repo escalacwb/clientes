@@ -95,7 +95,7 @@ export async function listOrcamentosPage(input: {
   const to = from + input.pageSize - 1
   let query = supabase
     .from('orcamentos')
-    .select('*,clientes(nome),users(nome)', { count: 'exact' })
+    .select('*,clientes(nome),users!orcamentos_vendedor_id_fkey(nome)', { count: 'exact' })
     .order('data_orcamento', { ascending: false })
     .range(from, to)
 

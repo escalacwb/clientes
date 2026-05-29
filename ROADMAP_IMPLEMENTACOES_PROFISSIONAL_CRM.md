@@ -1110,6 +1110,25 @@ Validacao:
 Proximo passo tecnico:
 - Criar tendencia de mudancas de preco por importacao e painel de possiveis duplicados.
 
+### 2026-05-28 - Auditoria local com Playwright e pesquisa de ferramentas
+
+Status: concluido.
+
+Entregue:
+- Rodada local do app com login admin e navegacao pelas principais telas.
+- Validado login Supabase dos tres usuarios; William nao possui clientes atribuidos no momento.
+- Identificado e corrigido erro de Orcamentos por relacionamento ambiguo com `users`.
+- Criado documento `AUDITORIA_LOCAL_E_ROADMAP_FERRAMENTAS_2026-05-28.md` com achados, riscos e ferramentas prioritarias.
+- Pesquisa comparativa usada para orientar roadmap: Salesforce Automotive Cloud, Zoho Automotive CRM/CPQ, YardCRM e sistema de inventario/cotacao de pneus.
+
+Validacao:
+- Build passou com `npm run build`.
+- Consulta autenticada de Orcamentos passou sem erro apos selecionar explicitamente `users!orcamentos_vendedor_id_fkey(nome)`.
+- Playwright confirmou navegacao local nas telas principais.
+
+Proximo passo tecnico:
+- Implementar central de erros por modulo e substituir metricas calculadas sobre pagina atual por views agregadas.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:
