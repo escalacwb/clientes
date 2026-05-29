@@ -4981,6 +4981,9 @@ function Campanhas({
   const [campanhasResumo, setCampanhasResumo] = useState<CampanhaResumo[]>([])
   const [activeCampanhaId, setActiveCampanhaId] = useState('')
   const [saveName, setSaveName] = useState('')
+  const [campaignObjective, setCampaignObjective] = useState('')
+  const [campaignCost, setCampaignCost] = useState('')
+  const [campaignRevenueGoal, setCampaignRevenueGoal] = useState('')
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [total, setTotal] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
@@ -5084,6 +5087,9 @@ function Campanhas({
     setQuery(campanha.filtroUsado.query ?? '')
     setMensagemModelo(campanha.mensagemModelo)
     setSaveName(campanha.nome)
+    setCampaignObjective(campanha.objetivo ?? '')
+    setCampaignCost(campanha.custoEstimado ? String(campanha.custoEstimado) : '')
+    setCampaignRevenueGoal(campanha.metaReceita ? String(campanha.metaReceita) : '')
     setPage(1)
     setStatusFilter('todos')
   }
@@ -5108,6 +5114,9 @@ function Campanhas({
       const created = await createCampanhaSalva({
         nome,
         descricao: segmento.descricao,
+        objetivo: campaignObjective.trim() || undefined,
+        custoEstimado: numberFromInput(campaignCost),
+        metaReceita: numberFromInput(campaignRevenueGoal),
         mensagemModelo,
         filtroUsado: {
           segmentoId,
@@ -5237,6 +5246,41 @@ function Campanhas({
           />
         </label>
         <label>
+          Objetivo
+          <input
+            value={campaignObjective}
+            onChange={(event) => {
+              setCampaignObjective(event.target.value)
+              setActiveCampanhaId('')
+            }}
+            placeholder="Ex.: reativar compradores de pneus"
+          />
+        </label>
+        <label>
+          Custo estimado
+          <input
+            inputMode="decimal"
+            value={campaignCost}
+            onChange={(event) => {
+              setCampaignCost(event.target.value)
+              setActiveCampanhaId('')
+            }}
+            placeholder="0,00"
+          />
+        </label>
+        <label>
+          Meta de receita
+          <input
+            inputMode="decimal"
+            value={campaignRevenueGoal}
+            onChange={(event) => {
+              setCampaignRevenueGoal(event.target.value)
+              setActiveCampanhaId('')
+            }}
+            placeholder="0,00"
+          />
+        </label>
+        <label>
           Cidade
           <input
             value={publicoFiltros.cidade ?? ''}
@@ -5294,7 +5338,7 @@ function Campanhas({
         <div className="campaign-report-header">
           <div>
             <strong>{activeCampaignResumo ? activeCampaignResumo.nome : 'Resumo da pagina atual'}</strong>
-            <small>{activeCampaignResumo ? `Criada em ${dateLabel(activeCampaignResumo.criadaEm)}` : 'Salve ou selecione uma campanha para ver o resultado global.'}</small>
+            <small>{activeCampaignResumo ? `${activeCampaignResumo.objetivo || 'Sem objetivo'} - criada em ${dateLabel(activeCampaignResumo.criadaEm)}` : 'Salve ou selecione uma campanha para ver o resultado global.'}</small>
           </div>
           {activeCampaignResumo && <span>{conversionRate(activeCampaignResumo.viraramVenda || activeCampaignResumo.viraramOrcamento, activeCampaignResumo.total)}% conversao</span>}
         </div>
@@ -5305,6 +5349,9 @@ function Campanhas({
           <Info label="Orcamentos" value={(activeCampaignResumo?.viraramOrcamento ?? campaignCounts.virou_orcamento).toString()} />
           <Info label="Ganhos" value={(activeCampaignResumo?.viraramVenda ?? campaignCounts.ganhou).toString()} />
           <Info label="Receita atribuida" value={money(activeCampaignResumo?.receitaAtribuida ?? 0)} />
+          <Info label="Custo" value={money(activeCampaignResumo?.custoEstimado ?? numberFromInput(campaignCost))} />
+          <Info label="ROI" value={`${activeCampaignResumo?.roiPercent ?? 0}%`} />
+          <Info label="Meta" value={money(activeCampaignResumo?.metaReceita ?? numberFromInput(campaignRevenueGoal))} />
           <Info label="Perdidos" value={(activeCampaignResumo?.perdidos ?? campaignCounts.perdido).toString()} />
         </div>
       </div>
@@ -5441,6 +5488,12 @@ function campaignSummary(status: CampanhaEnvioStatus, mensagem: string) {
 function conversionRate(conversions: number, total: number) {
   if (!total) return 0
   return Math.round((conversions / total) * 100)
+}
+
+function numberFromInput(value: string) {
+  const normalized = value.replace(/\./g, '').replace(',', '.')
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
 function lossReasonLabel(reason: string) {

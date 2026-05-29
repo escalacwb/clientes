@@ -31,6 +31,9 @@ export type CampanhaSalva = {
   id: string
   nome: string
   descricao?: string
+  objetivo?: string
+  custoEstimado: number
+  metaReceita: number
   mensagemModelo: string
   filtroUsado: CampanhaFiltroUsado
   criadaEm: string
@@ -39,6 +42,7 @@ export type CampanhaSalva = {
 export type CampanhaResumo = {
   campanhaId: string
   nome: string
+  objetivo?: string
   criadaEm: string
   total: number
   pendentes: number
@@ -50,6 +54,9 @@ export type CampanhaResumo = {
   perdidos: number
   naoContatar: number
   receitaAtribuida: number
+  custoEstimado: number
+  metaReceita: number
+  roiPercent: number
 }
 
 type CampanhaEnvioRow = {
@@ -74,6 +81,9 @@ type CampanhaRow = {
   id: string
   nome: string
   descricao: string | null
+  objetivo: string | null
+  custo_estimado: number | null
+  meta_receita: number | null
   mensagem_modelo: string
   filtro_usado: CampanhaFiltroUsado | null
   criada_em: string
@@ -88,6 +98,7 @@ type CampanhaRow = {
 type CampanhaResumoRow = {
   campanha_id: string
   nome: string
+  objetivo: string | null
   criada_em: string
   total: number
   pendentes: number
@@ -99,6 +110,9 @@ type CampanhaResumoRow = {
   perdidos: number
   nao_contatar: number
   receita_atribuida: number
+  custo_estimado: number
+  meta_receita: number
+  roi_percent: number
 }
 
 export const campanhaSegmentos: CampanhaSegmento[] = [
@@ -193,7 +207,7 @@ export async function listCampanhasSalvas(): Promise<CampanhaSalva[]> {
 
   const { data, error } = await supabase
     .from('campanhas')
-    .select('id,nome,descricao,mensagem_modelo,filtro_usado,criada_em')
+    .select('id,nome,descricao,objetivo,custo_estimado,meta_receita,mensagem_modelo,filtro_usado,criada_em')
     .order('criada_em', { ascending: false })
     .limit(50)
 
@@ -206,6 +220,9 @@ export async function listCampanhasSalvas(): Promise<CampanhaSalva[]> {
 export async function createCampanhaSalva(input: {
   nome: string
   descricao?: string
+  objetivo?: string
+  custoEstimado?: number
+  metaReceita?: number
   mensagemModelo: string
   filtroUsado: CampanhaFiltroUsado
   criadaPor?: string
@@ -216,6 +233,9 @@ export async function createCampanhaSalva(input: {
       id: `campanha-${Date.now()}`,
       nome: input.nome,
       descricao: input.descricao,
+      objetivo: input.objetivo,
+      custoEstimado: input.custoEstimado ?? 0,
+      metaReceita: input.metaReceita ?? 0,
       mensagemModelo: input.mensagemModelo,
       filtroUsado: input.filtroUsado,
       criadaEm: new Date().toISOString(),
@@ -227,11 +247,14 @@ export async function createCampanhaSalva(input: {
     .insert({
       nome: input.nome,
       descricao: input.descricao ?? 'Campanha salva pelo app web',
+      objetivo: input.objetivo ?? null,
+      custo_estimado: input.custoEstimado ?? 0,
+      meta_receita: input.metaReceita ?? 0,
       mensagem_modelo: input.mensagemModelo,
       filtro_usado: input.filtroUsado,
       criada_por: input.criadaPor ?? null,
     })
-    .select('id,nome,descricao,mensagem_modelo,filtro_usado,criada_em')
+    .select('id,nome,descricao,objetivo,custo_estimado,meta_receita,mensagem_modelo,filtro_usado,criada_em')
     .single()
 
   if (error) throw error
@@ -273,7 +296,7 @@ async function listCampanhasResumoFallback(): Promise<CampanhaResumo[]> {
 
   const { data, error } = await supabase
     .from('campanhas')
-    .select('id,nome,criada_em,filtro_usado,campanha_envios(status,virou_orcamento,virou_venda,receita_atribuida)')
+    .select('id,nome,criada_em,filtro_usado,objetivo,custo_estimado,meta_receita,campanha_envios(status,virou_orcamento,virou_venda,receita_atribuida)')
     .order('criada_em', { ascending: false })
     .limit(50)
 
@@ -496,6 +519,9 @@ function mapCampanha(row: CampanhaRow): CampanhaSalva {
     id: row.id,
     nome: row.nome,
     descricao: row.descricao ?? undefined,
+    objetivo: row.objetivo ?? undefined,
+    custoEstimado: Number(row.custo_estimado ?? 0),
+    metaReceita: Number(row.meta_receita ?? 0),
     mensagemModelo: row.mensagem_modelo,
     filtroUsado,
     criadaEm: row.criada_em,
@@ -504,9 +530,12 @@ function mapCampanha(row: CampanhaRow): CampanhaSalva {
 
 function mapCampanhaResumo(row: CampanhaRow): CampanhaResumo {
   const envios = row.campanha_envios ?? []
+  const receita = envios.reduce((total, envio) => total + Number(envio.receita_atribuida ?? 0), 0)
+  const custo = Number(row.custo_estimado ?? 0)
   return {
     campanhaId: row.id,
     nome: row.nome,
+    objetivo: row.objetivo ?? undefined,
     criadaEm: row.criada_em,
     total: envios.length,
     pendentes: envios.filter((envio) => envio.status === 'pendente').length,
@@ -517,7 +546,10 @@ function mapCampanhaResumo(row: CampanhaRow): CampanhaResumo {
     viraramVenda: envios.filter((envio) => envio.virou_venda).length,
     perdidos: envios.filter((envio) => envio.status === 'perdido').length,
     naoContatar: envios.filter((envio) => envio.status === 'nao_contatar').length,
-    receitaAtribuida: envios.reduce((total, envio) => total + Number(envio.receita_atribuida ?? 0), 0),
+    receitaAtribuida: receita,
+    custoEstimado: custo,
+    metaReceita: Number(row.meta_receita ?? 0),
+    roiPercent: calculateRoiPercent(receita, custo),
   }
 }
 
@@ -525,6 +557,7 @@ function mapCampanhaResumoView(row: CampanhaResumoRow): CampanhaResumo {
   return {
     campanhaId: row.campanha_id,
     nome: row.nome,
+    objetivo: row.objetivo ?? undefined,
     criadaEm: row.criada_em,
     total: Number(row.total ?? 0),
     pendentes: Number(row.pendentes ?? 0),
@@ -536,5 +569,13 @@ function mapCampanhaResumoView(row: CampanhaResumoRow): CampanhaResumo {
     perdidos: Number(row.perdidos ?? 0),
     naoContatar: Number(row.nao_contatar ?? 0),
     receitaAtribuida: Number(row.receita_atribuida ?? 0),
+    custoEstimado: Number(row.custo_estimado ?? 0),
+    metaReceita: Number(row.meta_receita ?? 0),
+    roiPercent: Number(row.roi_percent ?? 0),
   }
+}
+
+function calculateRoiPercent(receita: number, custo: number) {
+  if (!custo) return 0
+  return Math.round(((receita - custo) / custo) * 100)
 }

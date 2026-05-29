@@ -187,13 +187,14 @@ Ja entregue:
 - Campanhas salvas.
 - Fila WhatsApp.
 - Status finais e relatorio basico.
+- Vinculo campanha -> orcamento -> ganho/perda.
+- Receita atribuida.
+- Campo de objetivo, custo e ROI.
 
 Proximas entregas:
 - Seletor assistido de produtos/servicos do catalogo.
-- Vinculo campanha -> orcamento -> ganho/perda.
-- Receita atribuida.
 - Janela minima entre campanhas por cliente.
-- Campo de objetivo, custo e ROI.
+- Relatorio de ROI por periodo, vendedor e segmento.
 
 Pronto quando:
 - Uma campanha mostra alcance, respostas, orcamentos, ganhos, receita e ROI.

@@ -1042,6 +1042,24 @@ Validacao:
 Proximo passo tecnico:
 - Criar relatorio de conversao Rodobens por periodo/vendedor e reforcar a classificacao de origem pela importacao.
 
+### 2026-05-28 - Campanhas com meta, custo e ROI
+
+Status: concluido.
+
+Entregue:
+- Adicionados `objetivo`, `custo_estimado` e `meta_receita` em campanhas.
+- View `vw_campanhas_resumo` passou a retornar custo, meta, receita atribuida e ROI percentual.
+- Tela de Campanhas agora permite salvar objetivo, custo estimado e meta de receita junto dos filtros e mensagem.
+- Resumo da campanha exibe custo, meta e ROI usando dados agregados do Supabase.
+
+Validacao:
+- SQL aplicado com `node scripts/run-sql-file.mjs supabase/queries/campanhas_roi.sql`.
+- Build passou com `npm run build`.
+- Consulta direta em `vw_campanhas_resumo` validou as novas colunas; sem linhas porque nao havia campanhas salvas com segmento no banco no momento.
+
+Proximo passo tecnico:
+- Adicionar seletor assistido de produtos/servicos do catalogo e janela minima entre campanhas por cliente.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:
