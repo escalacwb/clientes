@@ -108,6 +108,17 @@ export type ForecastVendedorResumo = {
   gargaloPrincipal: string
 }
 
+export type MetaVendedor = {
+  id: string
+  vendedorId: string
+  vendedorNome?: string
+  mesReferencia: string
+  metaReceita: number
+  metaContatos: number
+  metaOrcamentos: number
+  observacao?: string
+}
+
 type DashboardResumoRow = {
   clientes_total: number
   clientes_ativos_90: number
@@ -214,6 +225,17 @@ type ForecastVendedorRow = {
   vencem_7d: number
   ultimo_movimento: string | null
   gargalo_principal: string
+}
+
+type MetaVendedorRow = {
+  id: string
+  vendedor_id: string
+  users?: { nome: string | null } | null
+  mes_referencia: string
+  meta_receita: number
+  meta_contatos: number
+  meta_orcamentos: number
+  observacao: string | null
 }
 
 export async function getDashboardResumo(): Promise<DashboardResumo | undefined> {
@@ -363,6 +385,48 @@ export async function listForecastVendedor(): Promise<ForecastVendedorResumo[]> 
   }))
 }
 
+export async function listMetasVendedores(mesReferencia = currentMonthReference()): Promise<MetaVendedor[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('metas_vendedores')
+    .select('*,users!metas_vendedores_vendedor_id_fkey(nome)')
+    .eq('mes_referencia', mesReferencia)
+    .order('meta_receita', { ascending: false })
+
+  if (error) throw error
+  return (data as MetaVendedorRow[] | null ?? []).map(mapMetaVendedor)
+}
+
+export async function upsertMetaVendedor(input: {
+  vendedorId: string
+  mesReferencia?: string
+  metaReceita: number
+  metaContatos: number
+  metaOrcamentos: number
+  observacao?: string
+}): Promise<MetaVendedor> {
+  const supabase = await getSupabase()
+  if (!supabase) throw new Error('Supabase nao configurado.')
+
+  const { data, error } = await supabase
+    .from('metas_vendedores')
+    .upsert({
+      vendedor_id: input.vendedorId,
+      mes_referencia: input.mesReferencia ?? currentMonthReference(),
+      meta_receita: input.metaReceita,
+      meta_contatos: input.metaContatos,
+      meta_orcamentos: input.metaOrcamentos,
+      observacao: input.observacao ?? null,
+    }, { onConflict: 'vendedor_id,mes_referencia' })
+    .select('*,users!metas_vendedores_vendedor_id_fkey(nome)')
+    .single()
+
+  if (error) throw error
+  return mapMetaVendedor(data as MetaVendedorRow)
+}
+
 async function listRanking(viewName: string, limit: number): Promise<RankingResumo[]> {
   const supabase = await getSupabase()
   if (!supabase) return []
@@ -427,4 +491,22 @@ function mapVendedorResumo(row: VendedorResumoRow): VendedorResumo {
     pipeline: Number(row.pipeline ?? 0),
     totalCarteira: Number(row.total_carteira ?? 0),
   }
+}
+
+function mapMetaVendedor(row: MetaVendedorRow): MetaVendedor {
+  return {
+    id: row.id,
+    vendedorId: row.vendedor_id,
+    vendedorNome: row.users?.nome ?? undefined,
+    mesReferencia: row.mes_referencia,
+    metaReceita: Number(row.meta_receita ?? 0),
+    metaContatos: Number(row.meta_contatos ?? 0),
+    metaOrcamentos: Number(row.meta_orcamentos ?? 0),
+    observacao: row.observacao ?? undefined,
+  }
+}
+
+export function currentMonthReference() {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 }

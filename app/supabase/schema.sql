@@ -281,6 +281,19 @@ create table public.orcamento_aprovacoes (
   criado_em timestamptz not null default now()
 );
 
+create table public.metas_vendedores (
+  id uuid primary key default gen_random_uuid(),
+  vendedor_id uuid not null references public.users(id),
+  mes_referencia date not null,
+  meta_receita numeric(14, 2) not null default 0,
+  meta_contatos integer not null default 0,
+  meta_orcamentos integer not null default 0,
+  observacao text,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now(),
+  unique (vendedor_id, mes_referencia)
+);
+
 create table public.produtos (
   id uuid primary key default gen_random_uuid(),
   codigo text not null unique,
@@ -635,6 +648,7 @@ where status = 'aberta' and origem is not null;
 create index orcamento_versoes_orcamento_idx on public.orcamento_versoes(orcamento_id, numero desc);
 create index orcamento_aprovacoes_orcamento_idx on public.orcamento_aprovacoes(orcamento_id, criado_em desc);
 create index orcamento_condicoes_orcamento_idx on public.orcamento_condicoes(orcamento_id, ordem);
+create index metas_vendedores_mes_idx on public.metas_vendedores(mes_referencia, vendedor_id);
 
 create or replace function public.set_atualizado_em()
 returns trigger
@@ -652,6 +666,10 @@ for each row execute function public.set_atualizado_em();
 
 create trigger orcamentos_set_atualizado_em
 before update on public.orcamentos
+for each row execute function public.set_atualizado_em();
+
+create trigger metas_vendedores_set_atualizado_em
+before update on public.metas_vendedores
 for each row execute function public.set_atualizado_em();
 
 create or replace function public.atualizar_cliente_datas_por_interacao()
@@ -1947,6 +1965,7 @@ alter table public.orcamento_itens enable row level security;
 alter table public.orcamento_versoes enable row level security;
 alter table public.orcamento_condicoes enable row level security;
 alter table public.orcamento_aprovacoes enable row level security;
+alter table public.metas_vendedores enable row level security;
 alter table public.produtos enable row level security;
 alter table public.produto_aliases enable row level security;
 alter table public.listas_preco enable row level security;
@@ -2265,6 +2284,15 @@ with check (
       and o.vendedor_id = public.current_app_user_id()
   )
 );
+
+create policy metas_vendedores_read_admin
+on public.metas_vendedores for select
+using (public.current_user_is_admin() or vendedor_id = public.current_app_user_id());
+
+create policy metas_vendedores_write_admin
+on public.metas_vendedores for all
+using (public.current_user_is_admin())
+with check (public.current_user_is_admin());
 
 create policy produtos_read_authenticated
 on public.produtos for select

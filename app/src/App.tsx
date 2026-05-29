@@ -103,6 +103,7 @@ import { listConflitos, resolveConflito } from './repositories/conflitosReposito
 import {
   getDashboardResumo,
   listForecastVendedor,
+  listMetasVendedores,
   listAtividadesDia,
   listFunilGerencial,
   listMotivosPerda,
@@ -112,12 +113,14 @@ import {
   listVendedoresResumo,
   type DashboardResumo,
   type ForecastVendedorResumo,
+  type MetaVendedor,
   type AtividadeDiaResumo,
   type FunilGerencialResumo,
   type MotivoPerdaResumo,
   type RankingResumo,
   type TarefaSlaVendedorResumo,
   type VendedorResumo,
+  upsertMetaVendedor,
 } from './repositories/dashboardRepository'
 import { listClienteServicosItens, listClienteVeiculos, listClienteVendasItens } from './repositories/historicoRepository'
 import { createInteracao } from './repositories/interacoesRepository'
@@ -349,6 +352,7 @@ function App() {
   const [motivosPerda, setMotivosPerda] = useState<MotivoPerdaResumo[]>([])
   const [atividadesDia, setAtividadesDia] = useState<AtividadeDiaResumo[]>([])
   const [forecastVendedor, setForecastVendedor] = useState<ForecastVendedorResumo[]>([])
+  const [metasVendedores, setMetasVendedores] = useState<MetaVendedor[]>([])
   const [rodobensLeads, setRodobensLeads] = useState<Cliente[]>([])
   const [rodobensTotal, setRodobensTotal] = useState(0)
   const [rodobensFunil, setRodobensFunil] = useState<RodobensFunilResumo[]>([])
@@ -464,6 +468,7 @@ function App() {
           loadedMotivosPerda,
           loadedAtividadesDia,
           loadedForecastVendedor,
+          loadedMetasVendedores,
         ] = await Promise.all([
           listInteracoes(),
           listOrcamentos(),
@@ -485,6 +490,7 @@ function App() {
           listMotivosPerda(),
           listAtividadesDia(),
           listForecastVendedor(),
+          listMetasVendedores(),
         ])
 
         if (!isMounted) return
@@ -508,6 +514,7 @@ function App() {
         setMotivosPerda(loadedMotivosPerda)
         setAtividadesDia(loadedAtividadesDia)
         setForecastVendedor(loadedForecastVendedor)
+        setMetasVendedores(loadedMetasVendedores)
       } catch (exception) {
         if (!isMounted) return
         setModuleError('dashboard', exception instanceof Error ? exception.message : 'Nao foi possivel carregar os dados.')
@@ -2226,6 +2233,7 @@ function App() {
             motivosPerda={motivosPerda}
             atividadesDia={atividadesDia}
             forecastVendedor={forecastVendedor}
+            metasVendedores={metasVendedores}
             interacoes={interacoes}
             orcamentos={orcamentos}
             importacoes={importacoes}
@@ -2236,6 +2244,10 @@ function App() {
             campanhasVendedorResumo={campanhasVendedorResumo}
             vendasItens={scopedVendasItens}
             servicosItens={scopedServicosItens}
+            onSaveMeta={async (input) => {
+              const saved = await upsertMetaVendedor(input)
+              setMetasVendedores((current) => [saved, ...current.filter((row) => row.id !== saved.id && row.vendedorId !== saved.vendedorId)])
+            }}
           />
         )}
         {session.role === 'admin' && view === 'vendedores' && (
@@ -10985,6 +10997,7 @@ function Relatorios({
   motivosPerda,
   atividadesDia,
   forecastVendedor,
+  metasVendedores,
   interacoes,
   orcamentos,
   importacoes,
@@ -10995,6 +11008,7 @@ function Relatorios({
   campanhasVendedorResumo,
   vendasItens,
   servicosItens,
+  onSaveMeta,
 }: {
   clientes: Cliente[]
   resumo?: DashboardResumo
@@ -11005,6 +11019,7 @@ function Relatorios({
   motivosPerda: MotivoPerdaResumo[]
   atividadesDia: AtividadeDiaResumo[]
   forecastVendedor: ForecastVendedorResumo[]
+  metasVendedores: MetaVendedor[]
   interacoes: Interacao[]
   orcamentos: Orcamento[]
   importacoes: Importacao[]
@@ -11015,7 +11030,11 @@ function Relatorios({
   campanhasVendedorResumo: CampanhaVendedorResumo[]
   vendasItens: VendaItem[]
   servicosItens: ServicoItem[]
+  onSaveMeta: (input: { vendedorId: string; metaReceita: number; metaContatos: number; metaOrcamentos: number; observacao?: string }) => Promise<void>
 }) {
+  const [metaDrafts, setMetaDrafts] = useState<Record<string, { receita: string; contatos: string; orcamentos: string; observacao: string }>>({})
+  const [savingMetaId, setSavingMetaId] = useState('')
+  const [metaFeedback, setMetaFeedback] = useState('')
   const orcamentosGanhos = resumo?.orcamentosGanhos ?? orcamentos.filter((orcamento) => orcamento.status === 'ganho').length
   const orcamentosTotal = resumo?.orcamentosTotal ?? orcamentos.length
   const taxaConversao = orcamentosTotal ? Math.round((orcamentosGanhos / orcamentosTotal) * 100) : 0
@@ -11037,6 +11056,7 @@ function Relatorios({
   const servicos = rankingServicos.length > 0
     ? rankingServicos.map((item) => ({ label: item.label, count: item.itens }))
     : rankBy(servicosItens, (servico) => servico.servicoNome)
+  const metasBySeller = new Map(metasVendedores.map((meta) => [meta.vendedorId, meta]))
 
   const vendedorRows = vendedoresResumo.length > 0
     ? vendedoresResumo
@@ -11091,6 +11111,54 @@ function Relatorios({
     clientesRisco > 0 ? `Priorizar contato com ${clientesRisco} clientes sem compra ha mais de 180 dias.` : '',
     oportunidadesBloqueadas > 0 ? `Desbloquear ${oportunidadesBloqueadas} oportunidades impedidas por status ou falta de dados.` : '',
   ].filter(Boolean)
+  const metaRows = forecastVendedor.length > 0
+    ? forecastVendedor
+    : usuarios.filter((usuario) => usuario.role === 'vendedor').map((usuario) => ({
+        vendedorId: usuario.id,
+        vendedorNome: usuario.nome,
+        propostasAbertas: 0,
+        pipelineAberto: 0,
+        forecastPonderado: 0,
+        ganhoMes: 0,
+        vencidas: 0,
+        vencem7d: 0,
+        gargaloPrincipal: 'Sem forecast',
+      }))
+
+  function metaDraftFor(vendedorId: string) {
+    const meta = metasBySeller.get(vendedorId)
+    return metaDrafts[vendedorId] ?? {
+      receita: meta?.metaReceita.toString() ?? '',
+      contatos: meta?.metaContatos.toString() ?? '',
+      orcamentos: meta?.metaOrcamentos.toString() ?? '',
+      observacao: meta?.observacao ?? '',
+    }
+  }
+
+  function updateMetaDraft(vendedorId: string, patch: Partial<{ receita: string; contatos: string; orcamentos: string; observacao: string }>) {
+    setMetaDrafts((current) => ({
+      ...current,
+      [vendedorId]: { ...metaDraftFor(vendedorId), ...patch },
+    }))
+  }
+
+  async function saveMeta(vendedorId: string) {
+    const draft = metaDraftFor(vendedorId)
+    setSavingMetaId(vendedorId)
+    setMetaFeedback('')
+    try {
+      await onSaveMeta({
+        vendedorId,
+        metaReceita: numberFromInput(draft.receita),
+        metaContatos: Math.max(0, Math.round(numberFromInput(draft.contatos))),
+        metaOrcamentos: Math.max(0, Math.round(numberFromInput(draft.orcamentos))),
+        observacao: draft.observacao.trim() || undefined,
+      })
+      setMetaFeedback('Meta salva para o mes atual.')
+    } finally {
+      setSavingMetaId('')
+    }
+  }
 
   return (
     <section className="grid-layout">
@@ -11140,6 +11208,50 @@ function Relatorios({
             </div>
           ))}
           {forecastVendedor.length === 0 && <div className="empty-state">Sem dados de forecast ainda.</div>}
+        </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Metas do mes</h2>
+            <p>Receita, contatos e propostas por vendedor, comparadas com ganho e forecast atual.</p>
+          </div>
+          <ShieldCheck size={18} />
+        </div>
+        {metaFeedback && <div className="success-alert">{metaFeedback}</div>}
+        <div className="table">
+          <div className="table-head seller-goals">
+            <span>Vendedor</span>
+            <span>Meta receita</span>
+            <span>Atingido</span>
+            <span>Forecast</span>
+            <span>Contatos</span>
+            <span>Propostas</span>
+            <span>Observacao</span>
+            <span>Acao</span>
+          </div>
+          {metaRows.map((row) => {
+            const draft = metaDraftFor(row.vendedorId)
+            const metaReceita = numberFromInput(draft.receita)
+            const atingimento = metaReceita > 0 ? Math.round((row.ganhoMes / metaReceita) * 100) : 0
+            return (
+              <div className="table-row seller-goals" key={row.vendedorId}>
+                <span><strong>{row.vendedorNome}</strong><small>{row.propostasAbertas} propostas abertas</small></span>
+                <input value={draft.receita} onChange={(event) => updateMetaDraft(row.vendedorId, { receita: event.target.value })} placeholder="R$" />
+                <span className={atingimento >= 100 ? 'status-pill ok' : atingimento >= 60 ? 'status-pill warn' : 'status-pill danger'}>
+                  {atingimento}%
+                </span>
+                <span>{money(row.forecastPonderado)}</span>
+                <input value={draft.contatos} onChange={(event) => updateMetaDraft(row.vendedorId, { contatos: event.target.value })} placeholder="0" />
+                <input value={draft.orcamentos} onChange={(event) => updateMetaDraft(row.vendedorId, { orcamentos: event.target.value })} placeholder="0" />
+                <input value={draft.observacao} onChange={(event) => updateMetaDraft(row.vendedorId, { observacao: event.target.value })} placeholder="Foco do mes" />
+                <button className="button" type="button" disabled={savingMetaId === row.vendedorId} onClick={() => void saveMeta(row.vendedorId)}>
+                  {savingMetaId === row.vendedorId ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            )
+          })}
         </div>
       </section>
 
