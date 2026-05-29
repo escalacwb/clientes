@@ -491,10 +491,27 @@ Entregue:
 
 Validacao:
 - Build passou com `npm run build`.
+- SQL incremental aplicado no Supabase e tabela `orcamento_versoes` validada.
 - Teste no Supabase criou orcamento `aguardando_aprovacao`, mudou para `enviado`, gravou `aprovado_por` e `aprovado_em`, e removeu o teste depois.
 
 Proximo passo tecnico:
 - Criar historico dedicado de aprovacoes e permitir rejeitar solicitacao com motivo.
+
+### 2026-05-28 - Snapshot de versao de proposta
+
+Status: concluido.
+
+Entregue:
+- Criada tabela `orcamento_versoes` para guardar versoes de proposta por orcamento.
+- Cada novo orcamento registra a primeira versao com status, total, validade, condicao, origem, mensagem WhatsApp e itens em JSON.
+- Repository grava a versao sem bloquear a criacao do orcamento caso o schema ainda nao tenha sido aplicado.
+- Schema principal e schema incremental receberam tabela, indice e politicas RLS por vendedor/admin.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Criar tela de consulta/comparacao de versoes e registrar novas versoes quando uma proposta for editada/revisada.
 
 ### 2026-05-28 - Campanhas com construtor de publico
 

@@ -213,6 +213,23 @@ create table public.orcamento_itens (
   observacao text
 );
 
+create table public.orcamento_versoes (
+  id uuid primary key default gen_random_uuid(),
+  orcamento_id uuid not null references public.orcamentos(id) on delete cascade,
+  numero integer not null,
+  status text not null,
+  valor_total numeric(14, 2) not null default 0,
+  validade date,
+  forma_pagamento text,
+  observacao text,
+  mensagem text,
+  origem text,
+  itens jsonb not null default '[]'::jsonb,
+  criado_por uuid references public.users(id),
+  criado_em timestamptz not null default now(),
+  unique (orcamento_id, numero)
+);
+
 create table public.produtos (
   id uuid primary key default gen_random_uuid(),
   codigo text not null unique,
@@ -342,6 +359,7 @@ create index vendas_cliente_data_idx on public.vendas_itens(cliente_id, data_ven
 create index servicos_cliente_data_idx on public.servicos_itens(cliente_id, data_servico desc);
 create index interacoes_cliente_data_idx on public.interacoes(cliente_id, data_interacao desc);
 create index tarefas_vendedor_vencimento_idx on public.tarefas(vendedor_id, data_vencimento);
+create index orcamento_versoes_orcamento_idx on public.orcamento_versoes(orcamento_id, numero desc);
 
 create or replace function public.set_atualizado_em()
 returns trigger
@@ -893,6 +911,7 @@ alter table public.interacoes enable row level security;
 alter table public.tarefas enable row level security;
 alter table public.orcamentos enable row level security;
 alter table public.orcamento_itens enable row level security;
+alter table public.orcamento_versoes enable row level security;
 alter table public.produtos enable row level security;
 alter table public.produto_aliases enable row level security;
 alter table public.listas_preco enable row level security;
@@ -1072,6 +1091,36 @@ with check (
   or exists (
     select 1 from public.orcamentos o
     where o.id = orcamento_itens.orcamento_id
+      and o.vendedor_id = public.current_app_user_id()
+  )
+);
+
+create policy orcamento_versoes_read_own_or_admin
+on public.orcamento_versoes for select
+using (
+  public.current_user_is_admin()
+  or exists (
+    select 1 from public.orcamentos o
+    where o.id = orcamento_versoes.orcamento_id
+      and o.vendedor_id = public.current_app_user_id()
+  )
+);
+
+create policy orcamento_versoes_write_own_or_admin
+on public.orcamento_versoes for all
+using (
+  public.current_user_is_admin()
+  or exists (
+    select 1 from public.orcamentos o
+    where o.id = orcamento_versoes.orcamento_id
+      and o.vendedor_id = public.current_app_user_id()
+  )
+)
+with check (
+  public.current_user_is_admin()
+  or exists (
+    select 1 from public.orcamentos o
+    where o.id = orcamento_versoes.orcamento_id
       and o.vendedor_id = public.current_app_user_id()
   )
 );

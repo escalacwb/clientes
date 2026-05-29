@@ -101,12 +101,15 @@ export async function createOrcamento(input: OrcamentoInput, itens: OrcamentoIte
 
   const orcamento = mapOrcamento(data as OrcamentoRow)
 
-  if (itens.length > 0) {
-    const createdItems = await createOrcamentoItens(orcamento.id, itens)
-    return { ...orcamento, itens: createdItems }
-  }
+  const createdItems = itens.length > 0 ? await createOrcamentoItens(orcamento.id, itens) : []
+  const created = { ...orcamento, itens: createdItems }
 
-  return orcamento
+  await createOrcamentoVersao(created, {
+    mensagem: input.versaoMensagem,
+    origem: input.versaoOrigem,
+  })
+
+  return created
 }
 
 export async function updateOrcamentoStatus(
@@ -175,6 +178,54 @@ async function createOrcamentoItens(orcamentoId: string, itens: OrcamentoItemInp
   if (error) throw error
 
   return (data as OrcamentoItemRow[]).map(mapOrcamentoItem)
+}
+
+async function createOrcamentoVersao(
+  orcamento: Orcamento,
+  metadata: { mensagem?: string; origem?: string } = {},
+): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase) return
+
+  const itensSnapshot = (orcamento.itens ?? []).map((item) => ({
+    catalogoItemId: item.catalogoItemId,
+    codigo: item.codigo,
+    descricao: item.descricao,
+    tipo: item.tipo,
+    quantidade: item.quantidade,
+    valorUnitario: item.valorUnitario,
+    valorTotal: item.valorTotal,
+    descontoPercentual: item.descontoPercentual,
+    observacao: item.observacao,
+  }))
+
+  const { data: lastVersion } = await supabase
+    .from('orcamento_versoes')
+    .select('numero')
+    .eq('orcamento_id', orcamento.id)
+    .order('numero', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const nextVersion = Number(lastVersion?.numero ?? 0) + 1
+  const { error } = await supabase
+    .from('orcamento_versoes')
+    .insert({
+      orcamento_id: orcamento.id,
+      numero: nextVersion,
+      status: orcamento.status,
+      valor_total: orcamento.valorTotal,
+      validade: orcamento.validade ?? null,
+      forma_pagamento: orcamento.formaPagamento ?? null,
+      observacao: orcamento.observacao ?? null,
+      mensagem: metadata.mensagem ?? null,
+      origem: metadata.origem ?? null,
+      itens: itensSnapshot,
+    })
+
+  if (error) {
+    console.warn('Nao foi possivel registrar versao do orcamento.', error.message)
+  }
 }
 
 function mapOrcamento(row: OrcamentoRow): Orcamento {

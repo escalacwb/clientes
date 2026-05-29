@@ -68,9 +68,10 @@ Ja entregue:
 - Motivo de perda padronizado e obrigatorio.
 - Contexto de origem preservado ao criar orcamento por campanha/tarefa.
 - Campanha salva e marcada como `virou_orcamento` quando gera proposta.
+- Snapshot inicial de versao da proposta com itens, total, condicao, origem e mensagem.
 
 Proximas entregas:
-- Historico de versoes de proposta.
+- Tela para consultar e comparar versoes anteriores da proposta.
 
 Pronto quando:
 - Gerente enxerga pipeline por status e vendedor.

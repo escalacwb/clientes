@@ -90,6 +90,8 @@ export type OrcamentoInput = Omit<Orcamento, 'id' | 'data' | 'status' | 'itens'>
   data?: string
   status?: Orcamento['status']
   itens?: OrcamentoItemInput[]
+  versaoMensagem?: string
+  versaoOrigem?: string
 }
 
 export type OrcamentoItem = {
@@ -108,6 +110,21 @@ export type OrcamentoItem = {
 
 export type OrcamentoItemInput = Omit<OrcamentoItem, 'id' | 'orcamentoId' | 'valorTotal'> & {
   valorTotal?: number
+}
+
+export type OrcamentoVersao = {
+  id: string
+  orcamentoId: string
+  numero: number
+  status: Orcamento['status']
+  valorTotal: number
+  validade?: string
+  formaPagamento?: string
+  observacao?: string
+  mensagem?: string
+  origem?: string
+  itens: OrcamentoItemInput[]
+  criadoEm: string
 }
 
 export type CatalogoItem = {

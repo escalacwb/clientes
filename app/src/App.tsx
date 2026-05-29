@@ -2734,6 +2734,8 @@ function OrcamentoEditor({
         aprovacaoMotivo: needsApproval ? approvalWarnings.join(' ') : undefined,
         observacao: finalObservation,
         itens: validItems,
+        versaoMensagem: quoteMessage,
+        versaoOrigem: originContext.label,
       })
       await onCreateTask({
         clienteId: cliente.id,

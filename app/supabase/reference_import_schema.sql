@@ -186,6 +186,25 @@ alter table public.orcamento_itens
   add column if not exists codigo text,
   add column if not exists desconto_percentual numeric(8, 2);
 
+create table if not exists public.orcamento_versoes (
+  id uuid primary key default gen_random_uuid(),
+  orcamento_id uuid not null references public.orcamentos(id) on delete cascade,
+  numero integer not null,
+  status text not null,
+  valor_total numeric(14, 2) not null default 0,
+  validade date,
+  forma_pagamento text,
+  observacao text,
+  mensagem text,
+  origem text,
+  itens jsonb not null default '[]'::jsonb,
+  criado_por uuid references public.users(id),
+  criado_em timestamptz not null default now(),
+  unique (orcamento_id, numero)
+);
+
+create index if not exists orcamento_versoes_orcamento_idx on public.orcamento_versoes(orcamento_id, numero desc);
+
 drop view if exists public.vw_ordens_360;
 
 create view public.vw_ordens_360 as
@@ -220,6 +239,7 @@ alter table public.veiculos enable row level security;
 alter table public.ordens_movimento enable row level security;
 alter table public.catalogo_itens enable row level security;
 alter table public.catalogo_precos enable row level security;
+alter table public.orcamento_versoes enable row level security;
 
 drop policy if exists admin_manage_importacao_arquivos on public.importacao_arquivos;
 create policy admin_manage_importacao_arquivos
@@ -290,3 +310,35 @@ create policy admin_manage_catalogo_precos
 on public.catalogo_precos for all
 using (public.current_user_is_admin())
 with check (public.current_user_is_admin());
+
+drop policy if exists orcamento_versoes_read_own_or_admin on public.orcamento_versoes;
+create policy orcamento_versoes_read_own_or_admin
+on public.orcamento_versoes for select
+using (
+  public.current_user_is_admin()
+  or exists (
+    select 1 from public.orcamentos o
+    where o.id = orcamento_versoes.orcamento_id
+      and o.vendedor_id = public.current_app_user_id()
+  )
+);
+
+drop policy if exists orcamento_versoes_write_own_or_admin on public.orcamento_versoes;
+create policy orcamento_versoes_write_own_or_admin
+on public.orcamento_versoes for all
+using (
+  public.current_user_is_admin()
+  or exists (
+    select 1 from public.orcamentos o
+    where o.id = orcamento_versoes.orcamento_id
+      and o.vendedor_id = public.current_app_user_id()
+  )
+)
+with check (
+  public.current_user_is_admin()
+  or exists (
+    select 1 from public.orcamentos o
+    where o.id = orcamento_versoes.orcamento_id
+      and o.vendedor_id = public.current_app_user_id()
+  )
+);
