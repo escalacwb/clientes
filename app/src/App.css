@@ -4089,6 +4089,26 @@ h3 {
   max-width: 240px;
 }
 
+.audit-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.audit-toolbar input {
+  min-height: 36px;
+  min-width: 240px;
+  border: 1px solid #cfd8d3;
+  border-radius: 8px;
+  padding: 0 10px;
+}
+
+.audit-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
 .empty-state {
   border: 1px dashed #cfd8d3;
   border-radius: 8px;

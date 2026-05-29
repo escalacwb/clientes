@@ -12036,8 +12036,30 @@ function Usuarios({
 
 function Auditoria({ alteracoes }: { alteracoes: ClienteAlteracao[] }) {
   const [field, setField] = useState('todos')
+  const [query, setQuery] = useState('')
+  const [period, setPeriod] = useState<'7d' | '30d' | 'todos'>('30d')
   const fields = ['todos', ...Array.from(new Set(alteracoes.map((alteracao) => alteracao.campo)))]
-  const filtered = field === 'todos' ? alteracoes : alteracoes.filter((alteracao) => alteracao.campo === field)
+  const filtered = alteracoes.filter((alteracao) => {
+    if (field !== 'todos' && alteracao.campo !== field) return false
+    const term = query.trim().toLowerCase()
+    if (term && !`${alteracao.clienteNome} ${alteracao.usuarioNome} ${alteracao.campo} ${alteracao.valorAnterior} ${alteracao.valorNovo}`.toLowerCase().includes(term)) return false
+    if (period === 'todos') return true
+    const days = period === '7d' ? 7 : 30
+    return daysSince(alteracao.criadoEm) <= days
+  })
+  const auditSummary = useMemo(() => {
+    const sensitiveFields = ['whatsapp', 'whatsapp_principal', 'telefone', 'telefone_principal', 'vendedor_id', 'status_comercial', 'lead_qualificacao_status']
+    const sensitive = filtered.filter((alteracao) => sensitiveFields.some((campo) => alteracao.campo.includes(campo))).length
+    const byUser = new Map<string, number>()
+    filtered.forEach((alteracao) => byUser.set(alteracao.usuarioNome, (byUser.get(alteracao.usuarioNome) ?? 0) + 1))
+    const topUser = [...byUser.entries()].sort((a, b) => b[1] - a[1])[0]
+    return {
+      total: filtered.length,
+      sensitive,
+      clientes: new Set(filtered.map((alteracao) => alteracao.clienteNome)).size,
+      topUser: topUser ? `${topUser[0]} (${topUser[1]})` : 'Sem registro',
+    }
+  }, [filtered])
 
   return (
     <section className="grid-layout">
@@ -12047,9 +12069,23 @@ function Auditoria({ alteracoes }: { alteracoes: ClienteAlteracao[] }) {
             <h2>Alteracoes sensiveis</h2>
             <p>Telefone, WhatsApp, responsavel, vendedor e status ficam registrados para LGPD e gestao.</p>
           </div>
-          <select className="assign-select audit-filter" value={field} onChange={(event) => setField(event.target.value)}>
-            {fields.map((item) => <option key={item} value={item}>{item}</option>)}
-          </select>
+          <div className="audit-toolbar">
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente, usuario ou valor" />
+            <select className="assign-select audit-filter" value={period} onChange={(event) => setPeriod(event.target.value as typeof period)}>
+              <option value="7d">7 dias</option>
+              <option value="30d">30 dias</option>
+              <option value="todos">Tudo</option>
+            </select>
+            <select className="assign-select audit-filter" value={field} onChange={(event) => setField(event.target.value)}>
+              {fields.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="info-grid audit-summary">
+          <Info label="Eventos filtrados" value={auditSummary.total.toString()} />
+          <Info label="Campos sensiveis" value={auditSummary.sensitive.toString()} />
+          <Info label="Clientes afetados" value={auditSummary.clientes.toString()} />
+          <Info label="Usuario mais ativo" value={auditSummary.topUser} />
         </div>
         <div className="table">
           <div className="table-head audit">
@@ -12070,6 +12106,7 @@ function Auditoria({ alteracoes }: { alteracoes: ClienteAlteracao[] }) {
               <span>{alteracao.usuarioNome}</span>
             </div>
           ))}
+          {filtered.length === 0 && <div className="empty-state">Nenhuma alteracao encontrada para os filtros atuais.</div>}
         </div>
       </section>
     </section>
