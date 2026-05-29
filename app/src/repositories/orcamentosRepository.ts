@@ -28,6 +28,7 @@ type OrcamentoItemRow = {
   codigo: string | null
   descricao: string
   tipo: OrcamentoItem['tipo']
+  apresentacao: OrcamentoItem['apresentacao'] | null
   quantidade: number
   valor_unitario: number
   valor_total: number
@@ -170,6 +171,7 @@ export async function createOrcamento(input: OrcamentoInput, itens: OrcamentoIte
       valorUnitario: item.valorUnitario,
       valorTotal: item.valorTotal ?? item.quantidade * item.valorUnitario,
       observacao: item.observacao,
+      apresentacao: item.apresentacao ?? 'normal',
     }))
 
     return {
@@ -243,6 +245,7 @@ export async function reviseOrcamento(
         valorUnitario: item.valorUnitario,
         valorTotal: item.valorTotal ?? item.quantidade * item.valorUnitario,
         observacao: item.observacao,
+        apresentacao: item.apresentacao ?? 'normal',
       })),
       condicoes: input.condicoes?.map((condicao, index) => ({
         id: `oc-rev-${Date.now()}-${index}`,
@@ -371,6 +374,7 @@ async function createOrcamentoItens(orcamentoId: string, itens: OrcamentoItemInp
         codigo: item.codigo ?? null,
         descricao: item.descricao,
         tipo: item.tipo,
+        apresentacao: item.apresentacao ?? 'normal',
         quantidade: item.quantidade,
         valor_unitario: item.valorUnitario,
         valor_total: item.valorTotal ?? item.quantidade * item.valorUnitario,
@@ -421,6 +425,7 @@ async function createOrcamentoVersao(
     codigo: item.codigo,
     descricao: item.descricao,
     tipo: item.tipo,
+    apresentacao: item.apresentacao,
     quantidade: item.quantidade,
     valorUnitario: item.valorUnitario,
     valorTotal: item.valorTotal,
@@ -486,6 +491,7 @@ function mapOrcamentoItem(row: OrcamentoItemRow): OrcamentoItem {
     codigo: row.codigo ?? undefined,
     descricao: row.descricao,
     tipo: row.tipo,
+    apresentacao: row.apresentacao ?? 'normal',
     quantidade: row.quantidade,
     valorUnitario: row.valor_unitario,
     valorTotal: row.valor_total,

@@ -5074,6 +5074,7 @@ function FichaCliente({
                           tipo: selected.tipo,
                           valorUnitario: selected.preco,
                           descontoPercentual: item.descontoPercentual ?? 0,
+                          apresentacao: item.apresentacao ?? 'normal',
                         }
                       : { ...item, catalogoItemId: undefined, codigo: undefined }
                     setBudgetItems(next)
@@ -5325,8 +5326,8 @@ function OrcamentoEditor({
   const [catalogSearch, setCatalogSearch] = useState('')
   const [items, setItems] = useState<OrcamentoItemInput[]>(() =>
     originContext.initialItems?.length
-      ? originContext.initialItems
-      : [{ descricao: '', tipo: 'produto' as const, quantidade: 1, valorUnitario: 0, descontoPercentual: 0 }],
+      ? originContext.initialItems.map((item) => ({ apresentacao: 'normal', ...item }))
+      : [{ descricao: '', tipo: 'produto' as const, quantidade: 1, valorUnitario: 0, descontoPercentual: 0, apresentacao: 'normal' }],
   )
   const [isSaving, setIsSaving] = useState(false)
   const [feedback, setFeedback] = useState('')
@@ -5395,6 +5396,7 @@ function OrcamentoEditor({
         codigo: catalogoItem.codigo,
         tipo: catalogoItem.tipo,
         descricao: catalogoItem.descricao,
+        apresentacao: 'normal',
         quantidade: 1,
         valorUnitario: catalogoItem.preco,
         descontoPercentual: 0,
@@ -5534,6 +5536,7 @@ function OrcamentoEditor({
               <span>Qtd.</span>
               <span>Unitario</span>
               <span>Desc.</span>
+              <span>Bloco</span>
               <span>Grupo/uso</span>
               <span>Total</span>
             </div>
@@ -5547,7 +5550,13 @@ function OrcamentoEditor({
                 <input type="number" min="0" step="0.01" value={item.quantidade} onChange={(event) => updateItem(index, { quantidade: Number(event.target.value) })} />
                 <input type="number" min="0" step="0.01" value={item.valorUnitario} onChange={(event) => updateItem(index, { valorUnitario: Number(event.target.value) })} />
                 <input type="number" min="0" max="100" step="0.01" value={item.descontoPercentual ?? 0} onChange={(event) => updateItem(index, { descontoPercentual: Number(event.target.value) })} />
-                <input value={item.observacao ?? ''} onChange={(event) => updateItem(index, { observacao: event.target.value })} placeholder="Ex.: Opcao pneu direcional" />
+                <select value={item.apresentacao ?? 'normal'} onChange={(event) => updateItem(index, { apresentacao: event.target.value as OrcamentoItemInput['apresentacao'] })}>
+                  <option value="normal">Normal</option>
+                  <option value="alternativa">Alternativa</option>
+                  <option value="pacote">Pacote</option>
+                  <option value="complementar">Complementar</option>
+                </select>
+                <input value={item.observacao ?? ''} onChange={(event) => updateItem(index, { observacao: event.target.value })} placeholder="Ex.: Eixo direcional, kit montagem" />
                 <strong>{money(quoteItemTotal(item))}</strong>
               </div>
             ))}
@@ -5575,7 +5584,7 @@ function OrcamentoEditor({
             </div>
           </div>
           <div className="quote-actions">
-            <button className="button" type="button" onClick={() => setItems((current) => [...current, { descricao: '', tipo: 'produto', quantidade: 1, valorUnitario: 0, descontoPercentual: 0 }])}>
+            <button className="button" type="button" onClick={() => setItems((current) => [...current, { descricao: '', tipo: 'produto', quantidade: 1, valorUnitario: 0, descontoPercentual: 0, apresentacao: 'normal' }])}>
               Adicionar item
             </button>
             <button className="button" type="button" disabled={items.length <= 1} onClick={() => setItems((current) => current.slice(0, -1))}>
@@ -5631,34 +5640,16 @@ function OrcamentoEditor({
             <Info label="Aprovacao" value={approvalWarnings.length > 0 ? 'Necessaria' : 'Dentro do limite'} />
           </div>
           <div className="proposal-preview">
-            <div className="proposal-heading">
-              <strong>Capital Truck Center</strong>
-              <span>Proposta comercial</span>
-            </div>
-            <div className="proposal-client">
-              <strong>{cliente.nome}</strong>
-              <span>{cliente.cidade}/{cliente.uf}</span>
-              <span>{cliente.whatsapp ?? cliente.telefone ?? 'Contato nao informado'}</span>
-            </div>
-            <div className="proposal-lines">
-              {validItems.map((item, index) => (
-                <div key={`${item.descricao}-${index}`}>
-                  <span>{index + 1}. {item.quantidade}x {item.descricao}</span>
-                  <strong>{money(item.valorTotal ?? 0)}</strong>
-                </div>
-              ))}
-              {validItems.length === 0 && <span className="muted">Adicione itens para montar a proposta.</span>}
-            </div>
-            <div className="proposal-total">
-              <span>Total</span>
-              <strong>{money(total)}</strong>
-            </div>
-            <small>Condicao: {formaPagamento || 'Nao informada'} - Validade: {dateLabel(validade)}</small>
-            <div className="proposal-conditions">
-              {paymentScenarios.map((scenario) => (
-                <span key={scenario.label}>{scenario.label}: {money(scenario.total)}</span>
-              ))}
-            </div>
+            <QuoteProposalPreview
+              cliente={cliente}
+              itens={validItems}
+              total={total}
+              validade={validade}
+              formaPagamento={formaPagamento}
+              condicoes={paymentScenarios}
+              observacao={observacao}
+              vendedorNome={cliente.vendedorNome ?? currentUser.nome}
+            />
           </div>
           <label>
             Mensagem WhatsApp
@@ -5843,53 +5834,190 @@ function buildQuoteMessage(
   paymentScenarios: QuoteConditionScenario[] = [],
 ) {
   const total = itens.reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
-  const grouped = groupQuoteItemsForMessage(itens)
+  const blocks = groupQuoteItemsForMessage(itens)
+  const produtosTotal = itens.filter((item) => item.tipo === 'produto').reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
+  const servicosTotal = itens.filter((item) => item.tipo === 'servico').reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
   const lines = [
     `Ola, ${cliente.responsavel ?? cliente.nome}.`,
     '',
     '*Capital Truck Center*',
-    'Segue proposta comercial:',
+    '*Proposta comercial*',
+    `Cliente: ${cliente.nome}`,
+    cliente.cidade || cliente.uf ? `Local: ${[cliente.cidade, cliente.uf].filter(Boolean).join('/')}` : '',
+    validade ? `Validade: ${dateLabel(validade)}` : '',
     '',
-    '*Itens cotados*',
-  ]
+  ].filter(Boolean) as string[]
 
-  grouped.forEach((group, groupIndex) => {
-    if (group.title) lines.push(`${groupIndex + 1}. ${group.title}`)
-    group.items.forEach((item, index) => {
-      const prefix = group.title ? `   ${String.fromCharCode(97 + index)})` : `${groupIndex + 1}.`
-      lines.push(`${prefix} ${formatQuantity(item.quantidade)}x ${item.descricao}`)
+  blocks.forEach((block, blockIndex) => {
+    lines.push(`*${blockIndex + 1}. ${block.title}*`)
+    if (block.kind === 'alternativa') lines.push('Escolha uma das opcoes abaixo:')
+    if (block.kind === 'pacote') lines.push('Itens considerados em conjunto:')
+    if (block.kind === 'complementar') lines.push('Complementos recomendados:')
+    block.items.forEach((item, index) => {
+      const marker = block.kind === 'alternativa' ? `Opcao ${String.fromCharCode(65 + index)}` : `${index + 1}`
+      lines.push(`${marker}) ${formatQuantity(item.quantidade)}x ${item.descricao}`)
       lines.push(`   Unit.: ${money(item.valorUnitario)} | Total: ${money(item.valorTotal ?? 0)}`)
     })
+    lines.push(`Subtotal ${block.title}: ${money(block.total)}`, '')
   })
 
-  lines.push('', `*Total base:* ${money(total)}`)
+  lines.push('*Resumo*')
+  if (produtosTotal > 0) lines.push(`Produtos: ${money(produtosTotal)}`)
+  if (servicosTotal > 0) lines.push(`Servicos: ${money(servicosTotal)}`)
+  lines.push(`Total base: ${money(total)}`)
   if (paymentScenarios.length > 0) {
     lines.push('', '*Condicoes de pagamento*')
     paymentScenarios.forEach((scenario) => {
       lines.push(`- ${scenario.label}: ${money(scenario.total)}`)
     })
   }
-  if (validade) lines.push('', `Validade: ${dateLabel(validade)}`)
   if (observacao?.trim()) lines.push('', '*Observacoes*', observacao.trim())
   lines.push('', 'Posso confirmar disponibilidade e prazo para voce?')
   return lines.join('\n')
 }
 
 function groupQuoteItemsForMessage(itens: OrcamentoItemInput[]) {
-  const groups = new Map<string, OrcamentoItemInput[]>()
+  const groups = new Map<string, { kind: NonNullable<OrcamentoItemInput['apresentacao']>; items: OrcamentoItemInput[] }>()
   const order: string[] = []
   itens.forEach((item) => {
-    const key = item.observacao?.trim() || `__single_${order.length}`
+    const kind = item.apresentacao ?? 'normal'
+    const groupLabel = item.observacao?.trim()
+    const key = groupLabel ? `${kind}:${groupLabel}` : `${kind}:__single_${order.length}`
     if (!groups.has(key)) {
-      groups.set(key, [])
+      groups.set(key, { kind, items: [] })
       order.push(key)
     }
-    groups.get(key)?.push(item)
+    groups.get(key)?.items.push(item)
   })
-  return order.map((key) => ({
-    title: key.startsWith('__single_') ? '' : key,
-    items: groups.get(key) ?? [],
-  }))
+  return order.map((key) => {
+    const group = groups.get(key) ?? { kind: 'normal' as const, items: [] }
+    const title = key.includes(':__single_')
+      ? quoteBlockTitle(group.kind, group.items[0], order.indexOf(key))
+      : key.split(':').slice(1).join(':')
+    return {
+      title,
+      kind: group.kind,
+      items: group.items,
+      total: group.items.reduce((sum, item) => sum + (item.valorTotal ?? 0), 0),
+    }
+  })
+}
+
+function quoteBlockTitle(kind: NonNullable<OrcamentoItemInput['apresentacao']>, item: OrcamentoItemInput | undefined, index: number) {
+  if (kind === 'alternativa') return `Opcao ${index + 1}`
+  if (kind === 'pacote') return `Pacote ${index + 1}`
+  if (kind === 'complementar') return 'Complementos'
+  return item?.tipo === 'servico' ? 'Servicos' : 'Itens cotados'
+}
+
+function QuoteProposalPreview({
+  cliente,
+  itens,
+  total,
+  validade,
+  formaPagamento,
+  condicoes,
+  observacao,
+  vendedorNome,
+}: {
+  cliente: Cliente
+  itens: OrcamentoItemInput[]
+  total: number
+  validade?: string
+  formaPagamento?: string
+  condicoes?: QuoteConditionScenario[]
+  observacao?: string
+  vendedorNome?: string
+}) {
+  const blocks = groupQuoteItemsForMessage(itens)
+  const produtosTotal = itens.filter((item) => item.tipo === 'produto').reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
+  const servicosTotal = itens.filter((item) => item.tipo === 'servico').reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
+
+  return (
+    <>
+      <div className="proposal-heading">
+        <div>
+          <img className="proposal-logo" src={capitalLogo} alt="Capital Truck Center" />
+          <strong>Capital Truck Center</strong>
+          <span>Proposta comercial</span>
+        </div>
+        <div className="proposal-meta">
+          <small>{validade ? `Validade: ${dateLabel(validade)}` : 'Validade nao informada'}</small>
+          <small>Emitida em {dateLabel(new Date().toISOString())}</small>
+        </div>
+      </div>
+      <div className="proposal-client">
+        <strong>{cliente.nome}</strong>
+        <span>{[cliente.cidade, cliente.uf].filter(Boolean).join('/') || 'Local nao informado'}</span>
+        <span>{cliente.whatsapp ?? cliente.telefone ?? cliente.cpfCnpj ?? cliente.codigoErp ?? 'Contato nao informado'}</span>
+      </div>
+      <div className="proposal-commercial">
+        <span>Consultor comercial</span>
+        <strong>{vendedorNome || cliente.vendedorNome || 'Capital Truck Center'}</strong>
+      </div>
+      <div className="proposal-blocks">
+        {blocks.map((block, blockIndex) => (
+          <section className={`proposal-block ${block.kind}`} key={`${block.title}-${blockIndex}`}>
+            <div className="proposal-block-title">
+              <strong>{blockIndex + 1}. {block.title}</strong>
+              <span>{quoteBlockHint(block.kind)}</span>
+            </div>
+            <div className="proposal-lines">
+              {block.items.map((item, index) => {
+                const marker = block.kind === 'alternativa' ? `Opcao ${String.fromCharCode(65 + index)}` : `${index + 1}`
+                return (
+                  <div key={`${item.descricao}-${index}`}>
+                    <span>{marker}. {formatQuantity(item.quantidade)}x {item.descricao}</span>
+                    <strong>{money(item.valorTotal ?? 0)}</strong>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="proposal-subtotal">
+              <span>Subtotal</span>
+              <strong>{money(block.total)}</strong>
+            </div>
+          </section>
+        ))}
+        {itens.length === 0 && <span className="muted">Adicione itens para montar a proposta.</span>}
+      </div>
+      <div className="proposal-total">
+        <span>Total base</span>
+        <strong>{money(total)}</strong>
+      </div>
+      {(produtosTotal > 0 || servicosTotal > 0) && (
+        <div className="proposal-breakdown">
+          {produtosTotal > 0 && <span>Produtos: {money(produtosTotal)}</span>}
+          {servicosTotal > 0 && <span>Servicos: {money(servicosTotal)}</span>}
+        </div>
+      )}
+      <small>Condicao principal: {formaPagamento || 'Nao informada'}</small>
+      {condicoes && condicoes.length > 0 && (
+        <div className="proposal-conditions">
+          {condicoes.map((scenario) => (
+            <span key={scenario.label}>{scenario.label}: {money(scenario.total)}</span>
+          ))}
+        </div>
+      )}
+      {observacao?.trim() && (
+        <div className="proposal-notes">
+          <strong>Observacoes</strong>
+          <p>{observacao.trim()}</p>
+        </div>
+      )}
+      <div className="proposal-footer">
+        <strong>Capital Truck Center</strong>
+        <span>Confirmamos disponibilidade, prazo e condicoes no fechamento da proposta.</span>
+      </div>
+    </>
+  )
+}
+
+function quoteBlockHint(kind: NonNullable<OrcamentoItemInput['apresentacao']>) {
+  if (kind === 'alternativa') return 'escolha uma opcao'
+  if (kind === 'pacote') return 'itens em conjunto'
+  if (kind === 'complementar') return 'recomendado'
+  return 'item principal'
 }
 
 function formatQuantity(quantity: number) {
@@ -5905,6 +6033,7 @@ function quoteItemFromVenda(venda: VendaItem): OrcamentoItemInput {
     valorUnitario: venda.valorUnitario || (venda.valorTotal / Math.max(venda.quantidade || 1, 1)),
     descontoPercentual: 0,
     observacao: `Baseado na venda de ${dateLabel(venda.dataVenda)}${venda.nota ? `, nota ${venda.nota}` : ''}.`,
+    apresentacao: 'normal',
   }
 }
 
@@ -5917,6 +6046,7 @@ function quoteItemFromServico(servico: ServicoItem): OrcamentoItemInput {
     valorUnitario: servico.valorUnitario || (servico.valorTotal / Math.max(servico.quantidade || 1, 1)),
     descontoPercentual: 0,
     observacao: `Baseado no servico de ${dateLabel(servico.dataServico)}${servico.placa ? `, placa ${servico.placa}` : ''}.`,
+    apresentacao: 'complementar',
   }
 }
 
@@ -9107,28 +9237,16 @@ function OrcamentoWorkspace({
         {activeTab === 'resumo' && (
           <div className="quote-workspace-grid">
             <div className="proposal-preview">
-              <div className="proposal-heading">
-                <strong>Capital Truck Center</strong>
-                <span>Proposta comercial</span>
-              </div>
-              <div className="proposal-client">
-                <strong>{cliente.nome}</strong>
-                <span>{cliente.cidade}/{cliente.uf}</span>
-                <span>{cliente.cpfCnpj ?? cliente.codigoErp ?? 'Cadastro sem documento'}</span>
-              </div>
-              <div className="proposal-lines">
-                {validItems.map((item, index) => (
-                  <div key={`${item.id}-${index}`}>
-                    <span>{index + 1}. {item.quantidade}x {item.descricao}</span>
-                    <strong>{money(item.valorTotal ?? 0)}</strong>
-                  </div>
-                ))}
-              </div>
-              <div className="proposal-total">
-                <span>Total</span>
-                <strong>{money(orcamento.valorTotal)}</strong>
-              </div>
-              <small>Validade: {dateLabel(orcamento.validade)} - Condicao: {orcamento.formaPagamento ?? 'nao informada'}</small>
+              <QuoteProposalPreview
+                cliente={cliente}
+                itens={validItems}
+                total={orcamento.valorTotal}
+                validade={orcamento.validade}
+                formaPagamento={orcamento.formaPagamento}
+                condicoes={scenarios}
+                observacao={orcamento.observacao}
+                vendedorNome={vendedor?.nome ?? orcamento.vendedorNome ?? currentUser.nome}
+              />
             </div>
             <div className="summary-box">
               <strong>Controle comercial</strong>
@@ -9264,12 +9382,13 @@ function OrcamentoRevisionEditor({
           codigo: item.codigo,
           descricao: item.descricao,
           tipo: item.tipo,
+          apresentacao: item.apresentacao ?? 'normal',
           quantidade: item.quantidade,
           valorUnitario: item.valorUnitario,
           descontoPercentual: item.descontoPercentual ?? 0,
           observacao: item.observacao,
         }))
-      : [{ descricao: '', tipo: 'produto', quantidade: 1, valorUnitario: 0, descontoPercentual: 0 }],
+      : [{ descricao: '', tipo: 'produto', quantidade: 1, valorUnitario: 0, descontoPercentual: 0, apresentacao: 'normal' }],
   )
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
@@ -9306,6 +9425,7 @@ function OrcamentoRevisionEditor({
       descricao: selected.descricao,
       valorUnitario: selected.preco,
       descontoPercentual: 0,
+      apresentacao: 'normal',
     })
   }
 
@@ -9389,6 +9509,7 @@ function OrcamentoRevisionEditor({
               <span>Qtd.</span>
               <span>Unitario</span>
               <span>Desc.</span>
+              <span>Bloco</span>
               <span>Grupo/uso</span>
               <span>Total</span>
             </div>
@@ -9406,13 +9527,19 @@ function OrcamentoRevisionEditor({
                 <input type="number" min="0" step="0.01" value={item.quantidade} onChange={(event) => updateItem(index, { quantidade: Number(event.target.value) })} />
                 <input type="number" min="0" step="0.01" value={item.valorUnitario} onChange={(event) => updateItem(index, { valorUnitario: Number(event.target.value) })} />
                 <input type="number" min="0" max="100" step="0.01" value={item.descontoPercentual ?? 0} onChange={(event) => updateItem(index, { descontoPercentual: Number(event.target.value) })} />
+                <select value={item.apresentacao ?? 'normal'} onChange={(event) => updateItem(index, { apresentacao: event.target.value as OrcamentoItemInput['apresentacao'] })}>
+                  <option value="normal">Normal</option>
+                  <option value="alternativa">Alternativa</option>
+                  <option value="pacote">Pacote</option>
+                  <option value="complementar">Complementar</option>
+                </select>
                 <input value={item.observacao ?? ''} onChange={(event) => updateItem(index, { observacao: event.target.value })} placeholder="Opcao, eixo ou uso" />
                 <strong>{money(quoteItemTotal(item))}</strong>
               </div>
             ))}
           </div>
           <div className="quote-actions">
-            <button className="button" type="button" onClick={() => setItems((current) => [...current, { descricao: '', tipo: 'produto', quantidade: 1, valorUnitario: 0, descontoPercentual: 0 }])}>
+            <button className="button" type="button" onClick={() => setItems((current) => [...current, { descricao: '', tipo: 'produto', quantidade: 1, valorUnitario: 0, descontoPercentual: 0, apresentacao: 'normal' }])}>
               Adicionar item
             </button>
             <button className="button" type="button" disabled={items.length <= 1} onClick={() => setItems((current) => current.slice(0, -1))}>

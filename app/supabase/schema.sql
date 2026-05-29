@@ -229,6 +229,7 @@ create table public.orcamento_itens (
   codigo text,
   descricao text not null,
   tipo text not null default 'produto',
+  apresentacao text not null default 'normal',
   quantidade numeric(12, 3) not null default 1,
   valor_unitario numeric(14, 2) not null default 0,
   valor_total numeric(14, 2) not null default 0,

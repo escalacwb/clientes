@@ -138,6 +138,7 @@ export type OrcamentoItem = {
   valorTotal: number
   descontoPercentual?: number
   observacao?: string
+  apresentacao?: 'normal' | 'alternativa' | 'pacote' | 'complementar'
 }
 
 export type OrcamentoItemInput = Omit<OrcamentoItem, 'id' | 'orcamentoId' | 'valorTotal'> & {
