@@ -1610,6 +1610,21 @@ Validacao:
 Proximo passo tecnico:
 - Levar o mesmo modelo de resultado estruturado para campanhas e oportunidades, usando motivos padronizados por etapa.
 
+### 2026-05-29 - Resultado estruturado em campanhas
+
+Status: concluido - primeira entrega para campanhas.
+
+Entregue:
+- Inbox de campanhas passou a registrar resultado com resumo, proxima acao e data.
+- Status de campanha agora pode gerar follow-up automaticamente quando ha proxima acao.
+- Resultado da campanha registra interacao no historico do cliente e atualiza status comercial quando aplicavel.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Levar resultado estruturado para oportunidades/pipeline e padronizar motivos de perda por etapa.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

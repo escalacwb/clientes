@@ -2050,7 +2050,7 @@ function App() {
               setTarefas((current) => [created, ...current])
               return created
             }}
-            onUpdateInboxStatus={async (item, status) => {
+            onUpdateInboxStatus={async (item, status, result) => {
               const updated = await upsertCampanhaEnvio({
                 campanhaId: item.campanhaId,
                 campanhaNome: item.campanhaNome,
@@ -2065,10 +2065,29 @@ function App() {
                 vendedorId: item.vendedorId ?? session.id,
                 canal: 'Campanha',
                 tipo: 'campanha_inbox',
-                resumo: campaignSummary(status, item.mensagemFinal),
-                resultado: status,
+                resumo: result?.resumo || campaignSummary(status, item.mensagemFinal),
+                resultado: campaignStatusLabel(status),
+                proximaAcao: result?.proximaAcao || undefined,
+                dataProximaAcao: result?.dataProximaAcao || undefined,
                 campanhaId: item.campanhaId,
               })
+              const nextStatus = clientStatusFromCampaignStatus(status)
+              if (nextStatus) {
+                await updateClienteComercial(item.clienteId, { status: nextStatus })
+                setClientes((current) => current.map((cliente) => cliente.id === item.clienteId ? { ...cliente, status: nextStatus } : cliente))
+              }
+              if (result?.proximaAcao && result.dataProximaAcao) {
+                const created = await createTarefa({
+                  clienteId: item.clienteId,
+                  vendedorId: item.vendedorId ?? session.id,
+                  titulo: result.proximaAcao,
+                  descricao: `Follow-up da campanha ${item.campanhaNome ?? item.campanhaId}. Resultado: ${campaignStatusLabel(status)}.`,
+                  dataVencimento: result.dataProximaAcao,
+                  prioridade: campaignTaskPriority(status),
+                  origem: `campanha:${item.campanhaId}:resultado:${status}`,
+                })
+                setTarefas((current) => [created, ...current])
+              }
               setCampanhaInboxItems((current) => current.map((row) => row.id === item.id ? { ...item, ...updated, clienteNome: item.clienteNome, clienteCidade: item.clienteCidade, clienteUf: item.clienteUf } : row))
             }}
             onOpenBudgetEditor={(cliente, originContext) => {
@@ -2138,7 +2157,7 @@ function App() {
               setTarefas((current) => [created, ...current])
               return created
             }}
-            onUpdateStatus={async (item, status) => {
+            onUpdateStatus={async (item, status, result) => {
               const updated = await upsertCampanhaEnvio({
                 campanhaId: item.campanhaId,
                 campanhaNome: item.campanhaNome,
@@ -2153,11 +2172,30 @@ function App() {
                 vendedorId: item.vendedorId ?? session.id,
                 canal: 'Campanha',
                 tipo: 'campanha_inbox',
-                resumo: campaignSummary(status, item.mensagemFinal),
-                resultado: status,
+                resumo: result?.resumo || campaignSummary(status, item.mensagemFinal),
+                resultado: campaignStatusLabel(status),
+                proximaAcao: result?.proximaAcao || undefined,
+                dataProximaAcao: result?.dataProximaAcao || undefined,
                 campanhaId: item.campanhaId,
               })
               setInteracoes((current) => [interacao, ...current])
+              const nextStatus = clientStatusFromCampaignStatus(status)
+              if (nextStatus) {
+                await updateClienteComercial(item.clienteId, { status: nextStatus })
+                setClientes((current) => current.map((cliente) => cliente.id === item.clienteId ? { ...cliente, status: nextStatus } : cliente))
+              }
+              if (result?.proximaAcao && result.dataProximaAcao) {
+                const created = await createTarefa({
+                  clienteId: item.clienteId,
+                  vendedorId: item.vendedorId ?? session.id,
+                  titulo: result.proximaAcao,
+                  descricao: `Follow-up da campanha ${item.campanhaNome ?? item.campanhaId}. Resultado: ${campaignStatusLabel(status)}.`,
+                  dataVencimento: result.dataProximaAcao,
+                  prioridade: campaignTaskPriority(status),
+                  origem: `campanha:${item.campanhaId}:resultado:${status}`,
+                })
+                setTarefas((current) => [created, ...current])
+              }
               setCampanhaInboxItems((current) => current.map((row) => row.id === item.id ? { ...item, ...updated, clienteNome: item.clienteNome, clienteCidade: item.clienteCidade, clienteUf: item.clienteUf } : row))
             }}
           />
@@ -3209,9 +3247,16 @@ function CampanhasInbox({
   onOpenClient: (clienteId: string) => Promise<void>
   onOpenBudget: (item: CampanhaInboxItem) => Promise<void>
   onCreateTask: (item: CampanhaInboxItem) => Promise<Tarefa>
-  onUpdateStatus: (item: CampanhaInboxItem, status: CampanhaEnvioStatus) => Promise<void>
+  onUpdateStatus: (item: CampanhaInboxItem, status: CampanhaEnvioStatus, result?: CampaignInboxResultForm) => Promise<void>
 }) {
   const [busyId, setBusyId] = useState('')
+  const [resultTarget, setResultTarget] = useState<CampanhaInboxItem | null>(null)
+  const [resultStatus, setResultStatus] = useState<CampanhaEnvioStatus>('respondeu')
+  const [resultForm, setResultForm] = useState<CampaignInboxResultForm>({
+    resumo: '',
+    proximaAcao: '',
+    dataProximaAcao: '',
+  })
   const actionable = items.filter((item) => ['respondeu', 'virou_orcamento', 'enviado', 'nao_respondeu'].includes(item.status))
   const counts = items.reduce<Record<string, number>>((acc, item) => {
     acc[item.status] = (acc[item.status] ?? 0) + 1
@@ -3225,6 +3270,25 @@ function CampanhasInbox({
     } finally {
       setBusyId('')
     }
+  }
+
+  function openCampaignResult(item: CampanhaInboxItem, status: CampanhaEnvioStatus) {
+    setResultTarget(item)
+    setResultStatus(status)
+    setResultForm({
+      resumo: item.respostaCliente || `Tratativa da campanha ${item.campanhaNome ?? item.campanhaId}: ${campaignStatusLabel(status)}.`,
+      proximaAcao: ['respondeu', 'enviado', 'nao_respondeu', 'virou_orcamento'].includes(status) ? campaignNextActionForStatus(status) : '',
+      dataProximaAcao: ['respondeu', 'enviado', 'nao_respondeu', 'virou_orcamento'].includes(status) ? addDays(new Date().toISOString().slice(0, 10), status === 'nao_respondeu' ? 2 : 1) : '',
+    })
+  }
+
+  async function submitCampaignResult() {
+    if (!resultTarget) return
+    if (!resultForm.resumo.trim()) return
+    await run(resultTarget.id, async () => {
+      await onUpdateStatus(resultTarget, resultStatus, resultForm)
+      setResultTarget(null)
+    })
   }
 
   return (
@@ -3302,13 +3366,16 @@ function CampanhasInbox({
                 <button className="button" type="button" disabled={busyId === item.id} onClick={() => run(item.id, async () => { await onCreateTask(item) })}>
                   Criar tarefa
                 </button>
-                <button className="button" type="button" disabled={busyId === item.id} onClick={() => run(item.id, () => onUpdateStatus(item, 'ganhou'))}>
+                <button className="button" type="button" disabled={busyId === item.id} onClick={() => openCampaignResult(item, item.status)}>
+                  Resultado
+                </button>
+                <button className="button" type="button" disabled={busyId === item.id} onClick={() => openCampaignResult(item, 'ganhou')}>
                   Ganhou
                 </button>
-                <button className="button" type="button" disabled={busyId === item.id} onClick={() => run(item.id, () => onUpdateStatus(item, 'perdido'))}>
+                <button className="button" type="button" disabled={busyId === item.id} onClick={() => openCampaignResult(item, 'perdido')}>
                   Perdido
                 </button>
-                <button className="button" type="button" disabled={busyId === item.id} onClick={() => run(item.id, () => onUpdateStatus(item, 'nao_respondeu'))}>
+                <button className="button" type="button" disabled={busyId === item.id} onClick={() => openCampaignResult(item, 'nao_respondeu')}>
                   Sem resposta
                 </button>
               </span>
@@ -3317,8 +3384,61 @@ function CampanhasInbox({
           {items.length === 0 && <div className="empty-state">Nenhuma resposta de campanha nesta fila.</div>}
         </div>
       )}
+      {resultTarget && (
+        <section className="floating-panel task-result-panel">
+          <div className="panel-header">
+            <div>
+              <h2>Resultado da campanha</h2>
+              <p>{resultTarget.clienteNome} - {resultTarget.campanhaNome ?? 'Campanha'}</p>
+            </div>
+            <button className="button" type="button" onClick={() => setResultTarget(null)}>Fechar</button>
+          </div>
+          <div className="quick-result-grid">
+            {(['respondeu', 'virou_orcamento', 'nao_respondeu', 'ganhou', 'perdido', 'nao_contatar'] as CampanhaEnvioStatus[]).map((status) => (
+              <button
+                className={resultStatus === status ? 'button primary' : 'button'}
+                key={status}
+                type="button"
+                onClick={() => {
+                  setResultStatus(status)
+                  setResultForm((current) => ({
+                    ...current,
+                    proximaAcao: campaignNextActionForStatus(status),
+                    dataProximaAcao: campaignNextActionForStatus(status) ? addDays(new Date().toISOString().slice(0, 10), status === 'nao_respondeu' ? 2 : 1) : '',
+                  }))
+                }}
+              >
+                {campaignStatusLabel(status)}
+              </button>
+            ))}
+          </div>
+          <div className="task-form compact-form">
+            <label className="span-2">
+              Resumo da tratativa
+              <textarea value={resultForm.resumo} onChange={(event) => setResultForm({ ...resultForm, resumo: event.target.value })} />
+            </label>
+            <label>
+              Proxima data
+              <input type="date" value={resultForm.dataProximaAcao} onChange={(event) => setResultForm({ ...resultForm, dataProximaAcao: event.target.value })} />
+            </label>
+            <label>
+              Proxima acao
+              <input value={resultForm.proximaAcao} onChange={(event) => setResultForm({ ...resultForm, proximaAcao: event.target.value })} />
+            </label>
+            <button className="button primary" type="button" disabled={busyId === resultTarget.id || !resultForm.resumo.trim()} onClick={submitCampaignResult}>
+              {busyId === resultTarget.id ? 'Salvando...' : 'Salvar resultado'}
+            </button>
+          </div>
+        </section>
+      )}
     </section>
   )
+}
+
+type CampaignInboxResultForm = {
+  resumo: string
+  proximaAcao: string
+  dataProximaAcao: string
 }
 
 function Dashboard({
@@ -9532,7 +9652,7 @@ function Campanhas({
   onOpenInboxClient: (clienteId: string) => Promise<void>
   onOpenInboxBudget: (item: CampanhaInboxItem) => Promise<void>
   onCreateInboxTask: (item: CampanhaInboxItem) => Promise<Tarefa>
-  onUpdateInboxStatus: (item: CampanhaInboxItem, status: CampanhaEnvioStatus) => Promise<void>
+  onUpdateInboxStatus: (item: CampanhaInboxItem, status: CampanhaEnvioStatus, result?: CampaignInboxResultForm) => Promise<void>
   onOpenBudgetEditor: (cliente: Cliente, originContext: QuoteOriginContext) => void
   onDeleteCampaign: (campanhaId: string) => Promise<void>
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
@@ -10705,6 +10825,27 @@ function campaignTaskPriority(status: CampanhaEnvioStatus) {
   if (status === 'pendente' || status === 'enviado') return 80
   if (status === 'nao_respondeu') return 70
   return 50
+}
+
+function campaignNextActionForStatus(status: CampanhaEnvioStatus) {
+  const actions: Partial<Record<CampanhaEnvioStatus, string>> = {
+    enviado: 'Conferir resposta da campanha',
+    respondeu: 'Responder e qualificar necessidade',
+    nao_respondeu: 'Retentar contato da campanha',
+    virou_orcamento: 'Montar proposta comercial',
+  }
+  return actions[status] ?? ''
+}
+
+function clientStatusFromCampaignStatus(status: CampanhaEnvioStatus): ClienteStatus | undefined {
+  const statuses: Partial<Record<CampanhaEnvioStatus, ClienteStatus>> = {
+    respondeu: 'Em acompanhamento',
+    virou_orcamento: 'Orcamento aberto',
+    ganhou: 'Ativo',
+    perdido: 'Reativar',
+    nao_contatar: 'Nao contatar',
+  }
+  return statuses[status]
 }
 
 function campaignContactReadiness(cliente: Cliente, elegibilidade?: CampanhaElegibilidade, windowDays = 7) {
