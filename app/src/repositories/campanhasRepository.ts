@@ -19,6 +19,11 @@ export type CampanhaPublicoFiltros = {
   uf?: string
   vendedorId?: string
   produtoTerm?: string
+  origemBase?: Cliente['origemBase'] | 'todos'
+  diasSemCompraMin?: number
+  diasSemContatoMin?: number
+  valorMin?: number
+  somenteComWhatsapp?: boolean
 }
 
 export type CampanhaFiltroUsado = {
@@ -193,6 +198,16 @@ export async function listCampanhaSegmento(input: {
   const clienteIds = input.filtros?.produtoTerm?.trim()
     ? await findClientesByProdutoOuServico(input.filtros.produtoTerm)
     : input.clienteIds
+  const commonFilters = {
+    cidade: input.filtros?.cidade,
+    uf: input.filtros?.uf,
+    vendedorId: input.filtros?.vendedorId,
+    diasSemCompraMin: input.filtros?.diasSemCompraMin,
+    diasSemContatoMin: input.filtros?.diasSemContatoMin,
+    valorMin: input.filtros?.valorMin,
+    somenteComWhatsapp: input.filtros?.somenteComWhatsapp,
+    clienteIds,
+  }
   const result =
     segmento.id === 'selecionados'
       ? await listClientesPage({
@@ -206,21 +221,16 @@ export async function listCampanhaSegmento(input: {
           page: input.page,
           pageSize: input.pageSize,
           query: input.query,
-          origemBase: 'rodobens',
-          cidade: input.filtros?.cidade,
-          uf: input.filtros?.uf,
-          vendedorId: input.filtros?.vendedorId,
-          clienteIds,
+          origemBase: input.filtros?.origemBase && input.filtros.origemBase !== 'todos' ? input.filtros.origemBase : 'rodobens',
+          ...commonFilters,
         })
       : await listClientesPage({
           page: input.page,
           pageSize: input.pageSize,
           query: input.query,
           filtro: segmento.filtro,
-          cidade: input.filtros?.cidade,
-          uf: input.filtros?.uf,
-          vendedorId: input.filtros?.vendedorId,
-          clienteIds,
+          origemBase: input.filtros?.origemBase,
+          ...commonFilters,
         })
 
   return {

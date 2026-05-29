@@ -47,9 +47,11 @@ Status: Em andamento.
 Entregue nesta rodada:
 - Bloqueio visual de envio para sem WhatsApp, nao contatar e contato recente.
 - Indicadores de bloqueados, sem WhatsApp e opt-out no painel de campanhas.
+- Segmentacao combinavel em campanhas por cidade, UF, vendedor, origem Capital/Rodobens, produto/servico comprado, dias sem compra, dias sem contato, valor historico minimo e somente com WhatsApp.
+- Campanhas salvas preservam os filtros avancados no `filtro_usado`, permitindo reabrir o mesmo publico sem remontar manualmente.
 
 Proximos pontos:
-- Segmentos salvos com filtros combinaveis persistidos: cidade, UF, vendedor, origem, produto/servico, medida, ultima compra, ultimo contato, veiculo e KM.
+- Completar segmentos com medida, vendedor historico, veiculo, placa, KM e status de lead.
 - View de elegibilidade de campanha por cliente, com motivo do bloqueio.
 - Janela configuravel entre campanhas por cliente.
 - Opt-out com motivo, data e usuario.

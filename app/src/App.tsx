@@ -6760,6 +6760,53 @@ function Campanhas({
             placeholder="Ex.: 295/80; Michelin; alinhamento"
           />
         </label>
+        <label>
+          Origem da base
+          <select
+            value={publicoFiltros.origemBase ?? 'todos'}
+            onChange={(event) => updatePublicoFiltro('origemBase', event.target.value as CampanhaPublicoFiltros['origemBase'])}
+          >
+            <option value="todos">Todas</option>
+            <option value="capital_truck">Capital Truck</option>
+            <option value="rodobens">Rodobens</option>
+            <option value="desconhecida">Origem pendente</option>
+          </select>
+        </label>
+        <label>
+          Dias sem compra
+          <input
+            inputMode="numeric"
+            value={publicoFiltros.diasSemCompraMin ?? ''}
+            onChange={(event) => updatePublicoFiltro('diasSemCompraMin', positiveIntegerOrUndefined(event.target.value))}
+            placeholder="Ex.: 90"
+          />
+        </label>
+        <label>
+          Dias sem contato
+          <input
+            inputMode="numeric"
+            value={publicoFiltros.diasSemContatoMin ?? ''}
+            onChange={(event) => updatePublicoFiltro('diasSemContatoMin', positiveIntegerOrUndefined(event.target.value))}
+            placeholder="Ex.: 60"
+          />
+        </label>
+        <label>
+          Valor minimo historico
+          <input
+            inputMode="decimal"
+            value={publicoFiltros.valorMin ?? ''}
+            onChange={(event) => updatePublicoFiltro('valorMin', numberFromInput(event.target.value) || undefined)}
+            placeholder="Ex.: 5000,00"
+          />
+        </label>
+        <label className="checkbox-field">
+          <input
+            type="checkbox"
+            checked={Boolean(publicoFiltros.somenteComWhatsapp)}
+            onChange={(event) => updatePublicoFiltro('somenteComWhatsapp', event.target.checked)}
+          />
+          Somente com WhatsApp
+        </label>
       </div>
       <label className="campaign-message-editor">
         Mensagem da campanha
@@ -7079,6 +7126,11 @@ function numberFromInput(value: string) {
   const normalized = value.replace(/\./g, '').replace(',', '.')
   const parsed = Number(normalized)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+function positiveIntegerOrUndefined(value: string) {
+  const parsed = Number(value.replace(/\D/g, ''))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
 }
 
 function lossReasonLabel(reason: string) {

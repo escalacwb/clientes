@@ -209,6 +209,7 @@ Prioridade: alta.
    - Fizeram servico especifico.
    - Orcamento enviado sem resposta.
    - Cidade/UF/vendedor/origem.
+   - Primeira evolucao entregue: filtros combinaveis por cidade, UF, vendedor, origem, produto/servico, recencia de compra/contato, valor historico minimo e WhatsApp.
 
 2. Criar campanhas como entidade real.
    - Nome, objetivo, responsavel, periodo, publico, template, status.
@@ -1455,6 +1456,23 @@ Validacao:
 
 Proximo passo tecnico:
 - Comecar automacoes adicionais de follow-up: criar tarefas quando orcamento vencer e quando campanha responder, com deduplicacao por origem.
+
+### 2026-05-29 - Segmentacao avancada em campanhas
+
+Status: concluido - primeira entrega do M07.
+
+Entregue:
+- Campanhas ganharam filtros combinaveis por origem da base, dias sem compra, dias sem contato, valor historico minimo e somente clientes com WhatsApp.
+- O reposititorio de clientes passou a aplicar esses filtros diretamente no Supabase com paginacao, sem carregar a base inteira.
+- O fallback local tambem respeita os mesmos filtros para desenvolvimento.
+- Campanhas salvas preservam os filtros avancados dentro de `filtro_usado`.
+
+Validacao:
+- Build passou com `npm run build`.
+- Playwright local confirmou login, abertura de Campanhas e uso dos novos filtros.
+
+Proximo passo tecnico:
+- Completar M07 com medida, vendedor historico, veiculo/KM/status de lead e criar view de elegibilidade com motivo de bloqueio.
 
 ## Criterio de qualidade
 

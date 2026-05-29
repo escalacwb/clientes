@@ -182,7 +182,7 @@ Pronto quando:
 
 ### M07 - Segmentador avancado de campanhas
 
-Status: Pendente.
+Status: Parcial.
 
 Objetivo:
 Permitir campanhas por filtros comerciais reais, nao apenas segmentos fixos.
@@ -193,6 +193,11 @@ Entregas:
 - Contagem e amostra de clientes.
 - Salvar segmento como lista reutilizavel.
 - Criar campanha a partir do segmento.
+
+Ja entregue:
+- Tela de Campanhas permite combinar cidade, UF, vendedor, origem Capital/Rodobens/desconhecida, produto/servico comprado, dias sem compra, dias sem contato, valor historico minimo e somente clientes com WhatsApp.
+- Os filtros avancados sao enviados para query paginada no Supabase e tambem funcionam no fallback local.
+- Campanhas salvas preservam os filtros no `filtro_usado`, entao o publico pode ser reaberto depois.
 
 Pronto quando:
 - Gerente consegue montar campanha tipo: "clientes de Curitiba que compraram Michelin 295/80 e nao compram ha 120 dias".

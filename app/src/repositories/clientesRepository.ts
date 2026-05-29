@@ -49,6 +49,10 @@ export type ClientePageFilters = {
   uf?: string
   status?: Cliente['status'] | 'todos'
   clienteIds?: string[]
+  diasSemCompraMin?: number
+  diasSemContatoMin?: number
+  valorMin?: number
+  somenteComWhatsapp?: boolean
 }
 
 export type VendedorHistoricoResumo = {
@@ -415,6 +419,10 @@ function applyClienteFilters<T extends ClienteQueryBuilder>(query: T, input: Cli
   if (input.cidade?.trim()) next = next.ilike('cidade', `%${input.cidade.trim()}%`)
   if (input.uf?.trim()) next = next.ilike('uf', input.uf.trim())
   if (input.status && input.status !== 'todos') next = next.eq('status_comercial', toDbStatus(input.status))
+  if (input.diasSemCompraMin && input.diasSemCompraMin > 0) next = next.or(`ultima_compra_em.is.null,ultima_compra_em.lt.${dateDaysAgo(input.diasSemCompraMin)}`)
+  if (input.diasSemContatoMin && input.diasSemContatoMin > 0) next = next.or(`ultimo_contato_em.is.null,ultimo_contato_em.lt.${dateDaysAgo(input.diasSemContatoMin)}`)
+  if (input.valorMin && input.valorMin > 0) next = next.gte('total_comprado', input.valorMin)
+  if (input.somenteComWhatsapp) next = next.not('whatsapp_principal', 'is', null).not('whatsapp_principal', 'eq', '')
   if (input.clienteIds) next = input.clienteIds.length > 0 ? next.in('id', input.clienteIds) : next.in('id', ['00000000-0000-0000-0000-000000000000'])
   next = applyClienteFiltro(next, input.filtro)
   if (input.query?.trim()) {
@@ -422,6 +430,12 @@ function applyClienteFilters<T extends ClienteQueryBuilder>(query: T, input: Cli
     next = next.or(`nome.ilike.${term},cidade.ilike.${term},cpf_cnpj.ilike.${term},codigo_erp.ilike.${term}`)
   }
   return next
+}
+
+function dateDaysAgo(days: number) {
+  const date = new Date()
+  date.setDate(date.getDate() - days)
+  return date.toISOString().slice(0, 10)
 }
 
 function mapVendedorHistoricoResumo(row: VendedorHistoricoResumoRow): VendedorHistoricoResumo {
@@ -482,6 +496,10 @@ function filterMockClientes(
     if (cidade && !cliente.cidade.toLowerCase().includes(cidade)) return false
     if (uf && cliente.uf.toLowerCase() !== uf) return false
     if (input.status && input.status !== 'todos' && cliente.status !== input.status) return false
+    if (input.diasSemCompraMin && daysSinceLocal(cliente.ultimaCompraEm) < input.diasSemCompraMin) return false
+    if (input.diasSemContatoMin && daysSinceLocal(cliente.ultimoContatoEm) < input.diasSemContatoMin) return false
+    if (input.valorMin && cliente.totalComprado < input.valorMin) return false
+    if (input.somenteComWhatsapp && !cliente.whatsapp) return false
     if (input.clienteIds && !input.clienteIds.includes(cliente.id)) return false
     if (!term) return true
     return `${cliente.nome} ${cliente.cidade} ${cliente.cpfCnpj ?? ''} ${cliente.codigoErp}`.toLowerCase().includes(term)
