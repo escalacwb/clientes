@@ -3603,7 +3603,7 @@ h3 {
 @media print {
   @page {
     size: A4;
-    margin: 12mm;
+    margin: 10mm;
   }
 
   html,
@@ -3660,6 +3660,12 @@ h3 {
 
   .proposal-preview {
     color: #111827;
+    display: block !important;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10.5px;
+    line-height: 1.28;
+    orphans: 3;
+    widows: 3;
     padding: 0 !important;
     position: static !important;
     inset: auto !important;
@@ -3669,9 +3675,63 @@ h3 {
     page-break-after: auto;
   }
 
+  .proposal-preview > * {
+    margin-bottom: 6px;
+  }
+
+  .proposal-heading {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 54mm;
+    gap: 10mm;
+    align-items: start;
+    border-bottom: 2px solid #12312f;
+    padding-bottom: 6px;
+  }
+
+  .proposal-heading strong {
+    display: block;
+    color: #12312f;
+    font-size: 18px;
+    line-height: 1.15;
+    margin-top: 2px;
+  }
+
+  .proposal-heading span {
+    display: block;
+    font-size: 11px;
+  }
+
   .proposal-logo {
-    width: 230px;
-    max-height: 72px;
+    width: 42mm;
+    max-height: 16mm;
+    margin-bottom: 2mm;
+  }
+
+  .proposal-meta {
+    border: 1px solid #dfe7e1;
+    border-radius: 0;
+    padding: 7px;
+    justify-items: stretch;
+    text-align: left;
+  }
+
+  .proposal-client,
+  .proposal-commercial {
+    border: 1px solid #dfe7e1;
+    border-radius: 0;
+    background: #ffffff !important;
+    padding: 7px;
+  }
+
+  .proposal-client strong,
+  .proposal-commercial strong {
+    color: #12312f;
+    font-size: 13px;
+  }
+
+  .proposal-blocks {
+    display: grid !important;
+    gap: 7px;
   }
 
   .proposal-block,
@@ -3681,10 +3741,137 @@ h3 {
 
   .proposal-block {
     background: #ffffff !important;
+    border: 1px solid #d9e2dc;
+    border-radius: 0;
+    padding: 7px;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  .proposal-block-title {
+    display: block !important;
+    border-bottom: 1px solid #e4ebe6;
+    break-after: avoid;
+    page-break-after: avoid;
+    padding-bottom: 4px;
+  }
+
+  .proposal-block-title strong {
+    color: #12312f;
+    font-size: 13px;
+  }
+
+  .proposal-block-title span {
+    display: none;
+  }
+
+  .proposal-lines,
+  .proposal-alternatives {
+    display: grid !important;
+    gap: 0;
+    padding: 4px 0 0;
+  }
+
+  .proposal-lines div,
+  .proposal-alternatives div {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 30mm;
+    gap: 8px;
+    align-items: start;
+    border-bottom: 1px solid #eef2ef;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    padding: 4px 0;
+  }
+
+  .proposal-lines span,
+  .proposal-alternatives span {
+    overflow-wrap: anywhere;
+  }
+
+  .proposal-lines strong,
+  .proposal-alternatives strong,
+  .proposal-subtotal strong,
+  .proposal-block-totals strong,
+  .proposal-condition-block b {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .proposal-alternatives {
+    border-top: 1px dashed #cbd8d0;
+    margin-top: 5px;
+  }
+
+  .proposal-alternatives > strong {
+    margin-bottom: 2px;
+    text-align: left;
+  }
+
+  .proposal-subtotal,
+  .proposal-total,
+  .proposal-block-totals div,
+  .proposal-condition-block div {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 32mm;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .proposal-subtotal {
+    background: #f6f8f6;
+    border-top: 1px solid #dfe7e1;
+    break-before: avoid;
+    page-break-before: avoid;
+    margin-top: 4px;
+    padding: 5px;
+  }
+
+  .proposal-total,
+  .proposal-block-totals,
+  .proposal-conditions,
+  .proposal-notes,
+  .proposal-footer {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .proposal-block-totals,
+  .proposal-condition-block {
+    border: 1px solid #dfe7e1;
+    border-radius: 0;
+    background: #ffffff !important;
+    padding: 7px;
+  }
+
+  .proposal-block-totals > strong,
+  .proposal-condition-block > strong {
+    display: block;
+    border-bottom: 1px solid #e8eee9;
+    color: #12312f;
+    margin-bottom: 4px;
+    padding-bottom: 3px;
   }
 
   .proposal-conditions {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .proposal-notes,
+  .proposal-footer {
+    border-top: 1px solid #dfe7e1;
+    padding-top: 7px;
+  }
+
+  .proposal-footer {
+    margin-bottom: 0;
+  }
+
+  .proposal-preview small,
+  .proposal-breakdown {
+    font-size: 10px;
   }
 }
 
