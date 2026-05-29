@@ -46,6 +46,9 @@ create table public.clientes (
   origem text,
   origem_base text not null default 'desconhecida' check (origem_base in ('capital_truck', 'rodobens', 'desconhecida')),
   origem_detalhe text,
+  lead_qualificacao_status text not null default 'novo' check (lead_qualificacao_status in ('novo', 'contatado', 'qualificado', 'virou_cliente', 'descartado', 'nao_contatar')),
+  lead_qualificacao_observacao text,
+  lead_qualificado_em timestamptz,
   primeira_compra_em date,
   ultima_compra_em date,
   ultimo_servico_em date,
@@ -355,6 +358,18 @@ from public.clientes c
 where c.excluido_em is null
 group by coalesce(nullif(c.vendedor_codigo_erp, ''), 'sem_codigo'), coalesce(nullif(c.vendedor_nome_erp, ''), 'Nao informado');
 
+create view public.vw_rodobens_funil
+with (security_invoker = true) as
+select
+  c.lead_qualificacao_status as status,
+  count(*)::integer as total,
+  count(*) filter (where nullif(c.whatsapp_principal, '') is not null)::integer as com_whatsapp,
+  count(*) filter (where c.vendedor_id is not null)::integer as com_vendedor
+from public.clientes c
+where c.excluido_em is null
+  and c.origem_base = 'rodobens'
+group by c.lead_qualificacao_status;
+
 create table public.importacao_conflitos (
   id uuid primary key default gen_random_uuid(),
   importacao_id uuid not null references public.importacoes(id),
@@ -392,6 +407,7 @@ create index clientes_vendedor_idx on public.clientes(vendedor_id);
 create index clientes_cpf_cnpj_idx on public.clientes(cpf_cnpj);
 create index clientes_whatsapp_idx on public.clientes(whatsapp_principal);
 create index clientes_origem_base_idx on public.clientes(origem_base);
+create index clientes_lead_qualificacao_idx on public.clientes(lead_qualificacao_status) where origem_base = 'rodobens';
 create index clientes_nome_idx on public.clientes(nome);
 create index clientes_ultima_compra_idx on public.clientes(ultima_compra_em desc);
 create index vendas_cliente_data_idx on public.vendas_itens(cliente_id, data_venda desc);
@@ -622,6 +638,16 @@ begin
   if old.status_comercial is distinct from new.status_comercial then
     insert into public.cliente_alteracoes (cliente_id, usuario_id, campo, valor_anterior, valor_novo, origem)
     values (new.id, usuario_atual, 'status_comercial', old.status_comercial::text, new.status_comercial::text, 'app');
+  end if;
+
+  if old.lead_qualificacao_status is distinct from new.lead_qualificacao_status then
+    insert into public.cliente_alteracoes (cliente_id, usuario_id, campo, valor_anterior, valor_novo, origem)
+    values (new.id, usuario_atual, 'lead_qualificacao_status', old.lead_qualificacao_status, new.lead_qualificacao_status, 'rodobens');
+  end if;
+
+  if old.origem_base is distinct from new.origem_base then
+    insert into public.cliente_alteracoes (cliente_id, usuario_id, campo, valor_anterior, valor_novo, origem)
+    values (new.id, usuario_atual, 'origem_base', old.origem_base, new.origem_base, 'app');
   end if;
 
   return new;

@@ -9,6 +9,14 @@ export type ClienteStatus =
   | 'Inativo'
   | 'Nao contatar'
 
+export type LeadQualificacaoStatus =
+  | 'novo'
+  | 'contatado'
+  | 'qualificado'
+  | 'virou_cliente'
+  | 'descartado'
+  | 'nao_contatar'
+
 export type Cliente = {
   id: string
   codigoErp: string
@@ -30,6 +38,9 @@ export type Cliente = {
   origem: string
   origemBase?: 'capital_truck' | 'rodobens' | 'desconhecida'
   origemDetalhe?: string
+  leadQualificacaoStatus?: LeadQualificacaoStatus
+  leadQualificacaoObservacao?: string
+  leadQualificadoEm?: string
   primeiraCompraEm?: string
   ultimaCompraEm?: string
   ultimoServicoEm?: string

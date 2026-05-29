@@ -1,6 +1,6 @@
 import { clientes as mockClientes } from '../data/mockData'
 import { getSupabase } from '../lib/supabase'
-import type { CarteiraFiltro, Cliente } from '../types'
+import type { CarteiraFiltro, Cliente, LeadQualificacaoStatus } from '../types'
 
 type ClienteRow = {
   id: string
@@ -22,6 +22,9 @@ type ClienteRow = {
   origem: string | null
   origem_base: Cliente['origemBase'] | null
   origem_detalhe: string | null
+  lead_qualificacao_status: LeadQualificacaoStatus | null
+  lead_qualificacao_observacao: string | null
+  lead_qualificado_em: string | null
   primeira_compra_em: string | null
   ultima_compra_em: string | null
   ultimo_servico_em: string | null
@@ -38,6 +41,7 @@ type ClienteRow = {
 export type ClientePageFilters = {
   query?: string
   origemBase?: Cliente['origemBase'] | 'todos'
+  leadQualificacaoStatus?: LeadQualificacaoStatus | 'todos'
   filtro?: CarteiraFiltro
   vendedorId?: string
   vendedorHistoricoNome?: string
@@ -160,13 +164,50 @@ export async function listVendedoresHistoricosResumo(): Promise<VendedorHistoric
   return (data as VendedorHistoricoResumoRow[] | null ?? []).map(mapVendedorHistoricoResumo)
 }
 
-export async function listRodobensLeads(input: { page: number; pageSize: number; query?: string }): Promise<{ clientes: Cliente[]; total: number }> {
+export type RodobensFunilResumo = {
+  status: LeadQualificacaoStatus
+  total: number
+  comWhatsapp: number
+  comVendedor: number
+}
+
+type RodobensFunilResumoRow = {
+  status: LeadQualificacaoStatus
+  total: number
+  com_whatsapp: number
+  com_vendedor: number
+}
+
+export async function listRodobensLeads(input: {
+  page: number
+  pageSize: number
+  query?: string
+  status?: LeadQualificacaoStatus | 'todos'
+}): Promise<{ clientes: Cliente[]; total: number }> {
   return listClientesPage({
     page: input.page,
     pageSize: input.pageSize,
     query: input.query,
     origemBase: 'rodobens',
+    leadQualificacaoStatus: input.status,
   })
+}
+
+export async function listRodobensFunilResumo(): Promise<RodobensFunilResumo[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('vw_rodobens_funil')
+    .select('*')
+
+  if (error) throw error
+  return (data as RodobensFunilResumoRow[] | null ?? []).map((row) => ({
+    status: row.status,
+    total: Number(row.total ?? 0),
+    comWhatsapp: Number(row.com_whatsapp ?? 0),
+    comVendedor: Number(row.com_vendedor ?? 0),
+  }))
 }
 
 export async function assignClienteVendedor(clienteId: string, vendedorId: string): Promise<void> {
@@ -203,6 +244,37 @@ export async function updateClienteComercial(
       status_comercial: input.status ? toDbStatus(input.status) : undefined,
       observacoes_comerciais: input.observacoes,
     })
+    .eq('id', clienteId)
+
+  if (error) throw error
+}
+
+export async function updateRodobensQualificacao(
+  clienteId: string,
+  status: LeadQualificacaoStatus,
+  observacao?: string,
+): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase) return
+
+  const patch: Record<string, unknown> = {
+    lead_qualificacao_status: status,
+    lead_qualificacao_observacao: observacao,
+    lead_qualificado_em: ['qualificado', 'virou_cliente', 'descartado', 'nao_contatar'].includes(status) ? new Date().toISOString() : undefined,
+  }
+
+  if (status === 'virou_cliente') {
+    patch.origem_base = 'capital_truck'
+    patch.status_comercial = 'ativo'
+    patch.tags = ['convertido_rodobens']
+  }
+
+  if (status === 'nao_contatar') patch.status_comercial = 'nao_contatar'
+  if (status === 'contatado' || status === 'qualificado') patch.status_comercial = 'em_acompanhamento'
+
+  const { error } = await supabase
+    .from('clientes')
+    .update(patch)
     .eq('id', clienteId)
 
   if (error) throw error
@@ -256,6 +328,9 @@ function mapCliente(row: ClienteRow): Cliente {
     origem: row.origem ?? 'Supabase',
     origemBase: row.origem_base ?? 'desconhecida',
     origemDetalhe: row.origem_detalhe ?? undefined,
+    leadQualificacaoStatus: row.lead_qualificacao_status ?? 'novo',
+    leadQualificacaoObservacao: row.lead_qualificacao_observacao ?? undefined,
+    leadQualificadoEm: row.lead_qualificado_em ?? undefined,
     primeiraCompraEm: row.primeira_compra_em ?? undefined,
     ultimaCompraEm: row.ultima_compra_em ?? undefined,
     ultimoServicoEm: row.ultimo_servico_em ?? undefined,
@@ -319,6 +394,7 @@ function applyClienteFilters<T extends ClienteQueryBuilder>(query: T, input: Cli
   const origemBase = input.origemBase ?? origemBaseFromFiltro(input.filtro)
   let next = query
   if (origemBase && origemBase !== 'todos') next = next.eq('origem_base', origemBase)
+  if (input.leadQualificacaoStatus && input.leadQualificacaoStatus !== 'todos') next = next.eq('lead_qualificacao_status', input.leadQualificacaoStatus)
   if (input.vendedorId) next = next.eq('vendedor_id', input.vendedorId)
   if (input.vendedorHistoricoNome?.trim()) next = next.ilike('vendedor_nome_erp', `%${input.vendedorHistoricoNome.trim()}%`)
   if (input.cidade?.trim()) next = next.ilike('cidade', `%${input.cidade.trim()}%`)

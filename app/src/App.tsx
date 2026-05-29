@@ -66,7 +66,15 @@ import {
   attributeCampanhaRevenueByOrcamento,
 } from './repositories/campanhasRepository'
 import { listCatalogoItens, listCatalogoPage, listCatalogoPrecos, type CatalogoPrecoHistorico, type CatalogoTipoFilter } from './repositories/catalogoRepository'
-import { assignClientesVendedorByFilter, listVendedoresHistoricosResumo, type ClientePageFilters, type VendedorHistoricoResumo } from './repositories/clientesRepository'
+import {
+  assignClientesVendedorByFilter,
+  listRodobensFunilResumo,
+  listVendedoresHistoricosResumo,
+  updateRodobensQualificacao,
+  type ClientePageFilters,
+  type RodobensFunilResumo,
+  type VendedorHistoricoResumo,
+} from './repositories/clientesRepository'
 import { assignClienteVendedor } from './repositories/clientesRepository'
 import { listClientesPage } from './repositories/clientesRepository'
 import { listRodobensLeads } from './repositories/clientesRepository'
@@ -127,6 +135,7 @@ import type {
   ImportacaoConflito,
   Interacao,
   InteracaoInput,
+  LeadQualificacaoStatus,
   Orcamento,
   OrcamentoInput,
   OrcamentoItemInput,
@@ -262,8 +271,10 @@ function App() {
   const [atividadesDia, setAtividadesDia] = useState<AtividadeDiaResumo[]>([])
   const [rodobensLeads, setRodobensLeads] = useState<Cliente[]>([])
   const [rodobensTotal, setRodobensTotal] = useState(0)
+  const [rodobensFunil, setRodobensFunil] = useState<RodobensFunilResumo[]>([])
   const [rodobensPage, setRodobensPage] = useState(1)
   const [rodobensQuery, setRodobensQuery] = useState('')
+  const [rodobensStatusFilter, setRodobensStatusFilter] = useState<LeadQualificacaoStatus | 'todos'>('todos')
   const [isLoadingRodobens, setIsLoadingRodobens] = useState(false)
   const [quoteSourceView, setQuoteSourceView] = useState('clientes')
   const [quoteOriginContext, setQuoteOriginContext] = useState<QuoteOriginContext>({ kind: 'cliente', label: 'Ficha do cliente' })
@@ -608,10 +619,19 @@ function App() {
 
       setIsLoadingRodobens(true)
       try {
-        const result = await listRodobensLeads({ page: rodobensPage, pageSize: clientePageSize, query: rodobensQuery })
+        const [result, funil] = await Promise.all([
+          listRodobensLeads({
+            page: rodobensPage,
+            pageSize: clientePageSize,
+            query: rodobensQuery,
+            status: rodobensStatusFilter,
+          }),
+          listRodobensFunilResumo(),
+        ])
         if (!isMounted) return
         setRodobensLeads(result.clientes)
         setRodobensTotal(result.total)
+        setRodobensFunil(funil)
       } catch (exception) {
         if (isMounted) setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar Inbox Rodobens.')
       } finally {
@@ -625,7 +645,7 @@ function App() {
       isMounted = false
       window.clearTimeout(handle)
     }
-  }, [isCheckingSession, rodobensPage, rodobensQuery, session, view])
+  }, [isCheckingSession, rodobensPage, rodobensQuery, rodobensStatusFilter, session, view])
 
   useEffect(() => {
     let isMounted = true
@@ -1030,13 +1050,19 @@ function App() {
         {canUseScopedClientViews && view === 'rodobens' && (
           <RodobensInbox
             leads={rodobensLeads}
+            funil={rodobensFunil}
             total={rodobensTotal}
             page={rodobensPage}
             pageSize={clientePageSize}
             query={rodobensQuery}
+            statusFilter={rodobensStatusFilter}
             isLoading={isLoadingRodobens}
             onQueryChange={(nextQuery) => {
               setRodobensQuery(nextQuery)
+              setRodobensPage(1)
+            }}
+            onStatusFilterChange={(nextStatus) => {
+              setRodobensStatusFilter(nextStatus)
               setRodobensPage(1)
             }}
             onPageChange={setRodobensPage}
@@ -1053,6 +1079,15 @@ function App() {
               const created = await createTarefa(task)
               setTarefas((current) => [created, ...current])
               return created
+            }}
+            onUpdateQualificacao={async (cliente, status, observacao) => {
+              await updateRodobensQualificacao(cliente.id, status, observacao)
+              setRodobensLeads((current) => current
+                .map((item) => item.id === cliente.id ? { ...item, leadQualificacaoStatus: status, leadQualificacaoObservacao: observacao } : item)
+                .filter((item) => {
+                  if (status === 'virou_cliente' && item.id === cliente.id) return false
+                  return rodobensStatusFilter === 'todos' || item.leadQualificacaoStatus === rodobensStatusFilter
+                }))
             }}
           />
         )}
@@ -1743,34 +1778,64 @@ function Carteira({
   )
 }
 
+const rodobensQualificacaoStatuses: LeadQualificacaoStatus[] = [
+  'novo',
+  'contatado',
+  'qualificado',
+  'virou_cliente',
+  'descartado',
+  'nao_contatar',
+]
+
+function rodobensQualificacaoLabel(status: LeadQualificacaoStatus) {
+  const labels: Record<LeadQualificacaoStatus, string> = {
+    novo: 'Novo',
+    contatado: 'Contatado',
+    qualificado: 'Qualificado',
+    virou_cliente: 'Virou cliente',
+    descartado: 'Descartado',
+    nao_contatar: 'Nao contatar',
+  }
+  return labels[status]
+}
+
 function RodobensInbox({
   leads,
+  funil,
   total,
   page,
   pageSize,
   query,
+  statusFilter,
   isLoading,
   onQueryChange,
+  onStatusFilterChange,
   onPageChange,
   onSelect,
   onAddInteraction,
   onCreateTask,
+  onUpdateQualificacao,
 }: {
   leads: Cliente[]
+  funil: RodobensFunilResumo[]
   total: number
   page: number
   pageSize: number
   query: string
+  statusFilter: LeadQualificacaoStatus | 'todos'
   isLoading: boolean
   onQueryChange: (query: string) => void
+  onStatusFilterChange: (status: LeadQualificacaoStatus | 'todos') => void
   onPageChange: (page: number) => void
   onSelect: (cliente: Cliente) => void
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
   onCreateTask: (task: TarefaInput) => Promise<Tarefa>
+  onUpdateQualificacao: (cliente: Cliente, status: LeadQualificacaoStatus, observacao?: string) => Promise<void>
 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const safePage = Math.min(page, totalPages)
   const [statusMessage, setStatusMessage] = useState('')
+  const statusTotals = new Map(funil.map((item) => [item.status, item]))
 
   async function registerFirstContact(cliente: Cliente) {
     await onAddInteraction({
@@ -1790,7 +1855,14 @@ function RodobensInbox({
       prioridade: 80,
       origem: 'rodobens',
     })
+    await onUpdateQualificacao(cliente, 'contatado', 'Primeiro contato iniciado pela Inbox Rodobens.')
     setStatusMessage(`Contato registrado para ${cliente.nome}.`)
+  }
+
+  async function updateLead(cliente: Cliente, status: LeadQualificacaoStatus) {
+    const observacao = rodobensQualificacaoLabel(status)
+    await onUpdateQualificacao(cliente, status, observacao)
+    setStatusMessage(`${cliente.nome}: ${observacao}.`)
   }
 
   return (
@@ -1809,16 +1881,35 @@ function RodobensInbox({
               placeholder="Buscar lead Rodobens"
             />
           </label>
+          <select
+            className="compact-select"
+            value={statusFilter}
+            onChange={(event) => onStatusFilterChange(event.target.value as LeadQualificacaoStatus | 'todos')}
+          >
+            <option value="todos">Todos os status</option>
+            {rodobensQualificacaoStatuses.map((status) => (
+              <option value={status} key={status}>{rodobensQualificacaoLabel(status)}</option>
+            ))}
+          </select>
           <span className="status-pill">{total} leads</span>
         </div>
       </div>
-      <div className="client-alerts">
-        <div>
-          <AlertTriangle size={15} />
-          <span>
-            A importacao atual classificou 0 clientes com origem Rodobens. Esta tela ja esta pronta; ela sera preenchida quando a origem vier no arquivo ou for reclassificada.
-          </span>
-        </div>
+      <div className="lead-funnel-strip">
+        {rodobensQualificacaoStatuses.map((status) => {
+          const item = statusTotals.get(status)
+          return (
+            <button
+              className={statusFilter === status ? 'lead-funnel-card active' : 'lead-funnel-card'}
+              type="button"
+              key={status}
+              onClick={() => onStatusFilterChange(status)}
+            >
+              <strong>{item?.total ?? 0}</strong>
+              <span>{rodobensQualificacaoLabel(status)}</span>
+              <small>{item?.comWhatsapp ?? 0} com WhatsApp · {item?.comVendedor ?? 0} com vendedor</small>
+            </button>
+          )
+        })}
       </div>
       {statusMessage && <div className="readiness ok">{statusMessage}</div>}
       {isLoading && <div className="empty-state compact">Carregando leads Rodobens...</div>}
@@ -1829,9 +1920,10 @@ function RodobensInbox({
       )}
       {leads.length > 0 && (
         <div className="table">
-          <div className="table-head campaign">
+          <div className="table-head rodobens-row">
             <span>Cliente</span>
             <span>Origem</span>
+            <span>Status</span>
             <span>Contexto</span>
             <span>Acoes</span>
           </div>
@@ -1840,7 +1932,7 @@ function RodobensInbox({
             const waUrl = cliente.whatsapp ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(message)}` : undefined
 
             return (
-              <div className="table-row campaign" key={cliente.id}>
+              <div className="table-row rodobens-row" key={cliente.id}>
                 <span>
                   <strong>{cliente.nome}</strong>
                   <small>{cliente.cidade}/{cliente.uf} - {cliente.whatsapp ?? 'Sem WhatsApp'}</small>
@@ -1848,6 +1940,10 @@ function RodobensInbox({
                 <span>
                   <strong>{origemLabel(cliente.origemBase)}</strong>
                   <small>{cliente.origemDetalhe ?? cliente.origem}</small>
+                </span>
+                <span>
+                  <strong>{rodobensQualificacaoLabel(cliente.leadQualificacaoStatus ?? 'novo')}</strong>
+                  <small>{cliente.leadQualificacaoObservacao ?? 'Sem qualificacao registrada'}</small>
                 </span>
                 <span>
                   <small>Ultima compra: {dateLabel(cliente.ultimaCompraEm)}</small>
@@ -1862,6 +1958,15 @@ function RodobensInbox({
                   </a>
                   <button className="button primary" type="button" onClick={() => registerFirstContact(cliente)}>
                     Registrar contato
+                  </button>
+                  <button className="button" type="button" onClick={() => updateLead(cliente, 'qualificado')}>
+                    Qualificar
+                  </button>
+                  <button className="button" type="button" onClick={() => updateLead(cliente, 'virou_cliente')}>
+                    Virou cliente
+                  </button>
+                  <button className="button" type="button" onClick={() => updateLead(cliente, 'descartado')}>
+                    Descartar
                   </button>
                 </span>
               </div>

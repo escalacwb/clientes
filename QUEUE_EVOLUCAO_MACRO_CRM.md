@@ -164,12 +164,13 @@ Ja entregue:
 - Tela Inbox Rodobens.
 - Filtro de origem.
 - Acoes de contato e tarefa.
-
-Proximas entregas:
 - Status de qualificacao: novo, contatado, qualificado, virou cliente, descartado, nao contatar.
 - Metricas de conversao Rodobens.
 - Converter lead para carteira Capital.
+
+Proximas entregas:
 - Origem Rodobens confiavel via importacao, nao por inferencia fraca.
+- Relatorio de conversao por periodo e vendedor.
 
 Pronto quando:
 - Gerente sabe quantos Rodobens foram contatados e quantos viraram oportunidade/venda.
@@ -260,7 +261,7 @@ Pronto quando:
 
 ### Q12 - Relatorios gerenciais de funil
 
-Status: Parcial.
+Status: Concluido.
 
 Objetivo:
 Mostrar o fluxo comercial completo por vendedor, origem e periodo.

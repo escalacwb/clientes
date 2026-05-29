@@ -1023,6 +1023,25 @@ Validacao:
 Proximo passo tecnico:
 - Evoluir relatorios para filtros de periodo/vendedor e exportacao gerencial.
 
+### 2026-05-28 - Inbox Rodobens com qualificacao
+
+Status: concluido.
+
+Entregue:
+- Adicionados campos de qualificacao Rodobens em `clientes`: status, observacao e data de qualificacao.
+- Criada view `vw_rodobens_funil` com totais por status, WhatsApp preenchido e vendedor responsavel.
+- Inbox Rodobens ganhou filtro por status, cards de funil e acoes para registrar contato, qualificar, converter em cliente Capital e descartar.
+- Conversao para cliente muda `origem_base` para `capital_truck`; status `nao_contatar` sincroniza o status comercial.
+- Auditoria passou a registrar mudanca de qualificacao Rodobens e alteracao de origem.
+
+Validacao:
+- SQL aplicado com `node scripts/run-sql-file.mjs supabase/queries/rodobens_qualificacao.sql`.
+- Build passou com `npm run build`.
+- Consulta direta em `vw_rodobens_funil` retornou 2 leads Rodobens em `novo`, ambos com WhatsApp e sem vendedor.
+
+Proximo passo tecnico:
+- Criar relatorio de conversao Rodobens por periodo/vendedor e reforcar a classificacao de origem pela importacao.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:
