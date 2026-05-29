@@ -13,7 +13,7 @@ Atualizado em: 2026-05-28
 
 ### Q01 - Importacao diaria robusta no app
 
-Status: Em andamento.
+Status: Concluido.
 
 Objetivo:
 Transformar a importacao dos arquivos referencia em fluxo confiavel para uso diario, sem depender de IA ou script manual.
@@ -95,9 +95,10 @@ Ja entregue:
 - Carga inicial de tarefas limitada a contexto recente.
 - Campanhas com resumo por view agregada, sem nested payload de envios.
 - Relatorios priorizam views agregadas; cargas auxiliares iniciais de interacoes/importacoes/conflitos foram limitadas.
+- Estados de loading/vazio sem queda para cliente demonstrativo quando Supabase esta ativo.
 
 Proximas entregas:
-- Estados de loading vazios, sem fallback falso.
+- Proximos refinamentos de performance entram nos blocos especificos de cada modulo.
 
 Pronto quando:
 - Entrar no app nao dispara carga completa de vendas/servicos/clientes.

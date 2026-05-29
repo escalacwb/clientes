@@ -632,6 +632,21 @@ Validacao:
 Proximo passo tecnico:
 - Revisar estados de loading por tela para garantir vazio/carregando claro, sem fallback falso.
 
+### 2026-05-28 - Fechamento Q04 performance global
+
+Status: concluido.
+
+Entregue:
+- Removida queda para cliente demonstrativo quando Supabase esta ativo e nenhum cliente foi carregado.
+- Telas dependentes de cliente exibem estado vazio real quando nao ha cliente selecionado.
+- Q04 marcado como concluido apos paginacao de orcamentos, paginacao de tarefas, resumo agregado de campanhas, relatorios por views e cargas auxiliares limitadas.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Avancar para Q05: gestao de carteira por vendedor.
+
 ### 2026-05-28 - Campanhas com construtor de publico
 
 Status: concluido.

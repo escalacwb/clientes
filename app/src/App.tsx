@@ -169,6 +169,20 @@ const authUsuarios: Vendedor[] = [
   },
 ]
 
+const emptyClient: Cliente = {
+  id: 'empty-client',
+  codigoErp: '',
+  nome: 'Nenhum cliente carregado',
+  tipoCliente: '',
+  cidade: '',
+  uf: '',
+  status: 'Novo',
+  origem: 'supabase',
+  totalComprado: 0,
+  totalServicos: 0,
+  tags: [],
+}
+
 type QuoteOriginContext =
   | { kind: 'campanha'; sourceId?: string; label: string }
   | { kind: 'tarefa'; sourceId?: string; label: string }
@@ -524,7 +538,8 @@ function App() {
     scopedClientes.find((cliente) => cliente.id === selectedClientId) ??
     scopedClientes[0] ??
     clientes[0] ??
-    seedClientes[0]
+    emptyClient
+  const hasSelectedClient = selectedClient.id !== emptyClient.id
   const scopedClientIds = useMemo(() => new Set(scopedClientes.map((cliente) => cliente.id)), [scopedClientes])
   const scopedInteracoes = useMemo(() => {
     if (!session || session.role === 'admin') return interacoes
@@ -806,7 +821,7 @@ function App() {
             }}
           />
         )}
-        {canUseScopedClientViews && view === 'cliente360' && (
+        {canUseScopedClientViews && view === 'cliente360' && hasSelectedClient && (
           <Cliente360
             cliente={selectedClient}
             interacoes={scopedInteracoes}
@@ -816,7 +831,7 @@ function App() {
             onBack={() => setView('clientes')}
           />
         )}
-        {canUseScopedClientViews && view === 'orcamento-editor' && (
+        {canUseScopedClientViews && view === 'orcamento-editor' && hasSelectedClient && (
           <OrcamentoEditor
             cliente={selectedClient}
             catalogo={catalogo}
@@ -883,6 +898,11 @@ function App() {
               return created
             }}
           />
+        )}
+        {canUseScopedClientViews && ['cliente360', 'orcamento-editor'].includes(view) && !hasSelectedClient && (
+          <section className="panel wide">
+            <div className="empty-state">Nenhum cliente carregado para esta acao.</div>
+          </section>
         )}
         {canUseScopedClientViews && view === 'carteira' && (
           <Carteira
