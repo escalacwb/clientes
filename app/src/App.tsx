@@ -5393,7 +5393,7 @@ function OrcamentoEditor({
   const validItems = items
     .filter((item) => item.descricao.trim() && item.quantidade > 0 && item.valorUnitario > 0)
     .map((item) => ({ ...item, valorTotal: quoteItemTotal(item) }))
-  const total = validItems.reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
+  const total = quoteBaseTotal(validItems)
   const formaPagamento = paymentMode === 'Personalizado' ? customPayment : paymentMode
   const paymentConditionDrafts = quoteConditionDrafts(total, paymentAdjustments, enabledPaymentConditions, cardInstallments, customCondition1, customCondition2)
   const paymentScenarios = paymentConditionDrafts.filter((scenario) => {
@@ -5583,7 +5583,7 @@ function OrcamentoEditor({
               <span>Unitario</span>
               <span>Desc.</span>
               <span>Bloco</span>
-              <span>Grupo/uso</span>
+              <span>Bloco/uso</span>
               <span>Total</span>
             </div>
             {items.map((item, index) => (
@@ -5602,7 +5602,7 @@ function OrcamentoEditor({
                   <option value="pacote">Pacote</option>
                   <option value="complementar">Complementar</option>
                 </select>
-                <input value={item.observacao ?? ''} onChange={(event) => updateItem(index, { observacao: event.target.value })} placeholder="Ex.: Eixo direcional, kit montagem" />
+                <input value={item.observacao ?? ''} onChange={(event) => updateItem(index, { observacao: event.target.value })} placeholder="Ex.: Bloco 1, eixo direcional, kit montagem" />
                 <strong>{money(quoteItemTotal(item))}</strong>
               </div>
             ))}
@@ -5779,6 +5779,15 @@ function quotePaymentScenarios(total: number, adjustments: Record<string, number
   }))
 }
 
+function quoteBaseItems(itens: OrcamentoItemInput[]) {
+  const base = itens.filter((item) => (item.apresentacao ?? 'normal') !== 'alternativa')
+  return base.length > 0 ? base : itens
+}
+
+function quoteBaseTotal(itens: OrcamentoItemInput[]) {
+  return quoteBaseItems(itens).reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
+}
+
 function quoteConditionDrafts(
   total: number,
   adjustments: Record<string, number>,
@@ -5803,7 +5812,7 @@ function quoteConditionDrafts(
     enabled: Boolean(enabled[id]),
   }))
 
-  const cardAdjustment = cardInstallments * (adjustments.cartao ?? 1)
+  const cardAdjustment = adjustments.cartao ?? 1
   base.push({
     id: 'cartao',
     label: `Cartao ${cardInstallments}x`,
@@ -5879,38 +5888,40 @@ function buildQuoteMessage(
   observacao?: string,
   paymentScenarios: QuoteConditionScenario[] = [],
 ) {
-  const total = itens.reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
+  const baseItems = quoteBaseItems(itens)
+  const total = quoteBaseTotal(itens)
   const blocks = groupQuoteItemsForMessage(itens)
-  const produtosTotal = itens.filter((item) => item.tipo === 'produto').reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
-  const servicosTotal = itens.filter((item) => item.tipo === 'servico').reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
+  const produtosTotal = baseItems.filter((item) => item.tipo === 'produto').reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
+  const servicosTotal = baseItems.filter((item) => item.tipo === 'servico').reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
+  const hasAlternatives = itens.some((item) => (item.apresentacao ?? 'normal') === 'alternativa')
   const lines = [
-    `Ola, ${cliente.responsavel ?? cliente.nome}.`,
+    `Ola, ${cliente.responsavel ?? cliente.nome}. Tudo bem?`,
     '',
-    '*Capital Truck Center*',
-    '*Proposta comercial*',
+    '*Proposta comercial - Capital Truck Center*',
     `Cliente: ${cliente.nome}`,
-    cliente.cidade || cliente.uf ? `Local: ${[cliente.cidade, cliente.uf].filter(Boolean).join('/')}` : '',
-    validade ? `Validade: ${dateLabel(validade)}` : '',
+    cliente.cidade || cliente.uf ? `Local: ${[cliente.cidade, cliente.uf].filter(Boolean).join('/')}` : undefined,
+    validade ? `Validade: ${dateLabel(validade)}` : undefined,
     '',
   ].filter(Boolean) as string[]
 
   blocks.forEach((block, blockIndex) => {
-    lines.push(`*${blockIndex + 1}. ${block.title}*`)
+    lines.push(`*${quoteMessageBlockTitle(block.title, block.kind, blockIndex)}*`)
     if (block.kind === 'alternativa') lines.push('Escolha uma das opcoes abaixo:')
-    if (block.kind === 'pacote') lines.push('Itens considerados em conjunto:')
+    if (block.kind === 'pacote') lines.push('Itens deste bloco considerados em conjunto:')
     if (block.kind === 'complementar') lines.push('Complementos recomendados:')
     block.items.forEach((item, index) => {
-      const marker = block.kind === 'alternativa' ? `Opcao ${String.fromCharCode(65 + index)}` : `${index + 1}`
-      lines.push(`${marker}) ${formatQuantity(item.quantidade)}x ${item.descricao}`)
-      lines.push(`   Unit.: ${money(item.valorUnitario)} | Total: ${money(item.valorTotal ?? 0)}`)
+      const marker = block.kind === 'alternativa' ? `${String.fromCharCode(65 + index)})` : '-'
+      lines.push(`${marker} ${formatQuantity(item.quantidade)}x ${item.descricao}`)
+      lines.push(`  Unit.: ${money(item.valorUnitario)} | Total: ${money(item.valorTotal ?? 0)}`)
     })
-    lines.push(`Subtotal ${block.title}: ${money(block.total)}`, '')
+    lines.push(block.kind === 'alternativa' ? `Opcoes deste bloco: ${quoteBlockTotalLabel(block)}` : `Subtotal: ${money(block.total)}`, '')
   })
 
-  lines.push('*Resumo*')
+  lines.push('*Resumo da proposta*')
   if (produtosTotal > 0) lines.push(`Produtos: ${money(produtosTotal)}`)
   if (servicosTotal > 0) lines.push(`Servicos: ${money(servicosTotal)}`)
-  lines.push(`Total base: ${money(total)}`)
+  lines.push(`Total principal: ${money(total)}`)
+  if (hasAlternatives) lines.push('As alternativas sao opcoes de escolha e nao estao somadas no total principal.')
   if (paymentScenarios.length > 0) {
     lines.push('', '*Condicoes de pagamento*')
     paymentScenarios.forEach((scenario) => {
@@ -5922,13 +5933,21 @@ function buildQuoteMessage(
   return lines.join('\n')
 }
 
+function quoteMessageBlockTitle(title: string, kind: NonNullable<OrcamentoItemInput['apresentacao']>, index: number) {
+  const prefix = title.toLowerCase().startsWith('bloco') ? title : `Bloco ${index + 1} - ${title}`
+  if (kind === 'alternativa' && !prefix.toLowerCase().includes('alternativa')) return `${prefix} - alternativas`
+  if (kind === 'pacote' && !prefix.toLowerCase().includes('pacote')) return `${prefix} - pacote`
+  if (kind === 'complementar' && !prefix.toLowerCase().includes('complement')) return `${prefix} - complementos`
+  return prefix
+}
+
 function groupQuoteItemsForMessage(itens: OrcamentoItemInput[]) {
   const groups = new Map<string, { kind: NonNullable<OrcamentoItemInput['apresentacao']>; items: OrcamentoItemInput[] }>()
   const order: string[] = []
   itens.forEach((item) => {
     const kind = item.apresentacao ?? 'normal'
     const groupLabel = item.observacao?.trim()
-    const key = groupLabel ? `${kind}:${groupLabel}` : `${kind}:__single_${order.length}`
+    const key = groupLabel ? `${kind}:${groupLabel}` : `${kind}:${quoteDefaultBlockTitle(kind, item)}`
     if (!groups.has(key)) {
       groups.set(key, { kind, items: [] })
       order.push(key)
@@ -5950,10 +5969,26 @@ function groupQuoteItemsForMessage(itens: OrcamentoItemInput[]) {
 }
 
 function quoteBlockTitle(kind: NonNullable<OrcamentoItemInput['apresentacao']>, item: OrcamentoItemInput | undefined, index: number) {
-  if (kind === 'alternativa') return `Opcao ${index + 1}`
+  if (kind === 'alternativa') return `Alternativas ${index + 1}`
   if (kind === 'pacote') return `Pacote ${index + 1}`
   if (kind === 'complementar') return 'Complementos'
   return item?.tipo === 'servico' ? 'Servicos' : 'Itens cotados'
+}
+
+function quoteDefaultBlockTitle(kind: NonNullable<OrcamentoItemInput['apresentacao']>, item: OrcamentoItemInput) {
+  if (kind === 'alternativa') return 'Alternativas'
+  if (kind === 'pacote') return 'Pacote principal'
+  if (kind === 'complementar') return 'Complementos'
+  return item.tipo === 'servico' ? 'Servicos' : 'Itens principais'
+}
+
+function quoteBlockTotalLabel(block: { items: OrcamentoItemInput[]; total: number; kind: NonNullable<OrcamentoItemInput['apresentacao']> }) {
+  if (block.kind !== 'alternativa') return money(block.total)
+  const totals = block.items.map((item) => item.valorTotal ?? 0).filter((value) => value > 0)
+  if (totals.length === 0) return money(0)
+  const min = Math.min(...totals)
+  const max = Math.max(...totals)
+  return min === max ? money(min) : `${money(min)} a ${money(max)}`
 }
 
 function QuoteProposalPreview({
@@ -5976,8 +6011,9 @@ function QuoteProposalPreview({
   vendedorNome?: string
 }) {
   const blocks = groupQuoteItemsForMessage(itens)
-  const produtosTotal = itens.filter((item) => item.tipo === 'produto').reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
-  const servicosTotal = itens.filter((item) => item.tipo === 'servico').reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
+  const baseItems = quoteBaseItems(itens)
+  const produtosTotal = baseItems.filter((item) => item.tipo === 'produto').reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
+  const servicosTotal = baseItems.filter((item) => item.tipo === 'servico').reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
 
   return (
     <>
@@ -6020,17 +6056,20 @@ function QuoteProposalPreview({
               })}
             </div>
             <div className="proposal-subtotal">
-              <span>Subtotal</span>
-              <strong>{money(block.total)}</strong>
+              <span>{block.kind === 'alternativa' ? 'Faixa das opcoes' : 'Subtotal'}</span>
+              <strong>{quoteBlockTotalLabel(block)}</strong>
             </div>
           </section>
         ))}
         {itens.length === 0 && <span className="muted">Adicione itens para montar a proposta.</span>}
       </div>
       <div className="proposal-total">
-        <span>Total base</span>
+        <span>Total principal</span>
         <strong>{money(total)}</strong>
       </div>
+      {itens.some((item) => (item.apresentacao ?? 'normal') === 'alternativa') && (
+        <small>Alternativas nao somadas no total principal.</small>
+      )}
       {(produtosTotal > 0 || servicosTotal > 0) && (
         <div className="proposal-breakdown">
           {produtosTotal > 0 && <span>Produtos: {money(produtosTotal)}</span>}
@@ -9526,7 +9565,7 @@ function OrcamentoRevisionEditor({
   const validItems = items
     .filter((item) => item.descricao.trim() && item.quantidade > 0 && item.valorUnitario > 0)
     .map((item) => ({ ...item, valorTotal: quoteItemTotal(item) }))
-  const total = validItems.reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
+  const total = quoteBaseTotal(validItems)
   const approvalWarnings = quoteApprovalWarnings(validItems, catalogo)
   const paymentScenarios = quotePaymentScenarios(total, paymentAdjustments)
   const quoteMessage = buildQuoteMessage(cliente, validItems, validade, observacao, paymentScenarios)
@@ -9633,7 +9672,7 @@ function OrcamentoRevisionEditor({
               <span>Unitario</span>
               <span>Desc.</span>
               <span>Bloco</span>
-              <span>Grupo/uso</span>
+              <span>Bloco/uso</span>
               <span>Total</span>
             </div>
             {items.map((item, index) => (
@@ -9656,7 +9695,7 @@ function OrcamentoRevisionEditor({
                   <option value="pacote">Pacote</option>
                   <option value="complementar">Complementar</option>
                 </select>
-                <input value={item.observacao ?? ''} onChange={(event) => updateItem(index, { observacao: event.target.value })} placeholder="Opcao, eixo ou uso" />
+                <input value={item.observacao ?? ''} onChange={(event) => updateItem(index, { observacao: event.target.value })} placeholder="Bloco 1, eixo ou uso" />
                 <strong>{money(quoteItemTotal(item))}</strong>
               </div>
             ))}
