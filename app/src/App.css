@@ -45,10 +45,18 @@
 
 .sidebar .brand {
   align-items: flex-start;
+  background: #ffffff;
+  border-radius: 8px;
+  color: #12312f;
+  padding: 10px;
 }
 
 .sidebar .brand-logo {
   flex: 0 0 auto;
+}
+
+.sidebar .brand span {
+  color: #45645f;
 }
 
 .brand-mark {
