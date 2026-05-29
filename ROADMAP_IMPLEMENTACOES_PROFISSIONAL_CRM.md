@@ -1625,6 +1625,22 @@ Validacao:
 Proximo passo tecnico:
 - Levar resultado estruturado para oportunidades/pipeline e padronizar motivos de perda por etapa.
 
+### 2026-05-29 - Resultado estruturado no pipeline
+
+Status: concluido - primeira entrega para oportunidades.
+
+Entregue:
+- Mudanca de etapa no kanban de oportunidades passou a abrir confirmacao estruturada.
+- Cada avanco registra resumo no historico do cliente.
+- Etapas abertas podem criar proxima tarefa automaticamente.
+- Perda exige motivo antes de salvar a etapa como `Perdido`.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Consolidar relatorio de atividades por usuario usando interacoes, tarefas concluidas, campanhas e mudancas de pipeline.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

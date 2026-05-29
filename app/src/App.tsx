@@ -1813,9 +1813,36 @@ function App() {
               setPipelineOportunidades((current) => [created, ...current])
               return created
             }}
-            onUpdatePipelineStage={async (dealId, estagio, motivoPerda) => {
-              const updated = await updatePipelineStage(dealId, estagio, motivoPerda)
+            onUpdatePipelineStage={async (dealId, estagio, result) => {
+              const deal = pipelineOportunidades.find((item) => item.id === dealId)
+              const updated = await updatePipelineStage(dealId, estagio, result?.motivoPerda)
               setPipelineOportunidades((current) => current.map((item) => (item.id === dealId ? updated : item)))
+              if (deal) {
+                await createInteracao({
+                  clienteId: deal.clienteId,
+                  vendedorId: deal.responsavelId ?? session.id,
+                  canal: 'WhatsApp',
+                  tipo: 'pipeline',
+                  resumo: result?.resumo || `Oportunidade movida para ${pipelineStageLabel(estagio)}.`,
+                  resultado: pipelineStageLabel(estagio),
+                  proximaAcao: result?.proximaAcao || undefined,
+                  dataProximaAcao: result?.dataProximaAcao || undefined,
+                  orcamentoId: deal.orcamentoId,
+                  campanhaId: deal.campanhaId,
+                })
+                if (result?.proximaAcao && result.dataProximaAcao) {
+                  const created = await createTarefa({
+                    clienteId: deal.clienteId,
+                    vendedorId: deal.responsavelId ?? session.id,
+                    titulo: result.proximaAcao,
+                    descricao: `Follow-up do pipeline: ${deal.titulo} (${pipelineStageLabel(estagio)}).`,
+                    dataVencimento: result.dataProximaAcao,
+                    prioridade: pipelineTaskPriority(estagio),
+                    origem: `pipeline:${deal.id}:${estagio}`,
+                  })
+                  setTarefas((current) => [created, ...current])
+                }
+              }
               return updated
             }}
             onUpdatePipeline={async (dealId, patch) => {
@@ -4128,6 +4155,30 @@ function pipelineStageLabel(stage: OportunidadeEstagio) {
   return labels[stage]
 }
 
+function pipelineNextActionForStage(stage: OportunidadeEstagio) {
+  const actions: Partial<Record<OportunidadeEstagio, string>> = {
+    novo_lead: 'Fazer primeiro contato',
+    contato_iniciado: 'Qualificar necessidade',
+    qualificado: 'Montar proposta comercial',
+    orcamento: 'Enviar proposta e confirmar recebimento',
+    negociacao: 'Retomar negociacao',
+  }
+  return actions[stage] ?? ''
+}
+
+function pipelineTaskPriority(stage: OportunidadeEstagio) {
+  const priorities: Record<OportunidadeEstagio, number> = {
+    novo_lead: 70,
+    contato_iniciado: 78,
+    qualificado: 86,
+    orcamento: 94,
+    negociacao: 90,
+    ganho: 55,
+    perdido: 45,
+  }
+  return priorities[stage]
+}
+
 const pipelineStages: OportunidadeEstagio[] = [
   'novo_lead',
   'contato_iniciado',
@@ -4180,7 +4231,7 @@ function Oportunidades({
   onAssignSelected: (clienteIds: string[], vendedorId: string) => Promise<number>
   onCreateTask: (oportunidade: Oportunidade) => Promise<Tarefa>
   onCreatePipeline: (oportunidade: Oportunidade) => Promise<OportunidadePipeline>
-  onUpdatePipelineStage: (dealId: string, estagio: OportunidadeEstagio, motivoPerda?: string) => Promise<OportunidadePipeline>
+  onUpdatePipelineStage: (dealId: string, estagio: OportunidadeEstagio, result?: PipelineStageResultForm) => Promise<OportunidadePipeline>
   onUpdatePipeline: (
     dealId: string,
     patch: Partial<Pick<OportunidadePipeline, 'titulo' | 'valorEstimado' | 'probabilidade' | 'previsaoFechamento' | 'responsavelId' | 'observacao'>>,
@@ -4207,6 +4258,14 @@ function Oportunidades({
     observacao: '',
   })
   const [lossReasons, setLossReasons] = useState<Record<string, string>>({})
+  const [stageTarget, setStageTarget] = useState<OportunidadePipeline | null>(null)
+  const [stageTargetValue, setStageTargetValue] = useState<OportunidadeEstagio>('novo_lead')
+  const [stageResultForm, setStageResultForm] = useState<PipelineStageResultForm>({
+    resumo: '',
+    motivoPerda: '',
+    proximaAcao: '',
+    dataProximaAcao: '',
+  })
   const [isSavingDeal, setIsSavingDeal] = useState(false)
   const vendedores = usuarios.filter((usuario) => usuario.role === 'vendedor')
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
@@ -4260,6 +4319,39 @@ function Oportunidades({
       setEditingDealId('')
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar a oportunidade.')
+    } finally {
+      setIsSavingDeal(false)
+    }
+  }
+
+  function openStageResult(deal: OportunidadePipeline, nextStage: OportunidadeEstagio) {
+    setStageTarget(deal)
+    setStageTargetValue(nextStage)
+    setStageResultForm({
+      resumo: `${deal.titulo} movida para ${pipelineStageLabel(nextStage)}.`,
+      motivoPerda: nextStage === 'perdido' ? (lossReasons[deal.id] ?? '') : '',
+      proximaAcao: ['ganho', 'perdido'].includes(nextStage) ? '' : pipelineNextActionForStage(nextStage),
+      dataProximaAcao: ['ganho', 'perdido'].includes(nextStage) ? '' : addDays(new Date().toISOString().slice(0, 10), nextStage === 'orcamento' ? 1 : 3),
+    })
+  }
+
+  async function submitStageResult() {
+    if (!stageTarget) return
+    if (stageTargetValue === 'perdido' && !stageResultForm.motivoPerda.trim()) {
+      setError('Informe o motivo de perda antes de mover para Perdido.')
+      return
+    }
+    if (!stageResultForm.resumo.trim()) {
+      setError('Informe um resumo para registrar no historico.')
+      return
+    }
+    setError('')
+    setIsSavingDeal(true)
+    try {
+      await onUpdatePipelineStage(stageTarget.id, stageTargetValue, stageResultForm)
+      setStageTarget(null)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o pipeline.')
     } finally {
       setIsSavingDeal(false)
     }
@@ -4372,17 +4464,7 @@ function Oportunidades({
                           value={deal.estagio}
                           onChange={async (event) => {
                             const nextStage = event.target.value as OportunidadeEstagio
-                            const motivoPerda = nextStage === 'perdido' ? lossReasons[deal.id]?.trim() : undefined
-                            if (nextStage === 'perdido' && !motivoPerda) {
-                              setError('Informe o motivo de perda antes de mover para Perdido.')
-                              return
-                            }
-                            setError('')
-                            try {
-                              await onUpdatePipelineStage(deal.id, nextStage, motivoPerda)
-                            } catch (exception) {
-                              setError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o pipeline.')
-                            }
+                            openStageResult(deal, nextStage)
                           }}
                         >
                           {pipelineStages.map((stageOption) => (
@@ -4620,8 +4702,49 @@ function Oportunidades({
         <span>Pagina {page} de {totalPages}</span>
         <button className="button" type="button" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>Proxima</button>
       </div>
+      {stageTarget && (
+        <section className="floating-panel task-result-panel">
+          <div className="panel-header">
+            <div>
+              <h2>Atualizar oportunidade</h2>
+              <p>{stageTarget.clienteNome} - {pipelineStageLabel(stageTargetValue)}</p>
+            </div>
+            <button className="button" type="button" onClick={() => setStageTarget(null)}>Fechar</button>
+          </div>
+          <div className="task-form compact-form">
+            <label className="span-2">
+              Resumo da etapa
+              <textarea value={stageResultForm.resumo} onChange={(event) => setStageResultForm({ ...stageResultForm, resumo: event.target.value })} />
+            </label>
+            {stageTargetValue === 'perdido' && (
+              <label className="span-2">
+                Motivo da perda
+                <input value={stageResultForm.motivoPerda} onChange={(event) => setStageResultForm({ ...stageResultForm, motivoPerda: event.target.value })} placeholder="Ex.: preco, prazo, comprou concorrente" />
+              </label>
+            )}
+            <label>
+              Proxima data
+              <input type="date" value={stageResultForm.dataProximaAcao} onChange={(event) => setStageResultForm({ ...stageResultForm, dataProximaAcao: event.target.value })} />
+            </label>
+            <label>
+              Proxima acao
+              <input value={stageResultForm.proximaAcao} onChange={(event) => setStageResultForm({ ...stageResultForm, proximaAcao: event.target.value })} />
+            </label>
+            <button className="button primary" type="button" disabled={isSavingDeal} onClick={submitStageResult}>
+              {isSavingDeal ? 'Salvando...' : 'Salvar etapa'}
+            </button>
+          </div>
+        </section>
+      )}
     </section>
   )
+}
+
+type PipelineStageResultForm = {
+  resumo: string
+  motivoPerda: string
+  proximaAcao: string
+  dataProximaAcao: string
 }
 
 function Catalogo({
