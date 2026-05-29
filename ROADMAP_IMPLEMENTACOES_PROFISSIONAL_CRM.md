@@ -1285,6 +1285,24 @@ Validacao:
 Proximo passo tecnico:
 - Criar campanhas salvas diretamente a partir de uma selecao feita em Oportunidades/Rodobens, preservando o segmento e evitando duplicidade por cliente.
 
+### 2026-05-29 - Deduplicacao operacional de tarefas abertas
+
+Status: concluido.
+
+Entregue:
+- Criado indice unico parcial `tarefas_abertas_cliente_origem_idx`.
+- O banco passa a impedir duas tarefas abertas para o mesmo cliente e mesma origem operacional.
+- `createTarefa` passou a usar upsert quando existe origem, atualizando a tarefa aberta em vez de duplicar.
+- Isso protege os lotes de Rodobens, oportunidades e campanhas contra cliques repetidos/reprocessamentos.
+
+Validacao:
+- SQL aplicado com `node scripts/run-sql-file.mjs supabase/queries/tarefas_deduplicacao.sql`.
+- Consulta direta confirmou o indice `tarefas_abertas_cliente_origem_idx`.
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Criar campanhas salvas diretamente a partir de uma selecao feita em Oportunidades/Rodobens, preservando o segmento e evitando duplicidade por cliente.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

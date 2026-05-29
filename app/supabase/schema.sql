@@ -473,6 +473,9 @@ create index vendas_cliente_data_idx on public.vendas_itens(cliente_id, data_ven
 create index servicos_cliente_data_idx on public.servicos_itens(cliente_id, data_servico desc);
 create index interacoes_cliente_data_idx on public.interacoes(cliente_id, data_interacao desc);
 create index tarefas_vendedor_vencimento_idx on public.tarefas(vendedor_id, data_vencimento);
+create unique index if not exists tarefas_abertas_cliente_origem_idx
+on public.tarefas (cliente_id, origem)
+where status = 'aberta' and origem is not null;
 create index orcamento_versoes_orcamento_idx on public.orcamento_versoes(orcamento_id, numero desc);
 
 create or replace function public.set_atualizado_em()
