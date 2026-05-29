@@ -1595,6 +1595,21 @@ Validacao:
 Proximo passo tecnico:
 - Evoluir o registro de resultado da tarefa para criar interacao estruturada e atualizar status do cliente automaticamente.
 
+### 2026-05-29 - Resultado estruturado em tarefas
+
+Status: concluido - fechamento do ciclo tarefa/contato.
+
+Entregue:
+- Tarefas abertas ganharam acao `Registrar resultado`.
+- O vendedor escolhe resultado comercial, canal, resumo, proxima acao e data.
+- Ao salvar, o sistema conclui a tarefa, registra interacao no historico do cliente, atualiza status comercial e cria nova tarefa de follow-up quando houver proxima acao.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Levar o mesmo modelo de resultado estruturado para campanhas e oportunidades, usando motivos padronizados por etapa.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

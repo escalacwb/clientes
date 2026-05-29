@@ -1904,6 +1904,59 @@ function App() {
                 ),
               )
             }}
+            onCompleteWithResult={async (tarefa, result) => {
+              await completeTarefa(tarefa.id)
+              const cliente = scopedClientes.find((item) => item.id === tarefa.clienteId) ?? clientes.find((item) => item.id === tarefa.clienteId)
+              const vendedorId = tarefa.vendedorId ?? session.id
+              const statusByResult: Record<TaskCompletionResult, ClienteStatus | undefined> = {
+                respondeu: 'Em acompanhamento',
+                pediu_orcamento: 'Orcamento aberto',
+                nao_respondeu: 'Em acompanhamento',
+                comprar_depois: 'Em acompanhamento',
+                sem_interesse: 'Reativar',
+                nao_contatar: 'Nao contatar',
+              }
+              const nextStatus = statusByResult[result.resultado]
+              await createInteracao({
+                clienteId: tarefa.clienteId,
+                vendedorId,
+                canal: result.canal,
+                tipo: 'Resultado de tarefa',
+                resumo: result.resumo || tarefa.titulo,
+                resultado: taskCompletionResultLabel(result.resultado),
+                proximaAcao: result.proximaAcao || undefined,
+                dataProximaAcao: result.dataProximaAcao || undefined,
+              })
+              if (nextStatus) {
+                await updateClienteComercial(tarefa.clienteId, { status: nextStatus })
+                setClientes((current) => current.map((row) => row.id === tarefa.clienteId ? { ...row, status: nextStatus } : row))
+              }
+              if (result.proximaAcao && result.dataProximaAcao) {
+                const created = await createTarefa({
+                  clienteId: tarefa.clienteId,
+                  vendedorId,
+                  titulo: result.proximaAcao,
+                  descricao: `Follow-up gerado ao concluir: ${tarefa.titulo}`,
+                  dataVencimento: result.dataProximaAcao,
+                  prioridade: Math.max(55, tarefa.prioridade - 10),
+                  origem: `tarefa:${tarefa.id}`,
+                })
+                const vendedor = usuarios.find((item) => item.id === created.vendedorId)
+                setTarefas((current) => [
+                  {
+                    ...created,
+                    clienteNome: cliente?.nome ?? created.clienteNome,
+                    vendedorNome: vendedor?.nome ?? created.vendedorNome,
+                  },
+                  ...current,
+                ])
+              }
+              setTarefas((current) =>
+                current.map((item) =>
+                  item.id === tarefa.id ? { ...item, status: 'concluida', concluidaEm: new Date().toISOString() } : item,
+                ),
+              )
+            }}
             onReschedule={async (id, dataVencimento, motivo) => {
               const updated = await rescheduleTarefa(id, dataVencimento, motivo)
               setTarefas((current) => current.map((tarefa) => tarefa.id === id ? updated : tarefa))
@@ -4652,6 +4705,7 @@ function Tarefas({
   onOpenBudgetEditor,
   onCreate,
   onComplete,
+  onCompleteWithResult,
   onReschedule,
 }: {
   clientes: Cliente[]
@@ -4673,9 +4727,19 @@ function Tarefas({
   onOpenBudgetEditor: (clienteId: string, originContext?: QuoteOriginContext) => void
   onCreate: (task: TarefaInput) => Promise<Tarefa>
   onComplete: (id: string) => void
+  onCompleteWithResult: (tarefa: Tarefa, result: TaskCompletionForm) => Promise<void>
   onReschedule: (id: string, dataVencimento: string, motivo: string) => Promise<Tarefa>
 }) {
   const [showCreate, setShowCreate] = useState(false)
+  const [completionTarget, setCompletionTarget] = useState<Tarefa | null>(null)
+  const [isSavingCompletion, setIsSavingCompletion] = useState(false)
+  const [completionForm, setCompletionForm] = useState<TaskCompletionForm>({
+    canal: 'WhatsApp',
+    resultado: 'respondeu',
+    resumo: '',
+    proximaAcao: '',
+    dataProximaAcao: '',
+  })
   const [createdSuggestions, setCreatedSuggestions] = useState<string[]>([])
   const [reschedulingId, setReschedulingId] = useState('')
   const [rescheduleDrafts, setRescheduleDrafts] = useState<Record<string, { data: string; motivo: string }>>({})
@@ -4819,6 +4883,36 @@ function Tarefas({
       setError(exception instanceof Error ? exception.message : 'Nao foi possivel reagendar a tarefa.')
     } finally {
       setReschedulingId('')
+    }
+  }
+
+  function openCompletion(tarefa: Tarefa, resultado: TaskCompletionResult = 'respondeu') {
+    setCompletionTarget(tarefa)
+    setCompletionForm({
+      canal: 'WhatsApp',
+      resultado,
+      resumo: tarefa.descricao ?? tarefa.titulo,
+      proximaAcao: ['respondeu', 'comprar_depois', 'nao_respondeu'].includes(resultado) ? 'Retomar contato' : '',
+      dataProximaAcao: ['respondeu', 'comprar_depois', 'nao_respondeu'].includes(resultado) ? addDays(new Date().toISOString().slice(0, 10), resultado === 'nao_respondeu' ? 2 : 1) : '',
+    })
+  }
+
+  async function submitCompletion() {
+    if (!completionTarget) return
+    if (!completionForm.resumo.trim()) {
+      setError('Informe um resumo do contato para salvar no historico.')
+      return
+    }
+    setIsSavingCompletion(true)
+    setError('')
+    try {
+      await onCompleteWithResult(completionTarget, completionForm)
+      setCompletionTarget(null)
+      setError('Resultado registrado no historico do cliente.')
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel registrar o resultado.')
+    } finally {
+      setIsSavingCompletion(false)
     }
   }
 
@@ -4985,6 +5079,9 @@ function Tarefas({
                     Orcar
                   </button>
                   <button className="button primary" type="button" onClick={() => onComplete(tarefa.id)}>Concluir</button>
+                  <button className="button" type="button" onClick={() => openCompletion(tarefa)}>
+                    Registrar resultado
+                  </button>
                 </div>
               </article>
             )
@@ -5063,6 +5160,9 @@ function Tarefas({
                   setExecutionIndex((current) => Math.min(current, Math.max(executionQueue.length - 2, 0)))
                 }}>
                   Concluir e avancar
+                </button>
+                <button className="button" type="button" onClick={() => openCompletion(activeExecutionTask)}>
+                  Registrar resultado
                 </button>
               </div>
             </>
@@ -5213,6 +5313,9 @@ function Tarefas({
                   <button className="button primary" onClick={() => onComplete(tarefa.id)} type="button">
                     Concluir
                   </button>
+                  <button className="button" onClick={() => openCompletion(tarefa)} type="button">
+                    Resultado
+                  </button>
                   {reschedulingId === tarefa.id ? (
                     <div className="reschedule-inline">
                       <input
@@ -5268,8 +5371,79 @@ function Tarefas({
           </button>
         </div>
       </div>
+      {completionTarget && (
+        <section className="floating-panel task-result-panel">
+          <div className="panel-header">
+            <div>
+              <h2>Registrar resultado</h2>
+              <p>{completionTarget.clienteNome} - {completionTarget.titulo}</p>
+            </div>
+            <button className="button" type="button" onClick={() => setCompletionTarget(null)}>Fechar</button>
+          </div>
+          <div className="quick-result-grid">
+            {(['respondeu', 'pediu_orcamento', 'nao_respondeu', 'comprar_depois', 'sem_interesse', 'nao_contatar'] as TaskCompletionResult[]).map((result) => (
+              <button
+                className={completionForm.resultado === result ? 'button primary' : 'button'}
+                type="button"
+                key={result}
+                onClick={() => setCompletionForm((current) => ({ ...current, resultado: result }))}
+              >
+                {taskCompletionResultLabel(result)}
+              </button>
+            ))}
+          </div>
+          <div className="task-form compact-form">
+            <label>
+              Canal
+              <select value={completionForm.canal} onChange={(event) => setCompletionForm({ ...completionForm, canal: event.target.value as Interacao['canal'] })}>
+                <option value="WhatsApp">WhatsApp</option>
+                <option value="Ligacao">Ligacao</option>
+                <option value="Presencial">Presencial</option>
+                <option value="Email">Email</option>
+              </select>
+            </label>
+            <label>
+              Proxima data
+              <input type="date" value={completionForm.dataProximaAcao} onChange={(event) => setCompletionForm({ ...completionForm, dataProximaAcao: event.target.value })} />
+            </label>
+            <label className="span-2">
+              Resumo do contato
+              <textarea value={completionForm.resumo} onChange={(event) => setCompletionForm({ ...completionForm, resumo: event.target.value })} placeholder="Ex.: cliente pediu retorno com preco 30/60, aguardando aprovacao interna." />
+            </label>
+            <label className="span-2">
+              Proxima acao
+              <input value={completionForm.proximaAcao} onChange={(event) => setCompletionForm({ ...completionForm, proximaAcao: event.target.value })} placeholder="Ex.: Retomar cotacao com disponibilidade confirmada" />
+            </label>
+            <button className="button primary" type="button" disabled={isSavingCompletion} onClick={submitCompletion}>
+              {isSavingCompletion ? 'Salvando...' : 'Salvar resultado e concluir'}
+            </button>
+          </div>
+        </section>
+      )}
     </section>
   )
+}
+
+type TaskCompletionResult = 'respondeu' | 'pediu_orcamento' | 'nao_respondeu' | 'comprar_depois' | 'sem_interesse' | 'nao_contatar'
+
+type TaskCompletionForm = {
+  canal: Interacao['canal']
+  resultado: TaskCompletionResult
+  resumo: string
+  proximaAcao: string
+  dataProximaAcao: string
+}
+
+function taskCompletionResultLabel(result: TaskCompletionResult) {
+  const labels: Record<TaskCompletionResult, string> = {
+    respondeu: 'Respondeu',
+    pediu_orcamento: 'Pediu orcamento',
+    nao_respondeu: 'Nao respondeu',
+    comprar_depois: 'Comprar depois',
+    sem_interesse: 'Sem interesse',
+    nao_contatar: 'Nao contatar',
+  }
+  return labels[result]
 }
 
 type RoutineSuggestion = {
