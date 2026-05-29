@@ -35,6 +35,40 @@ type ClienteRow = {
   users?: { nome: string | null } | null
 }
 
+export type ClientePageFilters = {
+  query?: string
+  origemBase?: Cliente['origemBase'] | 'todos'
+  filtro?: CarteiraFiltro
+  vendedorId?: string
+  vendedorHistoricoNome?: string
+  cidade?: string
+  uf?: string
+  status?: Cliente['status'] | 'todos'
+  clienteIds?: string[]
+}
+
+export type VendedorHistoricoResumo = {
+  codigo: string
+  nome: string
+  clientes: number
+  semResponsavel: number
+  capitalTruck: number
+  rodobens: number
+  clientesRisco: number
+  totalComprado: number
+}
+
+type VendedorHistoricoResumoRow = {
+  vendedor_codigo_erp: string
+  vendedor_nome_erp: string
+  clientes: number
+  sem_responsavel: number
+  capital_truck: number
+  rodobens: number
+  clientes_risco: number
+  total_comprado: number
+}
+
 interface ClienteQueryBuilder {
   eq: (column: string, value: unknown) => this
   ilike: (column: string, pattern: string) => this
@@ -65,16 +99,7 @@ export async function listClientes(): Promise<Cliente[]> {
 export async function listClientesPage(input: {
   page: number
   pageSize: number
-  query?: string
-  origemBase?: Cliente['origemBase'] | 'todos'
-  filtro?: CarteiraFiltro
-  vendedorId?: string
-  vendedorHistoricoNome?: string
-  cidade?: string
-  uf?: string
-  status?: Cliente['status'] | 'todos'
-  clienteIds?: string[]
-}): Promise<{ clientes: Cliente[]; total: number }> {
+} & ClientePageFilters): Promise<{ clientes: Cliente[]; total: number }> {
   const supabase = await getSupabase()
   if (!supabase) {
     const filtered = filterMockClientes(mockClientes, input)
@@ -91,19 +116,7 @@ export async function listClientesPage(input: {
     .select('*,users(nome)', { count: 'exact' })
     .is('excluido_em', null)
 
-  const origemBase = input.origemBase ?? origemBaseFromFiltro(input.filtro)
-  if (origemBase && origemBase !== 'todos') query = query.eq('origem_base', origemBase)
-  if (input.vendedorId) query = query.eq('vendedor_id', input.vendedorId)
-  if (input.vendedorHistoricoNome?.trim()) query = query.ilike('vendedor_nome_erp', `%${input.vendedorHistoricoNome.trim()}%`)
-  if (input.cidade?.trim()) query = query.ilike('cidade', `%${input.cidade.trim()}%`)
-  if (input.uf?.trim()) query = query.ilike('uf', input.uf.trim())
-  if (input.status && input.status !== 'todos') query = query.eq('status_comercial', toDbStatus(input.status))
-  if (input.clienteIds) query = input.clienteIds.length > 0 ? query.in('id', input.clienteIds) : query.in('id', ['00000000-0000-0000-0000-000000000000'])
-  query = applyClienteFiltro(query, input.filtro)
-  if (input.query?.trim()) {
-    const term = `%${input.query.trim()}%`
-    query = query.or(`nome.ilike.${term},cidade.ilike.${term},cpf_cnpj.ilike.${term},codigo_erp.ilike.${term}`)
-  }
+  query = applyClienteFilters(query, input)
 
   const { data, error, count } = await query
     .order('nome', { ascending: true })
@@ -115,6 +128,36 @@ export async function listClientesPage(input: {
     clientes: (data as ClienteRow[]).map(mapCliente),
     total: count ?? 0,
   }
+}
+
+export async function assignClientesVendedorByFilter(input: ClientePageFilters & { vendedorIdDestino: string }): Promise<number> {
+  const supabase = await getSupabase()
+  if (!supabase) return filterMockClientes(mockClientes, input).length
+
+  let query = supabase
+    .from('clientes')
+    .update({ vendedor_id: input.vendedorIdDestino })
+    .is('excluido_em', null)
+
+  query = applyClienteFilters(query, input)
+
+  const { data, error } = await query.select('id')
+  if (error) throw error
+  return data?.length ?? 0
+}
+
+export async function listVendedoresHistoricosResumo(): Promise<VendedorHistoricoResumo[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return summarizeMockHistoricos()
+
+  const { data, error } = await supabase
+    .from('vw_vendedores_historicos_resumo')
+    .select('*')
+    .order('clientes', { ascending: false })
+    .limit(50)
+
+  if (error) throw error
+  return (data as VendedorHistoricoResumoRow[] | null ?? []).map(mapVendedorHistoricoResumo)
 }
 
 export async function listRodobensLeads(input: { page: number; pageSize: number; query?: string }): Promise<{ clientes: Cliente[]; total: number }> {
@@ -272,19 +315,70 @@ function applyClienteFiltro<T extends ClienteQueryBuilder>(query: T, filtro?: Ca
   }
 }
 
+function applyClienteFilters<T extends ClienteQueryBuilder>(query: T, input: ClientePageFilters): T {
+  const origemBase = input.origemBase ?? origemBaseFromFiltro(input.filtro)
+  let next = query
+  if (origemBase && origemBase !== 'todos') next = next.eq('origem_base', origemBase)
+  if (input.vendedorId) next = next.eq('vendedor_id', input.vendedorId)
+  if (input.vendedorHistoricoNome?.trim()) next = next.ilike('vendedor_nome_erp', `%${input.vendedorHistoricoNome.trim()}%`)
+  if (input.cidade?.trim()) next = next.ilike('cidade', `%${input.cidade.trim()}%`)
+  if (input.uf?.trim()) next = next.ilike('uf', input.uf.trim())
+  if (input.status && input.status !== 'todos') next = next.eq('status_comercial', toDbStatus(input.status))
+  if (input.clienteIds) next = input.clienteIds.length > 0 ? next.in('id', input.clienteIds) : next.in('id', ['00000000-0000-0000-0000-000000000000'])
+  next = applyClienteFiltro(next, input.filtro)
+  if (input.query?.trim()) {
+    const term = `%${input.query.trim()}%`
+    next = next.or(`nome.ilike.${term},cidade.ilike.${term},cpf_cnpj.ilike.${term},codigo_erp.ilike.${term}`)
+  }
+  return next
+}
+
+function mapVendedorHistoricoResumo(row: VendedorHistoricoResumoRow): VendedorHistoricoResumo {
+  return {
+    codigo: row.vendedor_codigo_erp,
+    nome: row.vendedor_nome_erp,
+    clientes: Number(row.clientes ?? 0),
+    semResponsavel: Number(row.sem_responsavel ?? 0),
+    capitalTruck: Number(row.capital_truck ?? 0),
+    rodobens: Number(row.rodobens ?? 0),
+    clientesRisco: Number(row.clientes_risco ?? 0),
+    totalComprado: Number(row.total_comprado ?? 0),
+  }
+}
+
+function summarizeMockHistoricos(): VendedorHistoricoResumo[] {
+  const rows = new Map<string, VendedorHistoricoResumo>()
+  mockClientes.forEach((cliente) => {
+    const nome = cliente.vendedorHistoricoNome ?? cliente.vendedorNome ?? 'Nao informado'
+    const current = rows.get(nome) ?? {
+      codigo: cliente.vendedorHistoricoCodigo ?? 'sem_codigo',
+      nome,
+      clientes: 0,
+      semResponsavel: 0,
+      capitalTruck: 0,
+      rodobens: 0,
+      clientesRisco: 0,
+      totalComprado: 0,
+    }
+    current.clientes += 1
+    if (!cliente.vendedorId) current.semResponsavel += 1
+    if (cliente.origemBase === 'capital_truck') current.capitalTruck += 1
+    if (cliente.origemBase === 'rodobens') current.rodobens += 1
+    if (daysSinceLocal(cliente.ultimaCompraEm) > 180) current.clientesRisco += 1
+    current.totalComprado += cliente.totalComprado
+    rows.set(nome, current)
+  })
+  return [...rows.values()].sort((a, b) => b.clientes - a.clientes)
+}
+
+function daysSinceLocal(date?: string) {
+  if (!date) return 9999
+  return Math.floor((Date.now() - new Date(date).getTime()) / 86400000)
+}
+
 function filterMockClientes(
   clientes: Cliente[],
-  input: {
-    query?: string
-    origemBase?: Cliente['origemBase'] | 'todos'
-    filtro?: CarteiraFiltro
-    vendedorId?: string
-    vendedorHistoricoNome?: string
-    cidade?: string
-    uf?: string
-    status?: Cliente['status'] | 'todos'
-    clienteIds?: string[]
-  },
+  input: ClientePageFilters,
 ) {
   const term = input.query?.trim().toLowerCase()
   const cidade = input.cidade?.trim().toLowerCase()

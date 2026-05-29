@@ -681,6 +681,25 @@ Validacao:
 Proximo passo tecnico:
 - Criar resumo agregado por vendedor historico do ERP e acoes em lote para redistribuir clientes filtrados.
 
+### 2026-05-28 - Historico ERP e redistribuicao em lote
+
+Status: concluido.
+
+Entregue:
+- Criada `vw_vendedores_historicos_resumo` com clientes, sem responsavel, Capital, Rodobens, risco e total comprado por vendedor historico.
+- Tela `Vendedores` exibe o resumo do vendedor historico importado do ERP.
+- Repository ganhou `assignClientesVendedorByFilter` para redistribuir todos os clientes de um filtro para um responsavel atual.
+- Tela `Vendedores` ganhou acao `Atribuir filtro` para redistribuicao em lote.
+- Q05 marcado como concluido.
+
+Validacao:
+- Build passou com `npm run build`.
+- `reference_import_schema.sql` aplicado no Supabase.
+- View validada com 52 vendedores historicos e 21575 clientes agregados.
+
+Proximo passo tecnico:
+- Avancar para Q06: ficha 360 acionavel com veiculos, campanhas, tarefas e acoes contextuais.
+
 ### 2026-05-28 - Campanhas com construtor de publico
 
 Status: concluido.

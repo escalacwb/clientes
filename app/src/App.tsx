@@ -65,6 +65,7 @@ import {
   attributeCampanhaRevenueByOrcamento,
 } from './repositories/campanhasRepository'
 import { listCatalogoItens } from './repositories/catalogoRepository'
+import { assignClientesVendedorByFilter, listVendedoresHistoricosResumo, type ClientePageFilters, type VendedorHistoricoResumo } from './repositories/clientesRepository'
 import { assignClienteVendedor } from './repositories/clientesRepository'
 import { listClientesPage } from './repositories/clientesRepository'
 import { listRodobensLeads } from './repositories/clientesRepository'
@@ -228,6 +229,7 @@ function App() {
   const [catalogo, setCatalogo] = useState<CatalogoItem[]>([])
   const [dashboardResumo, setDashboardResumo] = useState<DashboardResumo | undefined>()
   const [vendedoresResumo, setVendedoresResumo] = useState<VendedorResumo[]>([])
+  const [vendedoresHistoricosResumo, setVendedoresHistoricosResumo] = useState<VendedorHistoricoResumo[]>([])
   const [rankingMedidas, setRankingMedidas] = useState<RankingResumo[]>([])
   const [rankingServicos, setRankingServicos] = useState<RankingResumo[]>([])
   const [rodobensLeads, setRodobensLeads] = useState<Cliente[]>([])
@@ -299,6 +301,7 @@ function App() {
           loadedCatalogo,
           loadedDashboardResumo,
           loadedVendedoresResumo,
+          loadedVendedoresHistoricosResumo,
           loadedRankingMedidas,
           loadedRankingServicos,
         ] = await Promise.all([
@@ -314,6 +317,7 @@ function App() {
           listCatalogoItens(),
           getDashboardResumo(),
           listVendedoresResumo(),
+          listVendedoresHistoricosResumo(),
           listRankingMedidas(),
           listRankingServicos(),
         ])
@@ -331,6 +335,7 @@ function App() {
         setCatalogo(loadedCatalogo)
         setDashboardResumo(loadedDashboardResumo)
         setVendedoresResumo(loadedVendedoresResumo)
+        setVendedoresHistoricosResumo(loadedVendedoresHistoricosResumo)
         setRankingMedidas(loadedRankingMedidas)
         setRankingServicos(loadedRankingServicos)
       } catch (exception) {
@@ -1148,6 +1153,7 @@ function App() {
             clientes={clientes}
             usuarios={usuarios}
             vendedoresResumo={vendedoresResumo}
+            vendedoresHistoricosResumo={vendedoresHistoricosResumo}
             tarefas={tarefas}
             orcamentos={orcamentos}
             onAssignClient={(clienteId, vendedorId) => {
@@ -1161,6 +1167,13 @@ function App() {
                   return { ...cliente, vendedorId, vendedorNome: vendedor?.nome }
                 }),
               )
+            }}
+            onAssignFiltered={async (filters, vendedorId) => {
+              const updated = await assignClientesVendedorByFilter({ ...filters, vendedorIdDestino: vendedorId })
+              const [resumo, historicos] = await Promise.all([listVendedoresResumo(), listVendedoresHistoricosResumo()])
+              setVendedoresResumo(resumo)
+              setVendedoresHistoricosResumo(historicos)
+              return updated
             }}
           />
         )}
@@ -5440,16 +5453,20 @@ function VendedoresCarteira({
   clientes,
   usuarios,
   vendedoresResumo,
+  vendedoresHistoricosResumo,
   tarefas,
   orcamentos,
   onAssignClient,
+  onAssignFiltered,
 }: {
   clientes: Cliente[]
   usuarios: Vendedor[]
   vendedoresResumo: VendedorResumo[]
+  vendedoresHistoricosResumo: VendedorHistoricoResumo[]
   tarefas: Tarefa[]
   orcamentos: Orcamento[]
   onAssignClient: (clienteId: string, vendedorId: string) => void
+  onAssignFiltered: (filters: ClientePageFilters, vendedorId: string) => Promise<number>
 }) {
   const vendedores = usuarios.filter((usuario) => usuario.role === 'vendedor')
   const [responsavelFilter, setResponsavelFilter] = useState('todos')
@@ -5461,6 +5478,9 @@ function VendedoresCarteira({
   const [carteiraClientes, setCarteiraClientes] = useState<Cliente[]>(clientes)
   const [total, setTotal] = useState(clientes.length)
   const [isLoading, setIsLoading] = useState(false)
+  const [bulkAssignTo, setBulkAssignTo] = useState('')
+  const [bulkFeedback, setBulkFeedback] = useState('')
+  const [isBulkAssigning, setIsBulkAssigning] = useState(false)
   const [error, setError] = useState('')
   const pageSize = 50
   const cidades = Array.from(new Set(clientes.map((cliente) => cliente.cidade).filter(Boolean))).sort()
@@ -5495,6 +5515,14 @@ function VendedoresCarteira({
   const vendedorSugerido = [...resumoRows].sort((a, b) => a.clientes - b.clientes || a.risco - b.risco)[0]
   const statusOptions = Array.from(new Set(clientes.map((cliente) => cliente.status))).sort()
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const currentFilters: ClientePageFilters = {
+    filtro: responsavelFilter === 'sem-vendedor' ? 'sem-vendedor' : undefined,
+    vendedorId: responsavelFilter !== 'todos' && responsavelFilter !== 'sem-vendedor' ? responsavelFilter : undefined,
+    vendedorHistoricoNome: historicoFilter !== 'todos' ? historicoFilter : undefined,
+    cidade: cidadeFilter !== 'todas' ? cidadeFilter : undefined,
+    origemBase: origemFilter === 'todas' ? 'todos' : origemFilter,
+    status: statusFilter,
+  }
 
   useEffect(() => {
     let isMounted = true
@@ -5506,12 +5534,7 @@ function VendedoresCarteira({
         const result = await listClientesPage({
           page,
           pageSize,
-          filtro: responsavelFilter === 'sem-vendedor' ? 'sem-vendedor' : undefined,
-          vendedorId: responsavelFilter !== 'todos' && responsavelFilter !== 'sem-vendedor' ? responsavelFilter : undefined,
-          vendedorHistoricoNome: historicoFilter !== 'todos' ? historicoFilter : undefined,
-          cidade: cidadeFilter !== 'todas' ? cidadeFilter : undefined,
-          origemBase: origemFilter === 'todas' ? 'todos' : origemFilter,
-          status: statusFilter,
+          ...currentFilters,
         })
         if (!isMounted) return
         setCarteiraClientes(result.clientes)
@@ -5545,6 +5568,28 @@ function VendedoresCarteira({
     )
   }
 
+  async function assignFiltered() {
+    if (!bulkAssignTo || total === 0) return
+    setIsBulkAssigning(true)
+    setBulkFeedback('')
+    setError('')
+    try {
+      const updated = await onAssignFiltered(currentFilters, bulkAssignTo)
+      const vendedor = vendedores.find((item) => item.id === bulkAssignTo)
+      setBulkFeedback(`${updated} clientes atribuidos para ${vendedor?.nome ?? 'vendedor selecionado'}.`)
+      setCarteiraClientes((current) =>
+        responsavelFilter === 'sem-vendedor'
+          ? []
+          : current.map((cliente) => ({ ...cliente, vendedorId: bulkAssignTo, vendedorNome: vendedor?.nome })),
+      )
+      setTotal((current) => responsavelFilter === 'sem-vendedor' ? 0 : current)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel redistribuir a carteira filtrada.')
+    } finally {
+      setIsBulkAssigning(false)
+    }
+  }
+
   return (
     <section className="grid-layout">
       <section className="panel wide">
@@ -5576,6 +5621,39 @@ function VendedoresCarteira({
               <span className="score">{row.cobertura}</span>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Historico ERP</h2>
+            <p>Origem comercial importada do sistema operacional, separada do responsavel atual.</p>
+          </div>
+          <BarChart3 size={18} />
+        </div>
+        <div className="table">
+          <div className="table-head report">
+            <span>Historico</span>
+            <span>Clientes</span>
+            <span>Sem resp.</span>
+            <span>Capital</span>
+            <span>Rodobens</span>
+            <span>Risco</span>
+            <span>Comprado</span>
+          </div>
+          {vendedoresHistoricosResumo.slice(0, 8).map((row) => (
+            <div className="table-row report" key={`${row.codigo}-${row.nome}`}>
+              <span><strong>{row.nome}</strong></span>
+              <span>{row.clientes}</span>
+              <span>{row.semResponsavel}</span>
+              <span>{row.capitalTruck}</span>
+              <span>{row.rodobens}</span>
+              <span>{row.clientesRisco}</span>
+              <span>{money(row.totalComprado)}</span>
+            </div>
+          ))}
+          {vendedoresHistoricosResumo.length === 0 && <div className="empty-state">Sem vendedor historico importado ainda.</div>}
         </div>
       </section>
 
@@ -5639,6 +5717,17 @@ function VendedoresCarteira({
           <Info label="Sugestao" value={vendedorSugerido?.nome ?? 'Sem vendedor'} />
           <Info label="Menor carteira" value={vendedorSugerido ? `${vendedorSugerido.clientes} clientes` : '-'} />
         </div>
+        <div className="campaign-save-bar">
+          <span>Redistribuir todos os {total} clientes filtrados para um responsavel atual.</span>
+          <select className="assign-select" value={bulkAssignTo} onChange={(event) => setBulkAssignTo(event.target.value)}>
+            <option value="">Selecionar vendedor</option>
+            {vendedores.map((vendedor) => <option key={vendedor.id} value={vendedor.id}>{vendedor.nome}</option>)}
+          </select>
+          <button className="button primary" type="button" disabled={!bulkAssignTo || total === 0 || isBulkAssigning} onClick={assignFiltered}>
+            {isBulkAssigning ? 'Atribuindo...' : 'Atribuir filtro'}
+          </button>
+        </div>
+        {bulkFeedback && <div className="readiness ok">{bulkFeedback}</div>}
         {error && <div className="alert">{error}</div>}
         <div className="table">
           <div className="table-head client360-sale">

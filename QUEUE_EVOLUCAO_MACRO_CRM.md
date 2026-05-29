@@ -83,7 +83,7 @@ Pronto quando:
 
 ### Q04 - Performance global por modulo
 
-Status: Pendente.
+Status: Concluido.
 
 Objetivo:
 Eliminar carregamentos grandes no browser.
@@ -120,10 +120,11 @@ Ja entregue:
 - Carteira por vendedor com risco, tarefas, pipeline, contatos e cobertura.
 - Clientes da tela `Vendedores` buscados por query paginada propria.
 - Vendedor historico do ERP separado de responsavel atual.
-
-Proximas entregas:
 - Resumo agregado por vendedor historico do ERP.
 - Acoes em lote para redistribuir clientes filtrados.
+
+Proximas entregas:
+- Refinos futuros entram nos blocos de governanca comercial.
 
 Pronto quando:
 - Gerente consegue redistribuir carteira com contexto.

@@ -340,6 +340,21 @@ left join public.campanha_envios ce on ce.campanha_id = c.id
 where c.filtro_usado ? 'segmentoId'
 group by c.id, c.nome, c.criada_em, c.filtro_usado;
 
+create view public.vw_vendedores_historicos_resumo
+with (security_invoker = true) as
+select
+  coalesce(nullif(c.vendedor_codigo_erp, ''), 'sem_codigo') as vendedor_codigo_erp,
+  coalesce(nullif(c.vendedor_nome_erp, ''), 'Nao informado') as vendedor_nome_erp,
+  count(*)::integer as clientes,
+  count(*) filter (where c.vendedor_id is null)::integer as sem_responsavel,
+  count(*) filter (where c.origem_base = 'capital_truck')::integer as capital_truck,
+  count(*) filter (where c.origem_base = 'rodobens')::integer as rodobens,
+  count(*) filter (where c.ultima_compra_em is null or c.ultima_compra_em < current_date - interval '180 days')::integer as clientes_risco,
+  coalesce(sum(c.total_comprado), 0)::numeric(14, 2) as total_comprado
+from public.clientes c
+where c.excluido_em is null
+group by coalesce(nullif(c.vendedor_codigo_erp, ''), 'sem_codigo'), coalesce(nullif(c.vendedor_nome_erp, ''), 'Nao informado');
+
 create table public.importacao_conflitos (
   id uuid primary key default gen_random_uuid(),
   importacao_id uuid not null references public.importacoes(id),
