@@ -857,6 +857,22 @@ Validacao:
 Proximo passo tecnico:
 - Criar colunas/tabela para vinculo forte `orcamento_origem`, em vez de guardar apenas na observacao.
 
+### 2026-05-28 - Ficha 360 com veiculos e resumo executivo
+
+Status: concluido.
+
+Entregue:
+- A Ficha 360 passou a carregar veiculos do cliente sob demanda, sem puxar a base inteira.
+- Aba `Veiculos` mostra placa/chassi, descricao, ultimo KM, ultimo atendimento, quantidade de registros e valor vinculado.
+- Vendas e servicos exibem KM/observacao de veiculo quando os dados vierem da importacao.
+- Resumo executivo passou a mostrar frequencia media, proxima recompra sugerida, produto principal e servico recorrente.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Adicionar abas de tarefas e campanhas dentro da Ficha 360, com acoes diretas para criar tarefa, campanha ou orcamento a partir do historico.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

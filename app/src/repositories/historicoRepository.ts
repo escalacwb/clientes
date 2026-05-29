@@ -1,10 +1,12 @@
 import { servicosItens as mockServicos, vendasItens as mockVendas } from '../data/mockData'
 import { getSupabase } from '../lib/supabase'
-import type { ServicoItem, VendaItem } from '../types'
+import type { ClienteVeiculoResumo, ServicoItem, VendaItem } from '../types'
 
 type VendaRow = {
   id: string
   cliente_id: string
+  veiculo_id: string | null
+  ordem_id: string | null
   data_venda: string
   nota: string | null
   pedido: string | null
@@ -16,6 +18,8 @@ type VendaRow = {
   quantidade: number
   valor_unitario: number
   valor_total: number
+  km_extraido: number | null
+  veiculo_observacao: string | null
   vendedor_nome: string | null
   unidade: string | null
 }
@@ -23,6 +27,8 @@ type VendaRow = {
 type ServicoRow = {
   id: string
   cliente_id: string
+  veiculo_id: string | null
+  ordem_id: string | null
   data_servico: string
   pedido: string | null
   servico_codigo: string | null
@@ -31,9 +37,26 @@ type ServicoRow = {
   valor_unitario: number
   valor_total: number
   placa: string | null
+  km_extraido: number | null
+  veiculo_observacao: string | null
   observacao: string | null
   vendedor_nome: string | null
   unidade: string | null
+}
+
+type VeiculoRow = {
+  id: string
+  cliente_id: string | null
+  placa: string | null
+  chassi: string | null
+  descricao: string | null
+  ultimo_km: number | null
+  km_atualizado_em: string | null
+  primeiro_atendimento_em: string | null
+  ultimo_atendimento_em: string | null
+  total_atendimentos: number | null
+  valor_total_atendimentos: number | null
+  origem: string | null
 }
 
 export async function listVendasItens(): Promise<VendaItem[]> {
@@ -98,6 +121,21 @@ export async function listClienteServicosItens(clienteId: string): Promise<Servi
   return data.map(mapServico)
 }
 
+export async function listClienteVeiculos(clienteId: string): Promise<ClienteVeiculoResumo[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('veiculos')
+    .select('*')
+    .eq('cliente_id', clienteId)
+    .order('ultimo_atendimento_em', { ascending: false, nullsFirst: false })
+    .limit(200)
+
+  if (error) throw error
+  return (data as VeiculoRow[] | null ?? []).map(mapVeiculo)
+}
+
 async function fetchAllPages<T>(
   queryPage: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: unknown }>,
 ): Promise<T[]> {
@@ -117,6 +155,8 @@ function mapVenda(row: VendaRow): VendaItem {
   return {
     id: row.id,
     clienteId: row.cliente_id,
+    veiculoId: row.veiculo_id ?? undefined,
+    ordemId: row.ordem_id ?? undefined,
     dataVenda: row.data_venda,
     nota: row.nota ?? undefined,
     pedido: row.pedido ?? undefined,
@@ -128,6 +168,8 @@ function mapVenda(row: VendaRow): VendaItem {
     quantidade: row.quantidade,
     valorUnitario: row.valor_unitario,
     valorTotal: row.valor_total,
+    kmExtraido: row.km_extraido ?? undefined,
+    veiculoObservacao: row.veiculo_observacao ?? undefined,
     vendedorNome: row.vendedor_nome ?? undefined,
     unidade: row.unidade ?? undefined,
   }
@@ -137,6 +179,8 @@ function mapServico(row: ServicoRow): ServicoItem {
   return {
     id: row.id,
     clienteId: row.cliente_id,
+    veiculoId: row.veiculo_id ?? undefined,
+    ordemId: row.ordem_id ?? undefined,
     dataServico: row.data_servico,
     pedido: row.pedido ?? undefined,
     servicoCodigo: row.servico_codigo ?? undefined,
@@ -145,8 +189,27 @@ function mapServico(row: ServicoRow): ServicoItem {
     valorUnitario: row.valor_unitario,
     valorTotal: row.valor_total,
     placa: row.placa ?? undefined,
+    kmExtraido: row.km_extraido ?? undefined,
+    veiculoObservacao: row.veiculo_observacao ?? undefined,
     observacao: row.observacao ?? undefined,
     vendedorNome: row.vendedor_nome ?? undefined,
     unidade: row.unidade ?? undefined,
+  }
+}
+
+function mapVeiculo(row: VeiculoRow): ClienteVeiculoResumo {
+  return {
+    id: row.id,
+    clienteId: row.cliente_id ?? undefined,
+    placa: row.placa ?? undefined,
+    chassi: row.chassi ?? undefined,
+    descricao: row.descricao ?? undefined,
+    ultimoKm: row.ultimo_km ?? undefined,
+    kmAtualizadoEm: row.km_atualizado_em ?? undefined,
+    primeiroAtendimentoEm: row.primeiro_atendimento_em ?? undefined,
+    ultimoAtendimentoEm: row.ultimo_atendimento_em ?? undefined,
+    totalAtendimentos: row.total_atendimentos ?? 0,
+    valorTotalAtendimentos: row.valor_total_atendimentos ?? 0,
+    origem: row.origem ?? undefined,
   }
 }

@@ -108,7 +108,7 @@ Pronto quando:
 
 ### Q05 - Gestao de carteira por vendedor
 
-Status: Pendente.
+Status: Concluido.
 
 Objetivo:
 Separar vendedor responsavel atual de vendedor historico e dar visao gerencial da carteira.
@@ -139,13 +139,13 @@ Fazer a ficha do cliente virar a central viva do relacionamento.
 
 Ja entregue:
 - Pagina dedicada com vendas, servicos, orcamentos e filtros basicos.
+- Aba de veiculos com placa, KM e historico vinculado ao cliente.
+- Resumo executivo com frequencia media, proxima recompra sugerida, produto principal e servico recorrente.
 
 Proximas entregas:
-- Aba de veiculos com placa, KM e historico.
 - Aba de campanhas do cliente.
 - Aba de tarefas/atividades.
 - Acoes contextuais: repetir compra, criar orcamento de item anterior, criar tarefa, criar campanha.
-- Resumo executivo: ticket medio, frequencia, produto principal, servico recorrente, proxima recompra.
 
 Pronto quando:
 - Um vendedor abre um cliente e entende em 30 segundos o que vender e qual proxima acao.

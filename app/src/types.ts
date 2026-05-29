@@ -229,6 +229,8 @@ export type CampanhaEnvio = {
 export type VendaItem = {
   id: string
   clienteId: string
+  veiculoId?: string
+  ordemId?: string
   dataVenda: string
   nota?: string
   pedido?: string
@@ -240,6 +242,8 @@ export type VendaItem = {
   quantidade: number
   valorUnitario: number
   valorTotal: number
+  kmExtraido?: number
+  veiculoObservacao?: string
   vendedorNome?: string
   unidade?: string
 }
@@ -247,6 +251,8 @@ export type VendaItem = {
 export type ServicoItem = {
   id: string
   clienteId: string
+  veiculoId?: string
+  ordemId?: string
   dataServico: string
   pedido?: string
   servicoCodigo?: string
@@ -255,9 +261,26 @@ export type ServicoItem = {
   valorUnitario: number
   valorTotal: number
   placa?: string
+  kmExtraido?: number
+  veiculoObservacao?: string
   observacao?: string
   vendedorNome?: string
   unidade?: string
+}
+
+export type ClienteVeiculoResumo = {
+  id: string
+  clienteId?: string
+  placa?: string
+  chassi?: string
+  descricao?: string
+  ultimoKm?: number
+  kmAtualizadoEm?: string
+  primeiroAtendimentoEm?: string
+  ultimoAtendimentoEm?: string
+  totalAtendimentos: number
+  valorTotalAtendimentos: number
+  origem?: string
 }
 
 export type CarteiraFiltro =

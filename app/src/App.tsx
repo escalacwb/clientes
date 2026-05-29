@@ -80,7 +80,7 @@ import {
   type RankingResumo,
   type VendedorResumo,
 } from './repositories/dashboardRepository'
-import { listClienteServicosItens, listClienteVendasItens } from './repositories/historicoRepository'
+import { listClienteServicosItens, listClienteVeiculos, listClienteVendasItens } from './repositories/historicoRepository'
 import { createInteracao } from './repositories/interacoesRepository'
 import { listInteracoes } from './repositories/interacoesRepository'
 import { createImportacaoPreview } from './repositories/importacoesRepository'
@@ -111,6 +111,7 @@ import type {
   ClienteAlteracao,
   ClienteMesclagem,
   ClienteStatus,
+  ClienteVeiculoResumo,
   Importacao,
   ImportacaoConflito,
   Interacao,
@@ -224,6 +225,7 @@ function App() {
   const [tarefasOwnerFilter, setTarefasOwnerFilter] = useState('todos')
   const [vendasItens, setVendasItens] = useState<VendaItem[]>(isSupabaseConfigured ? [] : seedVendasItens)
   const [servicosItens, setServicosItens] = useState<ServicoItem[]>(isSupabaseConfigured ? [] : seedServicosItens)
+  const [clienteVeiculos, setClienteVeiculos] = useState<ClienteVeiculoResumo[]>([])
   const [possiveisDuplicados, setPossiveisDuplicados] = useState<PossivelDuplicado[]>(isSupabaseConfigured ? [] : seedPossiveisDuplicados)
   const [mesclagens, setMesclagens] = useState<ClienteMesclagem[]>(isSupabaseConfigured ? [] : seedMesclagens)
   const [catalogo, setCatalogo] = useState<CatalogoItem[]>([])
@@ -516,13 +518,15 @@ function App() {
 
       setIsLoadingHistory(true)
       try {
-        const [loadedVendas, loadedServicos] = await Promise.all([
+        const [loadedVendas, loadedServicos, loadedVeiculos] = await Promise.all([
           listClienteVendasItens(selectedClientId),
           listClienteServicosItens(selectedClientId),
+          listClienteVeiculos(selectedClientId),
         ])
         if (!isMounted) return
         setVendasItens(loadedVendas)
         setServicosItens(loadedServicos)
+        setClienteVeiculos(loadedVeiculos)
       } catch (exception) {
         if (isMounted) setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar o historico do cliente.')
       } finally {
@@ -835,6 +839,7 @@ function App() {
             orcamentos={scopedOrcamentos}
             vendasItens={scopedVendasItens}
             servicosItens={scopedServicosItens}
+            veiculos={clienteVeiculos}
             onBack={() => setView('clientes')}
           />
         )}
@@ -3219,6 +3224,7 @@ function Cliente360({
   orcamentos,
   vendasItens,
   servicosItens,
+  veiculos,
   onBack,
 }: {
   cliente: Cliente
@@ -3226,12 +3232,13 @@ function Cliente360({
   orcamentos: Orcamento[]
   vendasItens: VendaItem[]
   servicosItens: ServicoItem[]
+  veiculos: ClienteVeiculoResumo[]
   onBack: () => void
 }) {
   const [sellerFilter, setSellerFilter] = useState('todos')
   const [vehicleFilter, setVehicleFilter] = useState('todos')
   const [kindFilter, setKindFilter] = useState<'todos' | 'vendas' | 'servicos'>('todos')
-  const [activeTab, setActiveTab] = useState<'resumo' | 'vendas' | 'servicos' | 'orcamentos' | 'timeline'>('resumo')
+  const [activeTab, setActiveTab] = useState<'resumo' | 'veiculos' | 'vendas' | 'servicos' | 'orcamentos' | 'timeline'>('resumo')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
 
@@ -3243,7 +3250,10 @@ function Cliente360({
     ...clienteVendas.map((venda) => venda.vendedorNome).filter(Boolean),
     ...clienteServicos.map((servico) => servico.vendedorNome).filter(Boolean),
   ] as string[])).sort((a, b) => a.localeCompare(b))
-  const vehicles = Array.from(new Set(clienteServicos.map((servico) => servico.placa).filter(Boolean) as string[]))
+  const vehicles = Array.from(new Set([
+    ...veiculos.map((veiculo) => veiculo.placa).filter(Boolean),
+    ...clienteServicos.map((servico) => servico.placa).filter(Boolean),
+  ] as string[]))
     .sort((a, b) => a.localeCompare(b))
 
   const vendasFiltradas = clienteVendas.filter((venda) =>
@@ -3262,6 +3272,16 @@ function Cliente360({
   const ticketMedio = vendasFiltradas.length + servicosFiltrados.length
     ? (totalVendas + totalServicos) / (vendasFiltradas.length + servicosFiltrados.length)
     : 0
+  const allEvents = [
+    ...clienteVendas.map((venda) => ({ data: venda.dataVenda, tipo: 'Venda', nome: venda.produtoNome, valor: venda.valorTotal })),
+    ...clienteServicos.map((servico) => ({ data: servico.dataServico, tipo: 'Servico', nome: servico.servicoNome, valor: servico.valorTotal })),
+  ].sort((a, b) => a.data.localeCompare(b.data))
+  const produtoPrincipal = topByValue(clienteVendas, (venda) => venda.produtoNome, (venda) => venda.valorTotal)
+  const servicoRecorrente = topByCount(clienteServicos, (servico) => servico.servicoNome)
+  const frequenciaDias = averageDaysBetween(allEvents.map((item) => item.data))
+  const ultimaMovimentacao = allEvents.at(-1)?.data
+  const proximaRecompra = frequenciaDias && ultimaMovimentacao ? addDays(ultimaMovimentacao, Math.max(30, Math.round(frequenciaDias))) : undefined
+  const veiculosResumo = buildVehicleSummary(veiculos, clienteServicos, clienteVendas)
 
   return (
     <section className="client360">
@@ -3335,13 +3355,14 @@ function Cliente360({
 
       <div className="metrics-grid">
         <Metric icon={WalletCards} label="Historico filtrado" value={money(totalVendas + totalServicos)} tone="green" />
-        <Metric icon={Truck} label="Veiculos" value={vehicles.length.toString()} tone="blue" />
+        <Metric icon={Truck} label="Veiculos" value={veiculosResumo.length.toString()} tone="blue" />
         <Metric icon={UserRound} label="Vendedores historicos" value={sellers.length.toString()} tone="blue" />
         <Metric icon={BarChart3} label="Ticket medio" value={money(ticketMedio)} tone="amber" />
       </div>
 
       <div className="client360-tabs">
         <button className={activeTab === 'resumo' ? 'active' : ''} type="button" onClick={() => setActiveTab('resumo')}>Resumo</button>
+        <button className={activeTab === 'veiculos' ? 'active' : ''} type="button" onClick={() => setActiveTab('veiculos')}>Veiculos</button>
         <button className={activeTab === 'vendas' ? 'active' : ''} type="button" onClick={() => setActiveTab('vendas')}>Vendas</button>
         <button className={activeTab === 'servicos' ? 'active' : ''} type="button" onClick={() => setActiveTab('servicos')}>Servicos</button>
         <button className={activeTab === 'orcamentos' ? 'active' : ''} type="button" onClick={() => setActiveTab('orcamentos')}>Orcamentos</button>
@@ -3360,6 +3381,8 @@ function Cliente360({
             <div className="status-list">
               <div className="status-row"><span>Ultima compra</span><strong>{dateLabel(cliente.ultimaCompraEm)}</strong></div>
               <div className="status-row"><span>Ultimo servico</span><strong>{dateLabel(cliente.ultimoServicoEm)}</strong></div>
+              <div className="status-row"><span>Frequencia media</span><strong>{frequenciaDias ? `${Math.round(frequenciaDias)} dias` : 'Sem base'}</strong></div>
+              <div className="status-row"><span>Proxima recompra sugerida</span><strong>{dateLabel(proximaRecompra)}</strong></div>
               <div className="status-row"><span>Responsavel</span><strong>{cliente.responsavel || 'Nao informado'}</strong></div>
               <div className="status-row"><span>Origem</span><strong>{origemLabel(cliente.origemBase)}</strong></div>
             </div>
@@ -3367,21 +3390,51 @@ function Cliente360({
           <div className="panel">
             <div className="panel-header">
               <div>
-                <h2>Veiculos identificados</h2>
-                <p>Placas extraidas dos servicos importados.</p>
+                <h2>Potencial de venda</h2>
+                <p>Itens mais fortes para orientar abordagem e proposta.</p>
               </div>
             </div>
             <div className="status-list">
-              {vehicles.slice(0, 10).map((vehicle) => (
-                <div className="status-row" key={vehicle}>
-                  <span>{vehicle}</span>
-                  <strong>{clienteServicos.filter((servico) => servico.placa === vehicle).length} servicos</strong>
-                </div>
-              ))}
-              {vehicles.length === 0 && <div className="empty-state">Nenhuma placa estruturada encontrada.</div>}
+              <div className="status-row"><span>Produto principal</span><strong>{produtoPrincipal || cliente.produtoPrincipal || 'Sem historico'}</strong></div>
+              <div className="status-row"><span>Servico recorrente</span><strong>{servicoRecorrente || 'Sem historico'}</strong></div>
+              <div className="status-row"><span>Veiculos identificados</span><strong>{veiculosResumo.length}</strong></div>
+              <div className="status-row"><span>Ticket medio filtrado</span><strong>{money(ticketMedio)}</strong></div>
             </div>
           </div>
         </section>
+      )}
+
+      {activeTab === 'veiculos' && (
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Veiculos e KM</h2>
+            <p>Placas, quilometragem e historico vinculado ao cliente.</p>
+          </div>
+        </div>
+        <div className="table">
+          <div className="table-head client360-vehicle">
+            <span>Veiculo</span>
+            <span>KM</span>
+            <span>Ultimo atendimento</span>
+            <span>Historico</span>
+            <span>Total</span>
+          </div>
+          {veiculosResumo.map((veiculo) => (
+            <div className="table-row client360-vehicle" key={veiculo.id}>
+              <span>
+                <strong>{veiculo.placa || veiculo.chassi || 'Sem identificador'}</strong>
+                <small>{veiculo.descricao || veiculo.origem || 'Sem descricao'}</small>
+              </span>
+              <span>{veiculo.ultimoKm ? veiculo.ultimoKm.toLocaleString('pt-BR') : 'Sem KM'}</span>
+              <span>{dateLabel(veiculo.ultimoAtendimentoEm)}</span>
+              <span>{veiculo.totalAtendimentos} registros</span>
+              <strong>{money(veiculo.valorTotalAtendimentos)}</strong>
+            </div>
+          ))}
+          {veiculosResumo.length === 0 && <div className="empty-state">Nenhum veiculo estruturado encontrado para este cliente.</div>}
+        </div>
+      </section>
       )}
 
       {activeTab === 'vendas' && (
@@ -3397,7 +3450,7 @@ function Cliente360({
             <span>Data</span>
             <span>Produto</span>
             <span>Vendedor</span>
-            <span>Documento</span>
+            <span>Veiculo/KM</span>
             <span>Total</span>
           </div>
           {vendasFiltradas.map((venda) => (
@@ -3405,7 +3458,7 @@ function Cliente360({
               <span>{dateLabel(venda.dataVenda)}</span>
               <span><strong>{venda.produtoNome}</strong><small>{venda.produtoCodigo || venda.medida || venda.marca || 'Sem detalhe'}</small></span>
               <span>{venda.vendedorNome ?? 'Sem vendedor'}</span>
-              <span>{venda.nota || venda.pedido || 'Sem documento'}</span>
+              <span>{venda.kmExtraido ? `${venda.kmExtraido.toLocaleString('pt-BR')} km` : venda.veiculoObservacao || venda.nota || venda.pedido || 'Sem veiculo'}</span>
               <strong>{money(venda.valorTotal)}</strong>
             </div>
           ))}
@@ -3433,8 +3486,8 @@ function Cliente360({
           {servicosFiltrados.map((servico) => (
             <div className="table-row client360-service" key={servico.id}>
               <span>{dateLabel(servico.dataServico)}</span>
-              <span><strong>{servico.servicoNome}</strong><small>{servico.observacao || servico.servicoCodigo || 'Sem observacao'}</small></span>
-              <span>{servico.placa || 'Sem placa'}</span>
+              <span><strong>{servico.servicoNome}</strong><small>{servico.observacao || servico.veiculoObservacao || servico.servicoCodigo || 'Sem observacao'}</small></span>
+              <span>{servico.placa || 'Sem placa'}<small>{servico.kmExtraido ? `${servico.kmExtraido.toLocaleString('pt-BR')} km` : ''}</small></span>
               <span>{servico.vendedorNome ?? 'Sem vendedor'}</span>
               <strong>{money(servico.valorTotal)}</strong>
             </div>
@@ -3494,6 +3547,104 @@ function inDateRange(value: string | undefined, startDate: string, endDate: stri
   if (startDate && day < startDate) return false
   if (endDate && day > endDate) return false
   return true
+}
+
+function topByValue<T>(items: T[], label: (item: T) => string | undefined, value: (item: T) => number) {
+  const totals = new Map<string, number>()
+  items.forEach((item) => {
+    const key = label(item)?.trim()
+    if (!key) return
+    totals.set(key, (totals.get(key) ?? 0) + value(item))
+  })
+  return Array.from(totals.entries()).sort((a, b) => b[1] - a[1])[0]?.[0]
+}
+
+function topByCount<T>(items: T[], label: (item: T) => string | undefined) {
+  const totals = new Map<string, number>()
+  items.forEach((item) => {
+    const key = label(item)?.trim()
+    if (!key) return
+    totals.set(key, (totals.get(key) ?? 0) + 1)
+  })
+  return Array.from(totals.entries()).sort((a, b) => b[1] - a[1])[0]?.[0]
+}
+
+function averageDaysBetween(dates: string[]) {
+  const ordered = Array.from(new Set(dates.map((date) => date.slice(0, 10)))).sort()
+  if (ordered.length < 2) return 0
+  const gaps = ordered.slice(1).map((date, index) => {
+    const current = new Date(`${date}T12:00:00`)
+    const previous = new Date(`${ordered[index]}T12:00:00`)
+    return Math.max(0, Math.round((current.getTime() - previous.getTime()) / 86400000))
+  })
+  return gaps.reduce((total, gap) => total + gap, 0) / gaps.length
+}
+
+function addDays(date: string, days: number) {
+  const nextDate = new Date(`${date.slice(0, 10)}T12:00:00`)
+  nextDate.setDate(nextDate.getDate() + days)
+  return nextDate.toISOString().slice(0, 10)
+}
+
+function buildVehicleSummary(
+  veiculos: ClienteVeiculoResumo[],
+  servicos: ServicoItem[],
+  vendas: VendaItem[],
+): ClienteVeiculoResumo[] {
+  const byIdOrPlate = new Map<string, ClienteVeiculoResumo>()
+
+  veiculos.forEach((veiculo) => {
+    const summary = { ...veiculo }
+    byIdOrPlate.set(veiculo.id, summary)
+    if (veiculo.placa) byIdOrPlate.set(`placa:${veiculo.placa}`, summary)
+  })
+
+  servicos.forEach((servico) => {
+    const key = servico.veiculoId ?? (servico.placa ? `placa:${servico.placa}` : '')
+    if (!key) return
+    const isExistingVehicle = byIdOrPlate.has(key)
+    const current = byIdOrPlate.get(key) ?? {
+      id: key,
+      clienteId: servico.clienteId,
+      placa: servico.placa,
+      totalAtendimentos: 0,
+      valorTotalAtendimentos: 0,
+    }
+    if (!isExistingVehicle) {
+      current.totalAtendimentos += 1
+      current.valorTotalAtendimentos += servico.valorTotal
+    }
+    current.ultimoAtendimentoEm = maxDate(current.ultimoAtendimentoEm, servico.dataServico)
+    current.primeiroAtendimentoEm = minDate(current.primeiroAtendimentoEm, servico.dataServico)
+    if (servico.kmExtraido && (!current.ultimoKm || servico.kmExtraido > current.ultimoKm)) {
+      current.ultimoKm = servico.kmExtraido
+      current.kmAtualizadoEm = servico.dataServico
+    }
+    byIdOrPlate.set(key, current)
+  })
+
+  vendas.forEach((venda) => {
+    if (!venda.veiculoId) return
+    const current = byIdOrPlate.get(venda.veiculoId)
+    if (!current) return
+    current.valorTotalAtendimentos += venda.valorTotal
+    current.ultimoAtendimentoEm = maxDate(current.ultimoAtendimentoEm, venda.dataVenda)
+    if (venda.kmExtraido && (!current.ultimoKm || venda.kmExtraido > current.ultimoKm)) {
+      current.ultimoKm = venda.kmExtraido
+      current.kmAtualizadoEm = venda.dataVenda
+    }
+  })
+
+  return Array.from(new Map(Array.from(byIdOrPlate.values()).map((veiculo) => [veiculo.id, veiculo])).values())
+    .sort((a, b) => (b.ultimoAtendimentoEm ?? '').localeCompare(a.ultimoAtendimentoEm ?? ''))
+}
+
+function maxDate(current: string | undefined, next: string) {
+  return !current || next > current ? next : current
+}
+
+function minDate(current: string | undefined, next: string) {
+  return !current || next < current ? next : current
 }
 
 function Importacoes({
