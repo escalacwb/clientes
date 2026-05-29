@@ -5896,9 +5896,10 @@ function buildQuoteMessage(
   const hasAlternatives = itens.some((item) => (item.apresentacao ?? 'normal') === 'alternativa')
   const hasSeparatedBlocks = quoteHasSeparatedBlocks(blocks)
   const lines = [
-    `Ola, ${cliente.responsavel ?? cliente.nome}. Tudo bem?`,
+    `Olá, ${cliente.responsavel ?? cliente.nome}. Tudo bem?`,
     '',
     '📄 *Proposta comercial - Capital Truck Center*',
+    '',
     `👤 Cliente: ${cliente.nome}`,
     cliente.cidade || cliente.uf ? `📍 Local: ${[cliente.cidade, cliente.uf].filter(Boolean).join('/')}` : undefined,
     validade ? `📅 Validade: ${dateLabel(validade)}` : undefined,
@@ -5906,71 +5907,114 @@ function buildQuoteMessage(
   ].filter(Boolean) as string[]
 
   blocks.forEach((block, blockIndex) => {
-    lines.push(`📦 *${quoteMessageBlockTitle(block.title, block.kind, blockIndex)}*`)
+    const blockTitle = quoteDisplayBlockTitle(block, blockIndex)
+    lines.push('------------------------------')
+    lines.push(`📦 *${quoteMessageBlockTitle(blockTitle, block.kind)}*`)
+    lines.push('')
     const mainItems = block.items.filter((item) => (item.apresentacao ?? 'normal') !== 'alternativa')
     const alternativeItems = block.items.filter((item) => (item.apresentacao ?? 'normal') === 'alternativa')
 
     mainItems.forEach((item) => {
       lines.push(`- ${formatQuantity(item.quantidade)}x ${item.descricao}`)
       lines.push(`  Unit.: ${money(item.valorUnitario)} | Total: ${money(item.valorTotal ?? 0)}`)
+      lines.push('')
     })
-    if (mainItems.length > 0) lines.push(`Subtotal do bloco: ${money(quotePrincipalTotal(block.items))}`)
+    if (mainItems.length > 0) lines.push(`*Subtotal do bloco:* ${money(quotePrincipalTotal(block.items))}`)
 
     if (alternativeItems.length > 0) {
       if (mainItems.length > 0) lines.push('')
       lines.push('🔁 Alternativas deste bloco:')
+      lines.push('')
       alternativeItems.forEach((item, index) => {
-        lines.push(`${String.fromCharCode(65 + index)}) ${formatQuantity(item.quantidade)}x ${item.descricao}`)
+        lines.push(`Opção ${String.fromCharCode(65 + index)}: ${formatQuantity(item.quantidade)}x ${item.descricao}`)
         lines.push(`  Unit.: ${money(item.valorUnitario)} | Total: ${money(item.valorTotal ?? 0)}`)
+        lines.push('')
       })
-      lines.push(`Opcoes: ${quoteAlternativeRangeLabel(alternativeItems)}`)
+      lines.push(`*Opções:* ${quoteAlternativeRangeLabel(alternativeItems)}`)
     }
     lines.push('')
   })
 
+  lines.push('------------------------------')
   lines.push('🧾 *Resumo da proposta*')
+  lines.push('')
   if (hasSeparatedBlocks) {
     lines.push('Totais por bloco:')
-    blocks.forEach((block) => {
-      lines.push(`- ${block.title}: ${quoteBlockTotalLabel(block)}`)
+    lines.push('')
+    blocks.forEach((block, index) => {
+      lines.push(`- ${quoteDisplayBlockTitle(block, index)}: ${quoteBlockTotalLabel(block)}`)
     })
   } else {
     if (produtosTotal > 0) lines.push(`Produtos: ${money(produtosTotal)}`)
-    if (servicosTotal > 0) lines.push(`Servicos: ${money(servicosTotal)}`)
+    if (servicosTotal > 0) lines.push(`Serviços: ${money(servicosTotal)}`)
     lines.push(`Total principal: ${money(total)}`)
   }
-  if (hasAlternatives) lines.push('As alternativas sao opcoes de escolha e nao entram no subtotal principal do bloco.')
+  if (hasAlternatives) lines.push('', 'As alternativas são opções de escolha e não entram no subtotal principal do bloco.')
   if (paymentScenarios.length > 0) {
     if (hasSeparatedBlocks) {
-      lines.push('', '💳 *Condicoes por bloco*')
+      lines.push('', '💳 *Condições por bloco*')
       blocks.forEach((block, index) => {
         const hasConditionBase = quotePrincipalTotal(block.items) > 0 || block.items.some((item) => (item.apresentacao ?? 'normal') === 'alternativa')
         if (!hasConditionBase) return
-        if (index > 0) lines.push('')
-        lines.push(`${block.title}:`)
+        lines.push('')
+        lines.push(`*${quoteDisplayBlockTitle(block, index)}*`)
         paymentScenarios.forEach((scenario) => {
-          lines.push(`- ${scenario.label}: ${quoteBlockConditionLabel(block, scenario.adjustment)}`)
+          lines.push(`- ${quoteConditionLabel(scenario.label)}: ${quoteBlockConditionLabel(block, scenario.adjustment)}`)
         })
       })
     } else {
-      lines.push('', '💳 *Condicoes de pagamento*')
+      lines.push('', '💳 *Condições de pagamento*')
       paymentScenarios.forEach((scenario) => {
-        lines.push(`- ${scenario.label}: ${money(scenario.total)}`)
+        lines.push(`- ${quoteConditionLabel(scenario.label)}: ${money(scenario.total)}`)
       })
     }
   }
-  if (observacao?.trim()) lines.push('', '📝 *Observacoes*', observacao.trim())
-  lines.push('', '⚠️ Antes da emissao da ordem de compra, solicite a confirmacao de disponibilidade, prazo e condicoes.')
-  lines.push('Posso confirmar disponibilidade para voce?')
+  if (observacao?.trim()) lines.push('', '📝 *Observações*', observacao.trim())
+  lines.push('', '⚠️ Antes da emissão da ordem de compra, solicite a confirmação de disponibilidade, prazo e condições.')
+  lines.push('', 'Posso confirmar disponibilidade para você?')
   return lines.join('\n')
 }
 
-function quoteMessageBlockTitle(title: string, kind: NonNullable<OrcamentoItemInput['apresentacao']>, index: number) {
-  const prefix = title.toLowerCase().startsWith('bloco') ? title : `Bloco ${index + 1} - ${title}`
+function quoteMessageBlockTitle(title: string, kind: NonNullable<OrcamentoItemInput['apresentacao']>) {
+  const prefix = title
   if (kind === 'alternativa' && !prefix.toLowerCase().includes('alternativa')) return `${prefix} - alternativas`
   if (kind === 'pacote' && !prefix.toLowerCase().includes('pacote')) return `${prefix} - pacote`
   if (kind === 'complementar' && !prefix.toLowerCase().includes('complement')) return `${prefix} - complementos`
   return prefix
+}
+
+function quoteDisplayBlockTitle(block: { title: string }, index: number) {
+  const rawTitle = block.title.trim()
+  const ordinal = quoteOrdinalBlockLabel(index)
+  const normalized = rawTitle
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+  if (!rawTitle || /^\d+$/.test(normalized) || /^bloco\s*\d+$/.test(normalized)) return ordinal
+  if (normalized === 'itens principais' || normalized === 'servicos' || normalized === 'servicos principais') return ordinal
+  return `${ordinal} - ${rawTitle}`
+}
+
+function quoteOrdinalBlockLabel(index: number) {
+  const labels = [
+    'Primeiro bloco',
+    'Segundo bloco',
+    'Terceiro bloco',
+    'Quarto bloco',
+    'Quinto bloco',
+    'Sexto bloco',
+    'Sétimo bloco',
+    'Oitavo bloco',
+    'Nono bloco',
+    'Décimo bloco',
+  ]
+  return labels[index] ?? `Bloco ${index + 1}`
+}
+
+function quoteConditionLabel(label: string) {
+  if (label.toLowerCase() === 'a vista') return 'À vista'
+  return label
 }
 
 function groupQuoteItemsForMessage(itens: OrcamentoItemInput[]) {
@@ -6112,12 +6156,13 @@ function QuoteProposalPreview({
       </div>
       <div className="proposal-blocks">
         {blocks.map((block, blockIndex) => {
+          const blockTitle = quoteDisplayBlockTitle(block, blockIndex)
           const mainItems = block.items.filter((item) => (item.apresentacao ?? 'normal') !== 'alternativa')
           const alternativeItems = block.items.filter((item) => (item.apresentacao ?? 'normal') === 'alternativa')
           return (
             <section className={`proposal-block ${block.kind}`} key={`${block.title}-${blockIndex}`}>
               <div className="proposal-block-title">
-                <strong>{blockIndex + 1}. {block.title}</strong>
+                <strong>{blockTitle}</strong>
                 <span>{quoteBlockHint(block.kind)}</span>
               </div>
               {mainItems.length > 0 && (
@@ -6153,9 +6198,9 @@ function QuoteProposalPreview({
       {hasSeparatedBlocks ? (
         <div className="proposal-block-totals">
           <strong>Totais por bloco</strong>
-          {blocks.map((block) => (
+          {blocks.map((block, index) => (
             <div key={`total-${block.title}`}>
-              <span>{block.title}</span>
+              <span>{quoteDisplayBlockTitle(block, index)}</span>
               <strong>{quoteBlockTotalLabel(block)}</strong>
             </div>
           ))}
@@ -6179,19 +6224,19 @@ function QuoteProposalPreview({
       {condicoes && condicoes.length > 0 && (
         <div className="proposal-conditions">
           {hasSeparatedBlocks
-            ? blocks.map((block) => (
+            ? blocks.map((block, index) => (
                 <section className="proposal-condition-block" key={`condition-${block.title}`}>
-                  <strong>{block.title}</strong>
+                  <strong>{quoteDisplayBlockTitle(block, index)}</strong>
                   {condicoes.map((scenario) => (
                     <div key={`${block.title}-${scenario.label}`}>
-                      <span>{scenario.label}</span>
+                      <span>{quoteConditionLabel(scenario.label)}</span>
                       <b>{quoteBlockConditionLabel(block, scenario.adjustment)}</b>
                     </div>
                   ))}
                 </section>
               ))
             : condicoes.map((scenario) => (
-                <span key={scenario.label}>{scenario.label}: {money(scenario.total)}</span>
+                <span key={scenario.label}>{quoteConditionLabel(scenario.label)}: {money(scenario.total)}</span>
               ))}
         </div>
       )}

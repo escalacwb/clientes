@@ -3601,19 +3601,54 @@ h3 {
 }
 
 @media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  html,
+  body,
+  #root {
+    background: #ffffff !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
   body * {
-    visibility: hidden;
+    visibility: hidden !important;
   }
 
   .proposal-preview,
   .proposal-preview * {
-    visibility: visible;
+    visibility: visible !important;
+  }
+
+  .sidebar,
+  .topbar,
+  .quote-workspace-hero,
+  .quote-workspace-actions,
+  .quote-layout > :not(.quote-summary-panel),
+  .quote-summary-panel > :not(.proposal-preview),
+  .quote-workspace-grid > :not(.proposal-preview) {
+    display: none !important;
   }
 
   .app-shell,
   .workspace,
-  .quote-layout {
-    display: block;
+  .panel,
+  .quote-editor,
+  .quote-layout,
+  .quote-summary-panel,
+  .quote-workspace,
+  .quote-workspace-grid {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
   }
 
   .quote-editor,
@@ -3623,25 +3658,15 @@ h3 {
     box-shadow: none;
   }
 
-  .workspace {
-    padding: 0;
-    background: #ffffff;
-  }
-
-  .panel,
-  .quote-editor {
-    border: 0;
-    box-shadow: none;
-    padding: 0;
-  }
-
   .proposal-preview {
     color: #111827;
-    padding: 0;
-    position: absolute;
-    inset: 0 auto auto 50%;
-    transform: translateX(-50%);
-    width: min(190mm, 100%);
+    padding: 0 !important;
+    position: static !important;
+    inset: auto !important;
+    transform: none !important;
+    width: 100% !important;
+    max-width: none !important;
+    page-break-after: auto;
   }
 
   .proposal-logo {
