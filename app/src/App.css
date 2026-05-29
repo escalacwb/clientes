@@ -2130,11 +2130,14 @@ h3 {
 .proposal-heading > div,
 .proposal-meta,
 .proposal-lines,
+.proposal-alternatives,
 .proposal-blocks,
 .proposal-block,
 .proposal-block-title,
+.proposal-block-totals,
 .proposal-commercial,
 .proposal-breakdown,
+.proposal-condition-block,
 .proposal-notes,
 .proposal-footer {
   display: grid;
@@ -2183,8 +2186,11 @@ h3 {
 }
 
 .proposal-lines div,
+.proposal-alternatives div,
 .proposal-total,
-.proposal-subtotal {
+.proposal-subtotal,
+.proposal-block-totals div,
+.proposal-condition-block div {
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -2192,6 +2198,16 @@ h3 {
 
 .proposal-lines span {
   min-width: 0;
+}
+
+.proposal-alternatives {
+  border-top: 1px dashed #d9e5dd;
+  margin-top: 4px;
+  padding-top: 8px;
+}
+
+.proposal-alternatives > strong {
+  color: #12312f;
 }
 
 .proposal-block {
@@ -2233,6 +2249,17 @@ h3 {
   padding-top: 8px;
 }
 
+.proposal-block-totals {
+  border: 1px solid #dfe7e1;
+  border-radius: 8px;
+  background: #f8faf7;
+  padding: 10px;
+}
+
+.proposal-block-totals > strong {
+  color: #12312f;
+}
+
 .proposal-total strong {
   color: #12312f;
   font-size: 18px;
@@ -2241,6 +2268,21 @@ h3 {
 .proposal-breakdown,
 .proposal-conditions {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.proposal-condition-block {
+  border: 1px solid #e5ebe6;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.proposal-condition-block > strong {
+  color: #12312f;
+}
+
+.proposal-condition-block b {
+  color: #12312f;
 }
 
 .proposal-notes {
