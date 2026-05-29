@@ -477,6 +477,23 @@ Validacao:
 Observacao:
 - A lista de precos atual ainda nao possui `desconto_maximo`; o alerta esta pronto e sera ativado automaticamente quando esse campo vier preenchido na importacao.
 
+### 2026-05-28 - Acao gerencial para aprovar proposta
+
+Status: concluido.
+
+Entregue:
+- Repository de orcamentos passou a gravar `aprovado_por` e `aprovado_em` ao mudar status para `enviado`.
+- Tela de orcamentos mostra contador de propostas aguardando aprovacao.
+- Admin consegue acionar `Aprovar e enviar` em propostas com status `aguardando_aprovacao`.
+- A listagem exibe motivo de aprovacao e data de aprovacao.
+
+Validacao:
+- Build passou com `npm run build`.
+- Teste no Supabase criou orcamento `aguardando_aprovacao`, mudou para `enviado`, gravou `aprovado_por` e `aprovado_em`, e removeu o teste depois.
+
+Proximo passo tecnico:
+- Criar historico dedicado de aprovacoes e permitir rejeitar solicitacao com motivo.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

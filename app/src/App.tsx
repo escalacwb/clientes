@@ -882,13 +882,22 @@ function App() {
             clientes={scopedClientes}
             orcamentos={scopedOrcamentos}
             usuarios={usuarios}
+            currentUser={session}
             onStatusChange={(id, status, motivoPerda) => {
-              updateOrcamentoStatus(id, status, motivoPerda).catch((exception) => {
+              updateOrcamentoStatus(id, status, motivoPerda, status === 'enviado' ? session.id : undefined).catch((exception) => {
                 setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o orcamento.')
               })
               setOrcamentos((current) =>
                 current.map((orcamento) =>
-                  orcamento.id === id ? { ...orcamento, status, motivoPerda } : orcamento,
+                  orcamento.id === id
+                    ? {
+                        ...orcamento,
+                        status,
+                        motivoPerda,
+                        aprovadoPor: status === 'enviado' ? session.id : orcamento.aprovadoPor,
+                        aprovadoEm: status === 'enviado' ? new Date().toISOString() : orcamento.aprovadoEm,
+                      }
+                    : orcamento,
                 ),
               )
             }}
@@ -3835,11 +3844,13 @@ function Orcamentos({
   clientes,
   orcamentos,
   usuarios,
+  currentUser,
   onStatusChange,
 }: {
   clientes: Cliente[]
   orcamentos: Orcamento[]
   usuarios: Vendedor[]
+  currentUser: SessaoUsuario
   onStatusChange: (id: string, status: Orcamento['status'], motivoPerda?: string) => void
 }) {
   const [lossReasons, setLossReasons] = useState<Record<string, string>>({})
@@ -3854,8 +3865,10 @@ function Orcamentos({
     .filter((orcamento) => openStatuses.includes(orcamento.status))
     .reduce((total, orcamento) => total + orcamento.valorTotal, 0)
   const vencidos = orcamentos.filter((orcamento) => openStatuses.includes(orcamento.status) && daysSince(orcamento.validade) > 0).length
+  const aguardandoAprovacao = orcamentos.filter((orcamento) => orcamento.status === 'aguardando_aprovacao').length
   const negociando = orcamentos.filter((orcamento) => orcamento.status === 'negociando').length
   const ganhos = orcamentos.filter((orcamento) => orcamento.status === 'ganho').length
+  const canApprove = currentUser.role === 'admin'
 
   return (
     <section className="panel wide">
@@ -3884,6 +3897,7 @@ function Orcamentos({
       <div className="info-grid budget-summary">
         <Info label="Pipeline aberto" value={money(valorAberto)} />
         <Info label="Vencidos" value={vencidos.toString()} />
+        <Info label="Aguardando aprov." value={aguardandoAprovacao.toString()} />
         <Info label="Negociando" value={negociando.toString()} />
         <Info label="Ganhos" value={ganhos.toString()} />
       </div>
@@ -3905,6 +3919,7 @@ function Orcamentos({
               <span>
                 <span className={isExpired ? 'status-pill danger' : 'status-pill'}>{isExpired ? 'vencido' : orcamento.status}</span>
                 {orcamento.aprovacaoMotivo && <small>{orcamento.aprovacaoMotivo}</small>}
+                {orcamento.aprovadoEm && <small>Aprovado em {dateLabel(orcamento.aprovadoEm)}</small>}
               </span>
               <span>
                 <strong>{money(orcamento.valorTotal)}</strong>
@@ -3917,6 +3932,11 @@ function Orcamentos({
               <span>
                 <strong>{vendedor?.nome}</strong>
                 <div className="budget-status-actions">
+                  {orcamento.status === 'aguardando_aprovacao' && canApprove && (
+                    <button className="button primary" type="button" onClick={() => onStatusChange(orcamento.id, 'enviado')}>
+                      Aprovar e enviar
+                    </button>
+                  )}
                   {orcamento.status === 'enviado' && (
                     <button className="button" type="button" onClick={() => onStatusChange(orcamento.id, 'negociando')}>
                       Negociando

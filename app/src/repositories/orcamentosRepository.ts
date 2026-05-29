@@ -113,16 +113,23 @@ export async function updateOrcamentoStatus(
   id: string,
   status: Orcamento['status'],
   motivoPerda?: string,
+  aprovadoPor?: string,
 ): Promise<void> {
   const supabase = await getSupabase()
   if (!supabase) return
 
+  const patch: Record<string, string | null | undefined> = {
+    status,
+    motivo_perda: motivoPerda ?? null,
+  }
+  if (status === 'enviado' && aprovadoPor) {
+    patch.aprovado_por = aprovadoPor
+    patch.aprovado_em = new Date().toISOString()
+  }
+
   const { error } = await supabase
     .from('orcamentos')
-    .update({
-      status,
-      motivo_perda: motivoPerda ?? null,
-    })
+    .update(patch)
     .eq('id', id)
 
   if (error) throw error
