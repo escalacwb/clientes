@@ -7185,28 +7185,6 @@ function Campanhas({
               ))}
             </select>
           </label>
-          <label className="mini-select">
-            <Search size={15} />
-            <input
-              value={query}
-              onChange={(event) => changeQuery(event.target.value)}
-              placeholder="Buscar cliente"
-            />
-          </label>
-          <label className="mini-select">
-            <Filter size={15} />
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as CampanhaEnvioStatus | 'todos')}>
-              <option value="todos">Todos os status</option>
-              <option value="pendente">Pendentes</option>
-              <option value="enviado">Enviados</option>
-              <option value="respondeu">Responderam</option>
-              <option value="virou_orcamento">Virou orcamento</option>
-              <option value="ganhou">Ganhos</option>
-              <option value="perdido">Perdidos</option>
-              <option value="nao_respondeu">Nao respondeu</option>
-              <option value="nao_contatar">Nao contatar</option>
-            </select>
-          </label>
           <Send size={18} />
         </div>
       </div>
@@ -7233,28 +7211,10 @@ function Campanhas({
       </section>
       <section className="campaign-builder-stage">
         <div className="campaign-stage-header">
-          <span>2. Publico</span>
-          <small>{activePublicoFilterCount} filtros ativos. Use atalhos ou refine pelos campos abaixo.</small>
+          <span>2. Configuracao</span>
+          <small>Identifique a campanha, objetivo e metas antes de trabalhar a lista de clientes.</small>
         </div>
-        <div className="campaign-preset-grid">
-          <button className="campaign-preset" type="button" onClick={() => applyCampaignPreset('sem-cadastro')}>
-            <strong>Clientes sem cadastro</strong>
-            <small>Listas externas novas, com WhatsApp e ainda nao qualificadas.</small>
-          </button>
-          <button className="campaign-preset" type="button" onClick={() => applyCampaignPreset('compradores-produto')}>
-            <strong>Comprou produto/servico</strong>
-            <small>Use produto, medida, marca ou servico para montar a audiencia.</small>
-          </button>
-          <button className="campaign-preset" type="button" onClick={() => applyCampaignPreset('regiao')}>
-            <strong>Cidade ou regiao</strong>
-            <small>Comece por localidade e refine por vendedor ou historico.</small>
-          </button>
-          <button className="campaign-preset" type="button" onClick={() => applyCampaignPreset('alto-valor')}>
-            <strong>Reativar alto valor</strong>
-            <small>Clientes com historico relevante e mais de 90 dias sem compra.</small>
-          </button>
-        </div>
-        <div className="campaign-audience-toolbar">
+        <div className="campaign-audience-toolbar visually-hidden">
           <span>{total} clientes no publico · pagina {page} de {totalPages}</span>
           <button className="button" type="button" onClick={resetCampaignAudience}>Limpar publico</button>
         </div>
@@ -7317,6 +7277,7 @@ function Campanhas({
             placeholder="7"
           />
         </label>
+        <div className="visually-hidden">
         <label>
           Cidade
           <input
@@ -7457,6 +7418,7 @@ function Campanhas({
           />
           Somente com WhatsApp
         </label>
+        </div>
       </div>
       </section>
       <div className="campaign-image-panel">
@@ -7561,6 +7523,132 @@ function Campanhas({
           </button>
         ))}
       </div>
+      <section className="campaign-builder-stage campaign-audience-stage">
+        <div className="campaign-stage-header">
+          <span>Publico e filtros da lista</span>
+          <small>{activePublicoFilterCount} filtros ativos. Os filtros abaixo controlam apenas a lista de clientes desta campanha.</small>
+        </div>
+        <div className="campaign-preset-grid">
+          <button className="campaign-preset" type="button" onClick={() => applyCampaignPreset('sem-cadastro')}>
+            <strong>Clientes sem cadastro</strong>
+            <small>Listas externas novas, com WhatsApp e ainda nao qualificadas.</small>
+          </button>
+          <button className="campaign-preset" type="button" onClick={() => applyCampaignPreset('compradores-produto')}>
+            <strong>Comprou produto/servico</strong>
+            <small>Use produto, medida, marca ou servico para montar a audiencia.</small>
+          </button>
+          <button className="campaign-preset" type="button" onClick={() => applyCampaignPreset('regiao')}>
+            <strong>Cidade ou regiao</strong>
+            <small>Comece por localidade e refine por vendedor ou historico.</small>
+          </button>
+          <button className="campaign-preset" type="button" onClick={() => applyCampaignPreset('alto-valor')}>
+            <strong>Reativar alto valor</strong>
+            <small>Clientes com historico relevante e mais de 90 dias sem compra.</small>
+          </button>
+        </div>
+        <div className="campaign-audience-toolbar">
+          <label className="mini-select">
+            <Search size={15} />
+            <input value={query} onChange={(event) => changeQuery(event.target.value)} placeholder="Buscar cliente" />
+          </label>
+          <label className="mini-select">
+            <Filter size={15} />
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as CampanhaEnvioStatus | 'todos')}>
+              <option value="todos">Todos os status</option>
+              <option value="pendente">Pendentes</option>
+              <option value="enviado">Enviados</option>
+              <option value="respondeu">Responderam</option>
+              <option value="virou_orcamento">Virou orcamento</option>
+              <option value="ganhou">Ganhos</option>
+              <option value="perdido">Perdidos</option>
+              <option value="nao_respondeu">Nao respondeu</option>
+              <option value="nao_contatar">Nao contatar</option>
+            </select>
+          </label>
+          <span>{total} clientes no publico · pagina {page} de {totalPages}</span>
+          <button className="button" type="button" onClick={resetCampaignAudience}>Limpar publico</button>
+        </div>
+        <div className="campaign-filter-grid">
+          <label>
+            Cidade
+            <input value={publicoFiltros.cidade ?? ''} onChange={(event) => updatePublicoFiltro('cidade', event.target.value)} placeholder="Ex.: Curitiba" />
+          </label>
+          <label>
+            UF / regiao
+            <input value={publicoFiltros.uf ?? ''} onChange={(event) => updatePublicoFiltro('uf', event.target.value.toUpperCase().slice(0, 2))} placeholder="PR" />
+          </label>
+          <label>
+            Vendedor
+            <select value={publicoFiltros.vendedorId ?? ''} onChange={(event) => updatePublicoFiltro('vendedorId', event.target.value)}>
+              <option value="">Todos</option>
+              {usuarios.map((usuario) => (
+                <option value={usuario.id} key={usuario.id}>{usuario.nome}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Vendedor historico
+            <input value={publicoFiltros.vendedorHistoricoNome ?? ''} onChange={(event) => updatePublicoFiltro('vendedorHistoricoNome', event.target.value)} placeholder="Nome no sistema" />
+          </label>
+          <label>
+            Produto ou servico comprado
+            <input value={publicoFiltros.produtoTerm ?? ''} onChange={(event) => updatePublicoFiltro('produtoTerm', event.target.value)} placeholder="Ex.: 295/80; Michelin; alinhamento" />
+          </label>
+          <label>
+            Medida
+            <input value={publicoFiltros.medidaTerm ?? ''} onChange={(event) => updatePublicoFiltro('medidaTerm', event.target.value)} placeholder="Ex.: 295/80R22.5" />
+          </label>
+          <label>
+            Placa / veiculo
+            <input value={publicoFiltros.placaTerm ?? ''} onChange={(event) => updatePublicoFiltro('placaTerm', event.target.value.toUpperCase())} placeholder="ABC1D23" />
+          </label>
+          <label>
+            KM minimo
+            <input inputMode="numeric" value={publicoFiltros.kmMin ?? ''} onChange={(event) => updatePublicoFiltro('kmMin', positiveIntegerOrUndefined(event.target.value))} placeholder="Ex.: 80000" />
+          </label>
+          <label>
+            KM maximo
+            <input inputMode="numeric" value={publicoFiltros.kmMax ?? ''} onChange={(event) => updatePublicoFiltro('kmMax', positiveIntegerOrUndefined(event.target.value))} placeholder="Ex.: 180000" />
+          </label>
+          <label>
+            Origem da base
+            <select value={publicoFiltros.origemBase ?? 'todos'} onChange={(event) => updatePublicoFiltro('origemBase', event.target.value as CampanhaPublicoFiltros['origemBase'])}>
+              <option value="todos">Todas</option>
+              <option value="capital_truck">Capital Truck</option>
+              <option value="rodobens">Clientes sem cadastro</option>
+              <option value="desconhecida">Origem pendente</option>
+            </select>
+          </label>
+          <label>
+            Status lead
+            <select value={publicoFiltros.leadQualificacaoStatus ?? 'todos'} onChange={(event) => updatePublicoFiltro('leadQualificacaoStatus', event.target.value as CampanhaPublicoFiltros['leadQualificacaoStatus'])}>
+              <option value="todos">Todos</option>
+              <option value="novo">Novo</option>
+              <option value="contatado">Contatado</option>
+              <option value="qualificado">Qualificado</option>
+              <option value="virou_cliente">Virou cliente</option>
+              <option value="descartado">Descartado</option>
+              <option value="nao_contatar">Nao contatar</option>
+            </select>
+          </label>
+          <label>
+            Dias sem compra
+            <input inputMode="numeric" value={publicoFiltros.diasSemCompraMin ?? ''} onChange={(event) => updatePublicoFiltro('diasSemCompraMin', positiveIntegerOrUndefined(event.target.value))} placeholder="Ex.: 90" />
+          </label>
+          <label>
+            Dias sem contato
+            <input inputMode="numeric" value={publicoFiltros.diasSemContatoMin ?? ''} onChange={(event) => updatePublicoFiltro('diasSemContatoMin', positiveIntegerOrUndefined(event.target.value))} placeholder="Ex.: 60" />
+          </label>
+          <label>
+            Valor minimo historico
+            <input inputMode="decimal" value={publicoFiltros.valorMin ?? ''} onChange={(event) => updatePublicoFiltro('valorMin', numberFromInput(event.target.value) || undefined)} placeholder="Ex.: 5000,00" />
+          </label>
+          <label className="checkbox-field">
+            <input type="checkbox" checked={Boolean(publicoFiltros.somenteComWhatsapp)} onChange={(event) => updatePublicoFiltro('somenteComWhatsapp', event.target.checked)} />
+            Somente com WhatsApp
+          </label>
+        </div>
+      </section>
       {campaignError && <div className="alert">{campaignError}</div>}
       {isLoading && <div className="empty-state">Carregando segmento de campanha...</div>}
       {!isLoading && filteredClientes.length > 0 && (

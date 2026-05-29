@@ -2699,6 +2699,10 @@ h3 {
   text-align: center;
 }
 
+.visually-hidden {
+  display: none !important;
+}
+
 @media (max-width: 1100px) {
   .app-shell {
     grid-template-columns: 1fr;
