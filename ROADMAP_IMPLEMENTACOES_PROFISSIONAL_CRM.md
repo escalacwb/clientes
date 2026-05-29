@@ -1435,6 +1435,23 @@ Validacao:
 Proximo passo tecnico:
 - Criar alertas gerenciais configuraveis sobre a view de SLA e comecar automacoes adicionais de follow-up.
 
+### 2026-05-29 - Alertas gerenciais de SLA
+
+Status: concluido.
+
+Entregue:
+- Cockpit admin ganhou painel `Alertas de SLA`.
+- Gerente pode ajustar o limite operacional da visao: 1+, 3+, 5+ ou 10+ atrasos/prioridades.
+- Alertas mostram vendedor, origem critica predominante, atrasadas, vencem hoje e atalho para abrir a fila de tarefas.
+- Quando ninguem passa do limite, a tela mostra estado vazio claro.
+
+Validacao:
+- Build passou com `npm run build`.
+- Playwright local validou painel `Alertas de SLA`, seletor de limite e exibicao de cards/estado vazio.
+
+Proximo passo tecnico:
+- Comecar automacoes adicionais de follow-up: criar tarefas quando orcamento vencer e quando campanha responder, com deduplicacao por origem.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

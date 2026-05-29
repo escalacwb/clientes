@@ -1846,6 +1846,7 @@ function Cockpit({
   const [rescheduleDate, setRescheduleDate] = useState(tomorrowDate())
   const [rescheduleReason, setRescheduleReason] = useState('')
   const [rescheduleError, setRescheduleError] = useState('')
+  const [slaAlertLimit, setSlaAlertLimit] = useState(3)
   const todayTasks = tarefas.filter((tarefa) => daysSince(tarefa.dataVencimento) >= 0)
   const highPriorityTasks = tarefas
     .filter((tarefa) => tarefa.prioridade >= 80 && !todayTasks.some((item) => item.id === tarefa.id))
@@ -1866,6 +1867,7 @@ function Cockpit({
       origemCritica: sellerCriticalOrigin(slaBySeller.get(usuario.id)),
     }))
     .sort((a, b) => b.atrasadas - a.atrasadas || b.tarefas - a.tarefas)
+  const slaAlerts = workload.filter((item) => item.atrasadas >= slaAlertLimit || item.criticas >= slaAlertLimit)
 
   async function complete(id: string) {
     setBusyTaskId(id)
@@ -2057,6 +2059,46 @@ function Cockpit({
           {rodobens.length + oportunidades.length === 0 && <div className="empty-state compact">Sem leads ou oportunidades novas agora.</div>}
         </div>
       </section>
+
+      {currentUser.role === 'admin' && (
+        <section className="panel wide cockpit-alerts">
+          <div className="panel-header">
+            <div>
+              <h2>Alertas de SLA</h2>
+              <p>Vendedores acima do limite operacional configurado nesta visao.</p>
+            </div>
+            <label className="mini-select">
+              <Gauge size={15} />
+              <select value={slaAlertLimit} onChange={(event) => setSlaAlertLimit(Number(event.target.value))}>
+                <option value={1}>Alertar com 1+</option>
+                <option value={3}>Alertar com 3+</option>
+                <option value={5}>Alertar com 5+</option>
+                <option value={10}>Alertar com 10+</option>
+              </select>
+            </label>
+          </div>
+          <div className="alert-grid">
+            {slaAlerts.map((item) => (
+              <article className="sla-alert-card" key={item.id}>
+                <div>
+                  <strong>{item.nome}</strong>
+                  <small>{item.origemCritica}</small>
+                </div>
+                <span className="sla-pill danger">{item.atrasadas} atrasadas</span>
+                <span className="sla-pill warn">{item.vencemHoje} hoje</span>
+                <button
+                  className="button"
+                  type="button"
+                  onClick={() => onOpenModule('tarefas')}
+                >
+                  Abrir fila
+                </button>
+              </article>
+            ))}
+            {slaAlerts.length === 0 && <div className="empty-state compact">Nenhum vendedor acima do limite selecionado.</div>}
+          </div>
+        </section>
+      )}
 
       {currentUser.role === 'admin' && (
         <section className="panel wide">

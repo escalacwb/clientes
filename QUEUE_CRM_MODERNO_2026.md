@@ -84,9 +84,9 @@ Ja entregue:
 - Visao admin do Cockpit mostra tambem tarefas com SLA critico por vendedor.
 - Criada view `vw_tarefas_sla_vendedor` para SLA global por vendedor, com atrasadas, vencem hoje, alta prioridade e origem critica.
 - Cockpit admin passou a usar a visao global de SLA, nao apenas as tarefas carregadas na pagina.
+- Cockpit admin ganhou painel `Alertas de SLA` com limite ajustavel de atraso/prioridade.
 
 Proximas entregas:
-- Alertas gerenciais com limite configuravel.
 - Automacoes adicionais para criar tarefas quando orcamento vencer ou campanha responder.
 
 Pronto quando:

@@ -594,6 +594,37 @@ h3 {
   color: #64736f;
 }
 
+.cockpit-alerts {
+  border-color: #f2d8a7;
+}
+
+.alert-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.sla-alert-card {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  border: 1px solid #f2d8a7;
+  border-radius: 8px;
+  background: #fffaf0;
+  padding: 12px;
+}
+
+.sla-alert-card strong,
+.sla-alert-card small {
+  display: block;
+}
+
+.sla-alert-card small {
+  color: #7c6844;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
 .floating-panel {
   position: fixed;
   right: 24px;
