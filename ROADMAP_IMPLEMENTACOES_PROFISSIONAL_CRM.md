@@ -415,6 +415,28 @@ Validacao local:
 Observacao:
 - A base atual nao parece trazer uma origem Rodobens ampla; os dois casos encontrados sao empresas com Rodobens no proprio nome. Para separar todos os clientes vindos de uma base Rodobens, o arquivo de importacao precisa trazer esse sinal em alguma coluna, nome de arquivo, aba ou metadado.
 
+### 2026-05-28 - Editor dedicado de proposta/orcamento
+
+Status: concluido.
+
+Entregue:
+- Botao `Orcamento` na ficha do cliente passou a abrir uma tela dedicada de proposta.
+- Editor tem cabecalho do cliente, validade, previsao de fechamento, condicao comercial, busca no catalogo, linhas de itens, quantidade, preco, desconto e total.
+- Mensagem WA.ME e preview de proposta sao gerados pela tela.
+- Criacao salva orcamento, itens, condicao, observacao e registra interacao comercial.
+- Layout responsivo para desktop/mobile.
+
+Validacao local:
+- Login como Wagner Fonseca.
+- Abertura da tela de proposta a partir da ficha de cliente.
+- Item `ALINHAMENTO` selecionado do catalogo.
+- 2 unidades com 10% de desconto calcularam total de R$ 234.
+- Orcamento foi criado no Supabase e depois removido como limpeza de teste.
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Adicionar versoes/status da proposta, aprovacao de desconto e modelo formatado para impressao/PDF.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

@@ -183,6 +183,7 @@ function App() {
   const [rodobensPage, setRodobensPage] = useState(1)
   const [rodobensQuery, setRodobensQuery] = useState('')
   const [isLoadingRodobens, setIsLoadingRodobens] = useState(false)
+  const [quoteSourceView, setQuoteSourceView] = useState('clientes')
   const [isLoadingData, setIsLoadingData] = useState(isSupabaseConfigured)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [isLoadingClientes, setIsLoadingClientes] = useState(isSupabaseConfigured)
@@ -631,6 +632,11 @@ function App() {
               setSelectedClientId(cliente.id)
               setView('cliente360')
             }}
+            onOpenBudgetEditor={(cliente) => {
+              setSelectedClientId(cliente.id)
+              setQuoteSourceView('clientes')
+              setView('orcamento-editor')
+            }}
             onUpdateClient={(clienteId, patch) => {
               updateClienteComercial(clienteId, patch).catch((exception) => {
                 setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o cliente.')
@@ -693,6 +699,27 @@ function App() {
             vendasItens={scopedVendasItens}
             servicosItens={scopedServicosItens}
             onBack={() => setView('clientes')}
+          />
+        )}
+        {canUseScopedClientViews && view === 'orcamento-editor' && (
+          <OrcamentoEditor
+            cliente={selectedClient}
+            catalogo={catalogo}
+            onBack={() => setView(quoteSourceView)}
+            onCreate={async (orcamento) => {
+              const created = await createOrcamento(orcamento, orcamento.itens)
+              setOrcamentos((current) => [created, ...current])
+              const interacao = await createInteracao({
+                clienteId: created.clienteId,
+                vendedorId: created.vendedorId ?? selectedClient.vendedorId ?? 'u-1',
+                canal: 'WhatsApp',
+                tipo: 'orcamento',
+                resumo: created.observacao || `Orcamento criado no valor de ${money(created.valorTotal)}.`,
+                resultado: 'pediu orcamento',
+              })
+              setInteracoes((current) => [interacao, ...current])
+              return created
+            }}
           />
         )}
         {canUseScopedClientViews && view === 'rodobens' && (
@@ -914,6 +941,7 @@ function titleFor(view: string) {
     dashboard: 'Painel comercial',
     clientes: 'Base unica de clientes',
     rodobens: 'Inbox Rodobens',
+    'orcamento-editor': 'Editor de proposta',
     carteira: 'Fila diaria do vendedor',
     oportunidades: 'Oportunidades automaticas',
     tarefas: 'Tarefas e proximas acoes',
@@ -1138,6 +1166,7 @@ function Clientes({
   onPageChange,
   onSelect,
   onOpenFullProfile,
+  onOpenBudgetEditor,
   onUpdateClient,
   onAddInteraction,
   onAddBudget,
@@ -1158,6 +1187,7 @@ function Clientes({
   onPageChange: (page: number) => void
   onSelect: (cliente: Cliente) => void
   onOpenFullProfile: (cliente: Cliente) => void
+  onOpenBudgetEditor: (cliente: Cliente) => void
   onUpdateClient: (clienteId: string, patch: Partial<Cliente>) => void
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
   onAddBudget: (orcamento: OrcamentoInput) => Promise<Orcamento>
@@ -1214,9 +1244,10 @@ function Clientes({
           orcamentos={orcamentos}
           vendasItens={vendasItens}
           servicosItens={servicosItens}
-          catalogo={catalogo}
-          onOpenFullProfile={() => onOpenFullProfile(selectedClient)}
-          onUpdateClient={onUpdateClient}
+        catalogo={catalogo}
+        onOpenFullProfile={() => onOpenFullProfile(selectedClient)}
+        onOpenBudgetEditor={() => onOpenBudgetEditor(selectedClient)}
+        onUpdateClient={onUpdateClient}
           onAddInteraction={onAddInteraction}
           onAddBudget={onAddBudget}
         />
@@ -1784,6 +1815,7 @@ function FichaCliente({
   onAddInteraction,
   onAddBudget,
   onOpenFullProfile,
+  onOpenBudgetEditor,
 }: {
   cliente: Cliente
   interacoes: Interacao[]
@@ -1795,6 +1827,7 @@ function FichaCliente({
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
   onAddBudget: (orcamento: OrcamentoInput) => Promise<Orcamento>
   onOpenFullProfile: () => void
+  onOpenBudgetEditor: () => void
 }) {
   const [showForm, setShowForm] = useState(false)
   const [showEditForm, setShowEditForm] = useState(false)
@@ -1972,7 +2005,7 @@ function FichaCliente({
         >
           <Phone size={16} /> Contato
         </button>
-        <button className="button" type="button" onClick={() => setShowBudgetForm((current) => !current)}>
+        <button className="button" type="button" onClick={onOpenBudgetEditor}>
           <WalletCards size={16} /> Orcamento
         </button>
         <button className="button" type="button" onClick={onOpenFullProfile}>
@@ -2345,6 +2378,205 @@ function FichaCliente({
       </div>
     </aside>
   )
+}
+
+function OrcamentoEditor({
+  cliente,
+  catalogo,
+  onBack,
+  onCreate,
+}: {
+  cliente: Cliente
+  catalogo: CatalogoItem[]
+  onBack: () => void
+  onCreate: (orcamento: OrcamentoInput) => Promise<Orcamento>
+}) {
+  const [validade, setValidade] = useState(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10))
+  const [previsaoFechamento, setPrevisaoFechamento] = useState('')
+  const [paymentMode, setPaymentMode] = useState('A vista')
+  const [customPayment, setCustomPayment] = useState('')
+  const [observacao, setObservacao] = useState('')
+  const [catalogSearch, setCatalogSearch] = useState('')
+  const [items, setItems] = useState<OrcamentoItemInput[]>([
+    { descricao: '', tipo: 'produto', quantidade: 1, valorUnitario: 0, descontoPercentual: 0 },
+  ])
+  const [isSaving, setIsSaving] = useState(false)
+  const [feedback, setFeedback] = useState('')
+  const [error, setError] = useState('')
+
+  const filteredCatalog = catalogo
+    .filter((item) => {
+      const term = catalogSearch.trim().toLowerCase()
+      if (!term) return true
+      return `${item.codigo} ${item.descricao} ${item.tipo} ${item.grupo ?? ''} ${item.marca ?? ''}`.toLowerCase().includes(term)
+    })
+    .slice(0, 120)
+  const validItems = items
+    .filter((item) => item.descricao.trim() && item.quantidade > 0 && item.valorUnitario > 0)
+    .map((item) => ({ ...item, valorTotal: quoteItemTotal(item) }))
+  const total = validItems.reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
+  const formaPagamento = paymentMode === 'Personalizado' ? customPayment : paymentMode
+  const quoteMessage = buildQuoteMessage(cliente, validItems, validade, formaPagamento, observacao)
+  const waUrl = cliente.whatsapp && validItems.length > 0
+    ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(quoteMessage)}`
+    : undefined
+  const paymentOptions = ['A vista', '30 dias', '30/60 dias', '30/60/90 dias', 'Cartao', 'Personalizado']
+
+  function updateItem(index: number, patch: Partial<OrcamentoItemInput>) {
+    setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item))
+  }
+
+  function applyCatalogItem(index: number, catalogoItemId: string) {
+    const selected = catalogo.find((item) => item.id === catalogoItemId)
+    if (!selected) {
+      updateItem(index, { catalogoItemId: undefined, codigo: undefined })
+      return
+    }
+    updateItem(index, {
+      catalogoItemId: selected.id,
+      codigo: selected.codigo,
+      tipo: selected.tipo,
+      descricao: selected.descricao,
+      valorUnitario: selected.preco,
+      descontoPercentual: 0,
+    })
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (validItems.length === 0 || total <= 0) {
+      setError('Adicione pelo menos um item com valor para criar a proposta.')
+      return
+    }
+    setIsSaving(true)
+    setError('')
+    setFeedback('')
+    try {
+      const created = await onCreate({
+        clienteId: cliente.id,
+        vendedorId: cliente.vendedorId ?? 'u-1',
+        valorTotal: total,
+        validade,
+        previsaoFechamento: previsaoFechamento || undefined,
+        formaPagamento,
+        observacao,
+        itens: validItems,
+      })
+      setFeedback(`Orcamento ${created.id.slice(0, 8)} criado com total de ${money(created.valorTotal)}.`)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel criar o orcamento.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <section className="panel wide quote-editor">
+      <div className="panel-header">
+        <div>
+          <h2>Proposta para {cliente.nome}</h2>
+          <p>{cliente.cidade}/{cliente.uf} - {cliente.whatsapp ?? 'sem WhatsApp'} - {origemLabel(cliente.origemBase)}</p>
+        </div>
+        <div className="toolbar-actions">
+          <button className="button" type="button" onClick={onBack}>Voltar</button>
+          <a className={!waUrl ? 'button disabled' : 'button'} href={waUrl} target="_blank" rel="noreferrer">
+            <MessageCircle size={16} /> Abrir WA.ME
+          </a>
+        </div>
+      </div>
+      {error && <div className="alert">{error}</div>}
+      {feedback && <div className="readiness ok">{feedback}</div>}
+      <form className="quote-layout" onSubmit={submit}>
+        <section className="quote-main">
+          <div className="quote-controls">
+            <label>
+              Validade
+              <input type="date" value={validade} onChange={(event) => setValidade(event.target.value)} required />
+            </label>
+            <label>
+              Prev. fechamento
+              <input type="date" value={previsaoFechamento} onChange={(event) => setPrevisaoFechamento(event.target.value)} />
+            </label>
+            <label>
+              Condicao
+              <select value={paymentMode} onChange={(event) => setPaymentMode(event.target.value)}>
+                {paymentOptions.map((option) => <option key={option}>{option}</option>)}
+              </select>
+            </label>
+            {paymentMode === 'Personalizado' && (
+              <label>
+                Condicao personalizada
+                <input value={customPayment} onChange={(event) => setCustomPayment(event.target.value)} placeholder="Ex.: 20/40/60 com entrada" />
+              </label>
+            )}
+          </div>
+          <label className="quote-search">
+            Buscar catalogo
+            <input value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Codigo, medida, produto, servico ou marca" />
+          </label>
+          <div className="quote-items">
+            <div className="quote-item-head">
+              <span>Catalogo</span>
+              <span>Descricao</span>
+              <span>Qtd.</span>
+              <span>Unitario</span>
+              <span>Desc.</span>
+              <span>Total</span>
+            </div>
+            {items.map((item, index) => (
+              <div className="quote-item-row" key={index}>
+                <select value={item.catalogoItemId ?? ''} onChange={(event) => applyCatalogItem(index, event.target.value)}>
+                  <option value="">Selecionar</option>
+                  {filteredCatalog.map((catalogItem) => (
+                    <option key={catalogItem.id} value={catalogItem.id}>
+                      {catalogItem.tipo} | {catalogItem.codigo} | {catalogItem.descricao} | {money(catalogItem.preco)}
+                    </option>
+                  ))}
+                </select>
+                <input value={item.descricao} onChange={(event) => updateItem(index, { descricao: event.target.value })} placeholder="Descricao" />
+                <input type="number" min="0" step="0.01" value={item.quantidade} onChange={(event) => updateItem(index, { quantidade: Number(event.target.value) })} />
+                <input type="number" min="0" step="0.01" value={item.valorUnitario} onChange={(event) => updateItem(index, { valorUnitario: Number(event.target.value) })} />
+                <input type="number" min="0" max="100" step="0.01" value={item.descontoPercentual ?? 0} onChange={(event) => updateItem(index, { descontoPercentual: Number(event.target.value) })} />
+                <strong>{money(quoteItemTotal(item))}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="quote-actions">
+            <button className="button" type="button" onClick={() => setItems((current) => [...current, { descricao: '', tipo: 'produto', quantidade: 1, valorUnitario: 0, descontoPercentual: 0 }])}>
+              Adicionar item
+            </button>
+            <button className="button" type="button" disabled={items.length <= 1} onClick={() => setItems((current) => current.slice(0, -1))}>
+              Remover ultima linha
+            </button>
+          </div>
+          <label className="quote-observation">
+            Observacoes e termos
+            <textarea value={observacao} onChange={(event) => setObservacao(event.target.value)} placeholder="Prazos, disponibilidade, condicoes comerciais e observacoes para o cliente." />
+          </label>
+        </section>
+        <aside className="quote-summary-panel">
+          <div className="info-grid quote-kpis">
+            <Info label="Itens validos" value={validItems.length.toString()} />
+            <Info label="Total" value={money(total)} />
+            <Info label="Catalogo" value={catalogo.length.toString()} />
+            <Info label="Validade" value={dateLabel(validade)} />
+          </div>
+          <label>
+            Mensagem WhatsApp
+            <textarea readOnly value={quoteMessage} />
+          </label>
+          <button className="button primary" type="submit" disabled={isSaving}>
+            {isSaving ? 'Criando...' : 'Criar orcamento'}
+          </button>
+        </aside>
+      </form>
+    </section>
+  )
+}
+
+function quoteItemTotal(item: OrcamentoItemInput) {
+  const discount = Math.min(Math.max(item.descontoPercentual ?? 0, 0), 100)
+  return item.quantidade * item.valorUnitario * (1 - discount / 100)
 }
 
 function buildQuoteMessage(

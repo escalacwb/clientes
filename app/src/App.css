@@ -887,6 +887,96 @@ h3 {
   background: #fff7f6;
 }
 
+.quote-editor {
+  display: grid;
+  gap: 16px;
+}
+
+.quote-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.34fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.quote-main,
+.quote-summary-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.quote-controls {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.quote-controls label,
+.quote-search,
+.quote-observation,
+.quote-summary-panel label {
+  display: grid;
+  gap: 6px;
+  color: #52625d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.quote-controls input,
+.quote-controls select,
+.quote-search input,
+.quote-observation textarea,
+.quote-summary-panel textarea,
+.quote-item-row input,
+.quote-item-row select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #cfd8d3;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1b1f23;
+  padding: 9px 10px;
+}
+
+.quote-observation textarea,
+.quote-summary-panel textarea {
+  min-height: 170px;
+  resize: vertical;
+}
+
+.quote-items {
+  display: grid;
+  gap: 8px;
+}
+
+.quote-item-head,
+.quote-item-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) minmax(180px, 1fr) 72px 104px 80px 104px;
+  gap: 8px;
+  align-items: center;
+}
+
+.quote-item-head {
+  color: #64736f;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.quote-item-row strong {
+  color: #12312f;
+}
+
+.quote-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.quote-kpis {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .button.primary {
   background: #12312f;
   color: #ffffff;
@@ -1524,6 +1614,14 @@ h3 {
   }
 
   .budget-item-row {
+    grid-template-columns: 1fr;
+  }
+
+  .quote-layout,
+  .quote-controls,
+  .quote-item-head,
+  .quote-item-row,
+  .quote-kpis {
     grid-template-columns: 1fr;
   }
 
