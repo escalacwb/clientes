@@ -530,6 +530,23 @@ Proximo passo tecnico:
 - Trocar campo livre de produto/servico por seletor assistido do catalogo.
 - Adicionar relatorio de campanha com totais globais, respostas, orcamentos e conversao.
 
+### 2026-05-28 - Relatorio global de campanhas
+
+Status: concluido.
+
+Entregue:
+- Campanhas salvas exibem resumo global, separado da pagina atual de contatos.
+- Resumo mostra alcance, enviados, respostas, orcamentos e taxa de conversao.
+- Historico mostra as campanhas recentes com envios, respostas, orcamentos e conversao.
+- Ao marcar envio/resposta/orcamento, o resumo e atualizado novamente pelo Supabase.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Relacionar campanha com orcamentos reais criados, para medir receita atribuida.
+- Adicionar status `ganhou/perdeu/nao_contatar` na fila de campanha.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

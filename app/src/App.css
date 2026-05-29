@@ -1316,6 +1316,80 @@ h3 {
   margin-bottom: 14px;
 }
 
+.campaign-report {
+  border: 1px solid #e0e6df;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+
+.campaign-report-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.campaign-report-header strong,
+.campaign-report-header small {
+  display: block;
+}
+
+.campaign-report-header small {
+  color: #64736f;
+  margin-top: 3px;
+}
+
+.campaign-report-header > span {
+  border-radius: 999px;
+  background: #12312f;
+  color: #ffffff;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.campaign-history {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.campaign-history-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #e0e6df;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1d2a27;
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.campaign-history-item.active {
+  border-color: #12312f;
+  background: #eff8f3;
+}
+
+.campaign-history-item span {
+  display: grid;
+  gap: 2px;
+}
+
+.campaign-history-item small {
+  color: #64736f;
+}
+
+.campaign-history-item b {
+  color: #0f766e;
+}
+
 .campaign-summary {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 14px;

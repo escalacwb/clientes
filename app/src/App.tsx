@@ -55,9 +55,11 @@ import {
   campanhaSegmentos,
   createCampanhaSalva,
   listCampanhaSegmento,
+  listCampanhasResumo,
   listCampanhasSalvas,
   upsertCampanhaEnvio,
   type CampanhaPublicoFiltros,
+  type CampanhaResumo,
   type CampanhaSalva,
   type CampanhaSegmentoId,
 } from './repositories/campanhasRepository'
@@ -3674,6 +3676,7 @@ function Campanhas({
   const [query, setQuery] = useState('')
   const [mensagemModelo, setMensagemModelo] = useState(campanhaSegmentos[0].template)
   const [campanhasSalvas, setCampanhasSalvas] = useState<CampanhaSalva[]>([])
+  const [campanhasResumo, setCampanhasResumo] = useState<CampanhaResumo[]>([])
   const [activeCampanhaId, setActiveCampanhaId] = useState('')
   const [saveName, setSaveName] = useState('')
   const [clientes, setClientes] = useState<Cliente[]>([])
@@ -3685,6 +3688,7 @@ function Campanhas({
   const [statusFilter, setStatusFilter] = useState<CampanhaEnvioStatus | 'todos'>('todos')
   const [campaignError, setCampaignError] = useState('')
   const segmento = campanhaSegmentos.find((item) => item.id === segmentoId) ?? campanhaSegmentos[0]
+  const activeCampaignResumo = campanhasResumo.find((resumo) => resumo.campanhaId === activeCampanhaId)
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const campanhaClientes = clientes
   const nextClient = campanhaClientes
@@ -3729,10 +3733,21 @@ function Campanhas({
   }, [segmentoId, page, query, publicoFiltros, activeCampanhaId, campanhasSalvas])
 
   useEffect(() => {
-    listCampanhasSalvas()
-      .then(setCampanhasSalvas)
+    Promise.all([listCampanhasSalvas(), listCampanhasResumo()])
+      .then(([salvas, resumos]) => {
+        setCampanhasSalvas(salvas)
+        setCampanhasResumo(resumos)
+      })
       .catch((exception) => setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar campanhas salvas.'))
   }, [])
+
+  async function refreshCampaignResumo() {
+    try {
+      setCampanhasResumo(await listCampanhasResumo())
+    } catch (exception) {
+      setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o resumo da campanha.')
+    }
+  }
 
   function changeSegment(nextSegmentoId: CampanhaSegmentoId) {
     const nextSegmento = campanhaSegmentos.find((item) => item.id === nextSegmentoId) ?? campanhaSegmentos[0]
@@ -3801,6 +3816,7 @@ function Campanhas({
       })
       setCampanhasSalvas((current) => [created, ...current.filter((campanha) => campanha.id !== created.id)])
       setActiveCampanhaId(created.id)
+      await refreshCampaignResumo()
     } catch (exception) {
       setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel salvar a campanha.')
     } finally {
@@ -3841,6 +3857,7 @@ function Campanhas({
         })
       }
       setStatuses((current) => ({ ...current, [cliente.id]: status }))
+      await refreshCampaignResumo()
     } catch (exception) {
       setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o envio.')
     }
@@ -3963,6 +3980,21 @@ function Campanhas({
           {isSaving ? 'Salvando...' : 'Salvar campanha'}
         </button>
       </div>
+      <div className="campaign-report">
+        <div className="campaign-report-header">
+          <div>
+            <strong>{activeCampaignResumo ? activeCampaignResumo.nome : 'Resumo da pagina atual'}</strong>
+            <small>{activeCampaignResumo ? `Criada em ${dateLabel(activeCampaignResumo.criadaEm)}` : 'Salve ou selecione uma campanha para ver o resultado global.'}</small>
+          </div>
+          {activeCampaignResumo && <span>{conversionRate(activeCampaignResumo.viraramOrcamento, activeCampaignResumo.total)}% conversao</span>}
+        </div>
+        <div className="info-grid campaign-summary">
+          <Info label="Alcance" value={(activeCampaignResumo?.total ?? campanhaClientes.length).toString()} />
+          <Info label="Enviados" value={(activeCampaignResumo?.enviados ?? campaignCounts.enviado).toString()} />
+          <Info label="Responderam" value={(activeCampaignResumo?.responderam ?? campaignCounts.respondeu).toString()} />
+          <Info label="Orcamentos" value={(activeCampaignResumo?.viraramOrcamento ?? campaignCounts.virou_orcamento).toString()} />
+        </div>
+      </div>
       {nextClient && (
         <div className="next-campaign-target">
           <span>
@@ -3980,11 +4012,21 @@ function Campanhas({
           </a>
         </div>
       )}
-      <div className="info-grid campaign-summary">
-        <Info label="Pendentes" value={campaignCounts.pendente.toString()} />
-        <Info label="Enviados" value={campaignCounts.enviado.toString()} />
-        <Info label="Responderam" value={campaignCounts.respondeu.toString()} />
-        <Info label="Orcamentos" value={campaignCounts.virou_orcamento.toString()} />
+      <div className="campaign-history">
+        {campanhasResumo.slice(0, 5).map((resumo) => (
+          <button
+            className={resumo.campanhaId === activeCampanhaId ? 'campaign-history-item active' : 'campaign-history-item'}
+            key={resumo.campanhaId}
+            onClick={() => applySavedCampaign(resumo.campanhaId)}
+            type="button"
+          >
+            <span>
+              <strong>{resumo.nome}</strong>
+              <small>{resumo.total} envios · {resumo.responderam} respostas · {resumo.viraramOrcamento} orcamentos</small>
+            </span>
+            <b>{conversionRate(resumo.viraramOrcamento, resumo.total)}%</b>
+          </button>
+        ))}
       </div>
       {campaignError && <div className="alert">{campaignError}</div>}
       {isLoading && <div className="empty-state">Carregando segmento de campanha...</div>}
@@ -4058,6 +4100,11 @@ function campaignSummary(status: CampanhaEnvioStatus, mensagem: string) {
     virou_orcamento: 'Campanha virou oportunidade de orcamento.',
   }
   return `${labels[status]} Mensagem: ${mensagem}`
+}
+
+function conversionRate(conversions: number, total: number) {
+  if (!total) return 0
+  return Math.round((conversions / total) * 100)
 }
 
 function Orcamentos({

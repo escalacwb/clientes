@@ -36,6 +36,19 @@ export type CampanhaSalva = {
   criadaEm: string
 }
 
+export type CampanhaResumo = {
+  campanhaId: string
+  nome: string
+  criadaEm: string
+  total: number
+  pendentes: number
+  enviados: number
+  responderam: number
+  semResposta: number
+  viraramOrcamento: number
+  viraramVenda: number
+}
+
 type CampanhaEnvioRow = {
   id: string
   campanha_id: string
@@ -58,6 +71,11 @@ type CampanhaRow = {
   mensagem_modelo: string
   filtro_usado: CampanhaFiltroUsado | null
   criada_em: string
+  campanha_envios?: Array<{
+    status: CampanhaEnvioStatus | string | null
+    virou_orcamento: boolean | null
+    virou_venda: boolean | null
+  }>
 }
 
 export const campanhaSegmentos: CampanhaSegmento[] = [
@@ -195,6 +213,23 @@ export async function createCampanhaSalva(input: {
 
   if (error) throw error
   return mapCampanha(data as CampanhaRow)
+}
+
+export async function listCampanhasResumo(): Promise<CampanhaResumo[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('campanhas')
+    .select('id,nome,criada_em,filtro_usado,campanha_envios(status,virou_orcamento,virou_venda)')
+    .order('criada_em', { ascending: false })
+    .limit(50)
+
+  if (error) throw error
+  return (data ?? [])
+    .map((row) => row as CampanhaRow)
+    .filter((campanha) => Boolean(campanha.filtro_usado?.segmentoId))
+    .map(mapCampanhaResumo)
 }
 
 async function findClientesByProdutoOuServico(term: string): Promise<string[]> {
@@ -384,5 +419,21 @@ function mapCampanha(row: CampanhaRow): CampanhaSalva {
     mensagemModelo: row.mensagem_modelo,
     filtroUsado,
     criadaEm: row.criada_em,
+  }
+}
+
+function mapCampanhaResumo(row: CampanhaRow): CampanhaResumo {
+  const envios = row.campanha_envios ?? []
+  return {
+    campanhaId: row.id,
+    nome: row.nome,
+    criadaEm: row.criada_em,
+    total: envios.length,
+    pendentes: envios.filter((envio) => envio.status === 'pendente').length,
+    enviados: envios.filter((envio) => envio.status === 'enviado').length,
+    responderam: envios.filter((envio) => envio.status === 'respondeu').length,
+    semResposta: envios.filter((envio) => envio.status === 'nao_respondeu').length,
+    viraramOrcamento: envios.filter((envio) => envio.status === 'virou_orcamento' || envio.virou_orcamento).length,
+    viraramVenda: envios.filter((envio) => envio.virou_venda).length,
   }
 }
