@@ -21,6 +21,21 @@ export type CampanhaPublicoFiltros = {
   produtoTerm?: string
 }
 
+export type CampanhaFiltroUsado = {
+  segmentoId: CampanhaSegmentoId
+  filtros?: CampanhaPublicoFiltros
+  query?: string
+}
+
+export type CampanhaSalva = {
+  id: string
+  nome: string
+  descricao?: string
+  mensagemModelo: string
+  filtroUsado: CampanhaFiltroUsado
+  criadaEm: string
+}
+
 type CampanhaEnvioRow = {
   id: string
   campanha_id: string
@@ -34,6 +49,15 @@ type CampanhaEnvioRow = {
   resposta_cliente: string | null
   virou_orcamento: boolean
   virou_venda: boolean
+}
+
+type CampanhaRow = {
+  id: string
+  nome: string
+  descricao: string | null
+  mensagem_modelo: string
+  filtro_usado: CampanhaFiltroUsado | null
+  criada_em: string
 }
 
 export const campanhaSegmentos: CampanhaSegmento[] = [
@@ -84,6 +108,8 @@ export async function listCampanhaSegmento(input: {
   pageSize: number
   query?: string
   filtros?: CampanhaPublicoFiltros
+  campanhaId?: string
+  campanhaNome?: string
 }): Promise<{ clientes: Cliente[]; total: number; statuses: Record<string, CampanhaEnvioStatus> }> {
   const segmento = campanhaSegmentos.find((item) => item.id === input.segmentoId) ?? campanhaSegmentos[0]
   const clienteIds = input.filtros?.produtoTerm?.trim()
@@ -114,8 +140,61 @@ export async function listCampanhaSegmento(input: {
 
   return {
     ...result,
-    statuses: await listCampanhaStatuses(segmento.campanhaNome, result.clientes.map((cliente) => cliente.id)),
+    statuses: input.campanhaId
+      ? await listCampanhaStatusesById(input.campanhaId, result.clientes.map((cliente) => cliente.id))
+      : await listCampanhaStatuses(input.campanhaNome ?? segmento.campanhaNome, result.clientes.map((cliente) => cliente.id)),
   }
+}
+
+export async function listCampanhasSalvas(): Promise<CampanhaSalva[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('campanhas')
+    .select('id,nome,descricao,mensagem_modelo,filtro_usado,criada_em')
+    .order('criada_em', { ascending: false })
+    .limit(50)
+
+  if (error) throw error
+  return (data ?? [])
+    .map(mapCampanha)
+    .filter((campanha) => Boolean(campanha.filtroUsado.segmentoId))
+}
+
+export async function createCampanhaSalva(input: {
+  nome: string
+  descricao?: string
+  mensagemModelo: string
+  filtroUsado: CampanhaFiltroUsado
+  criadaPor?: string
+}): Promise<CampanhaSalva> {
+  const supabase = await getSupabase()
+  if (!supabase) {
+    return {
+      id: `campanha-${Date.now()}`,
+      nome: input.nome,
+      descricao: input.descricao,
+      mensagemModelo: input.mensagemModelo,
+      filtroUsado: input.filtroUsado,
+      criadaEm: new Date().toISOString(),
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('campanhas')
+    .insert({
+      nome: input.nome,
+      descricao: input.descricao ?? 'Campanha salva pelo app web',
+      mensagem_modelo: input.mensagemModelo,
+      filtro_usado: input.filtroUsado,
+      criada_por: input.criadaPor ?? null,
+    })
+    .select('id,nome,descricao,mensagem_modelo,filtro_usado,criada_em')
+    .single()
+
+  if (error) throw error
+  return mapCampanha(data as CampanhaRow)
 }
 
 async function findClientesByProdutoOuServico(term: string): Promise<string[]> {
@@ -162,15 +241,24 @@ export async function listCampanhaStatuses(campanhaNome: string, clienteIds: str
     .from('campanhas')
     .select('id')
     .eq('nome', campanhaNome)
+    .limit(1)
     .maybeSingle()
 
   if (campanhaError) throw campanhaError
   if (!campanha?.id) return {}
 
+  return listCampanhaStatusesById(campanha.id as string, clienteIds)
+}
+
+export async function listCampanhaStatusesById(campanhaId: string, clienteIds: string[]): Promise<Record<string, CampanhaEnvioStatus>> {
+  if (clienteIds.length === 0) return {}
+  const supabase = await getSupabase()
+  if (!supabase) return {}
+
   const { data, error } = await supabase
     .from('campanha_envios')
     .select('cliente_id,status')
-    .eq('campanha_id', campanha.id)
+    .eq('campanha_id', campanhaId)
     .in('cliente_id', clienteIds)
 
   if (error) throw error
@@ -245,6 +333,7 @@ async function ensureCampanha(
     .from('campanhas')
     .select('id')
     .eq('nome', nome)
+    .limit(1)
     .maybeSingle()
 
   if (selectError) throw selectError
@@ -283,5 +372,17 @@ function mapEnvio(row: CampanhaEnvioRow): CampanhaEnvio {
     respostaCliente: row.resposta_cliente ?? undefined,
     virouOrcamento: row.virou_orcamento,
     virouVenda: row.virou_venda,
+  }
+}
+
+function mapCampanha(row: CampanhaRow): CampanhaSalva {
+  const filtroUsado = row.filtro_usado?.segmentoId ? row.filtro_usado : { segmentoId: 'inativos-90' as const }
+  return {
+    id: row.id,
+    nome: row.nome,
+    descricao: row.descricao ?? undefined,
+    mensagemModelo: row.mensagem_modelo,
+    filtroUsado,
+    criadaEm: row.criada_em,
   }
 }

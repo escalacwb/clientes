@@ -513,6 +513,23 @@ Proximo passo tecnico:
 - Permitir selecao assistida de varios produtos/servicos pelo catalogo, em vez de campo livre.
 - Criar relatorio de campanha com alcance, respostas, orcamentos, vendas e receita atribuida.
 
+### 2026-05-28 - Campanhas salvas reutilizaveis
+
+Status: concluido.
+
+Entregue:
+- Campanhas podem ser salvas com nome, filtros e mensagem modelo.
+- Tela permite reaplicar campanhas salvas sem remontar filtros manualmente.
+- Status dos envios passa a ser lido pelo ID da campanha salva, evitando conflito por nome duplicado.
+- Campanhas automaticas antigas nao entram como campanha salva quando nao possuem `segmentoId`.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Trocar campo livre de produto/servico por seletor assistido do catalogo.
+- Adicionar relatorio de campanha com totais globais, respostas, orcamentos e conversao.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

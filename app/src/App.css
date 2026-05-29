@@ -1282,6 +1282,40 @@ h3 {
   padding: 0 10px;
 }
 
+.campaign-message-editor {
+  display: grid;
+  gap: 6px;
+  color: #52625d;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.campaign-message-editor textarea {
+  width: 100%;
+  min-height: 82px;
+  resize: vertical;
+  border: 1px solid #cfd8d3;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #17211f;
+  line-height: 1.5;
+  padding: 10px;
+}
+
+.campaign-save-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #d7e5dc;
+  border-radius: 8px;
+  background: #eff8f3;
+  color: #33413d;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
 .campaign-summary {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 14px;
@@ -1714,6 +1748,11 @@ h3 {
 
   .budget-item-row {
     grid-template-columns: 1fr;
+  }
+
+  .campaign-save-bar {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .quote-layout,

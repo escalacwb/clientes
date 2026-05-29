@@ -53,9 +53,12 @@ import { getCurrentSession, signInWithPassword, signOut } from './repositories/a
 import { listClienteAlteracoes } from './repositories/auditoriaRepository'
 import {
   campanhaSegmentos,
+  createCampanhaSalva,
   listCampanhaSegmento,
+  listCampanhasSalvas,
   upsertCampanhaEnvio,
   type CampanhaPublicoFiltros,
+  type CampanhaSalva,
   type CampanhaSegmentoId,
 } from './repositories/campanhasRepository'
 import { listCatalogoItens } from './repositories/catalogoRepository'
@@ -871,6 +874,7 @@ function App() {
         {canUseScopedClientViews && view === 'campanhas' && (
           <Campanhas
             usuarios={usuarios}
+            currentUser={session}
             onAddInteraction={async (interacao) => {
               const created = await createInteracao(interacao)
               setInteracoes((current) => [created, ...current])
@@ -3655,10 +3659,12 @@ function Mesclagem({
 
 function Campanhas({
   usuarios,
+  currentUser,
   onAddInteraction,
   onAddTask,
 }: {
   usuarios: Vendedor[]
+  currentUser: SessaoUsuario
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
   onAddTask: (task: TarefaInput) => Promise<Tarefa>
 }) {
@@ -3666,9 +3672,14 @@ function Campanhas({
   const [segmentoId, setSegmentoId] = useState<CampanhaSegmentoId>('inativos-90')
   const [page, setPage] = useState(1)
   const [query, setQuery] = useState('')
+  const [mensagemModelo, setMensagemModelo] = useState(campanhaSegmentos[0].template)
+  const [campanhasSalvas, setCampanhasSalvas] = useState<CampanhaSalva[]>([])
+  const [activeCampanhaId, setActiveCampanhaId] = useState('')
+  const [saveName, setSaveName] = useState('')
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [total, setTotal] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
   const [publicoFiltros, setPublicoFiltros] = useState<CampanhaPublicoFiltros>({})
   const [statuses, setStatuses] = useState<Record<string, CampanhaEnvioStatus>>({})
   const [statusFilter, setStatusFilter] = useState<CampanhaEnvioStatus | 'todos'>('todos')
@@ -3694,7 +3705,7 @@ function Campanhas({
     setIsLoading(true)
     setCampaignError('')
 
-    listCampanhaSegmento({ segmentoId, page, pageSize, query, filtros: publicoFiltros })
+    listCampanhaSegmento({ segmentoId, page, pageSize, query, filtros: publicoFiltros, campanhaId: activeCampanhaId })
       .then((result) => {
         if (cancelled) return
         setClientes(result.clientes)
@@ -3715,10 +3726,19 @@ function Campanhas({
     return () => {
       cancelled = true
     }
-  }, [segmentoId, page, query, publicoFiltros])
+  }, [segmentoId, page, query, publicoFiltros, activeCampanhaId, campanhasSalvas])
+
+  useEffect(() => {
+    listCampanhasSalvas()
+      .then(setCampanhasSalvas)
+      .catch((exception) => setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar campanhas salvas.'))
+  }, [])
 
   function changeSegment(nextSegmentoId: CampanhaSegmentoId) {
+    const nextSegmento = campanhaSegmentos.find((item) => item.id === nextSegmentoId) ?? campanhaSegmentos[0]
     setSegmentoId(nextSegmentoId)
+    setMensagemModelo(nextSegmento.template)
+    setActiveCampanhaId('')
     setPage(1)
     setStatusFilter('todos')
   }
@@ -3730,15 +3750,62 @@ function Campanhas({
 
   function updatePublicoFiltro<K extends keyof CampanhaPublicoFiltros>(key: K, value: CampanhaPublicoFiltros[K]) {
     setPublicoFiltros((current) => ({ ...current, [key]: value || undefined }))
+    setActiveCampanhaId('')
+    setPage(1)
+    setStatusFilter('todos')
+  }
+
+  function applySavedCampaign(campanhaId: string) {
+    const campanha = campanhasSalvas.find((item) => item.id === campanhaId)
+    if (!campanha) {
+      setActiveCampanhaId('')
+      return
+    }
+    setActiveCampanhaId(campanha.id)
+    setSegmentoId(campanha.filtroUsado.segmentoId)
+    setPublicoFiltros(campanha.filtroUsado.filtros ?? {})
+    setQuery(campanha.filtroUsado.query ?? '')
+    setMensagemModelo(campanha.mensagemModelo)
+    setSaveName(campanha.nome)
     setPage(1)
     setStatusFilter('todos')
   }
 
   function messageFor(cliente: Cliente) {
     const primeiroNome = (cliente.responsavel || cliente.nome).split(' ')[0]
-    return segmento.template
+    return mensagemModelo
       .replace('{primeiro_nome}', primeiroNome)
       .replace('{nome_vendedor}', cliente.vendedorNome || 'Capital Truck Center')
+  }
+
+  async function saveCurrentCampaign() {
+    const nome = saveName.trim()
+    if (!nome) {
+      setCampaignError('Informe um nome para salvar a campanha.')
+      return
+    }
+
+    setIsSaving(true)
+    setCampaignError('')
+    try {
+      const created = await createCampanhaSalva({
+        nome,
+        descricao: segmento.descricao,
+        mensagemModelo,
+        filtroUsado: {
+          segmentoId,
+          filtros: publicoFiltros,
+          query,
+        },
+        criadaPor: currentUser.id,
+      })
+      setCampanhasSalvas((current) => [created, ...current.filter((campanha) => campanha.id !== created.id)])
+      setActiveCampanhaId(created.id)
+    } catch (exception) {
+      setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel salvar a campanha.')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   async function markStatus(cliente: Cliente, status: CampanhaEnvioStatus, mensagemFinal: string) {
@@ -3746,8 +3813,8 @@ function Campanhas({
 
     try {
       await upsertCampanhaEnvio({
-        campanhaId: segmento.campanhaId,
-        campanhaNome: segmento.campanhaNome,
+        campanhaId: activeCampanhaId || segmento.campanhaId,
+        campanhaNome: activeCampanhaId ? saveName || segmento.campanhaNome : segmento.campanhaNome,
         clienteId: cliente.id,
         vendedorId: cliente.vendedorId,
         telefone: cliente.whatsapp,
@@ -3788,6 +3855,15 @@ function Campanhas({
         </div>
         <div className="toolbar-actions">
           <label className="mini-select">
+            <ClipboardList size={15} />
+            <select value={activeCampanhaId} onChange={(event) => applySavedCampaign(event.target.value)}>
+              <option value="">Campanha nova</option>
+              {campanhasSalvas.map((campanha) => (
+                <option value={campanha.id} key={campanha.id}>{campanha.nome}</option>
+              ))}
+            </select>
+          </label>
+          <label className="mini-select">
             <Filter size={15} />
             <select value={segmentoId} onChange={(event) => changeSegment(event.target.value as CampanhaSegmentoId)}>
               {campanhaSegmentos.map((item) => (
@@ -3823,6 +3899,17 @@ function Campanhas({
       </div>
       <div className="campaign-filter-grid">
         <label>
+          Nome da campanha
+          <input
+            value={saveName}
+            onChange={(event) => {
+              setSaveName(event.target.value)
+              setActiveCampanhaId('')
+            }}
+            placeholder="Ex.: Michelin Curitiba - maio"
+          />
+        </label>
+        <label>
           Cidade
           <input
             value={publicoFiltros.cidade ?? ''}
@@ -3855,12 +3942,26 @@ function Campanhas({
           <input
             value={publicoFiltros.produtoTerm ?? ''}
             onChange={(event) => updatePublicoFiltro('produtoTerm', event.target.value)}
-            placeholder="Ex.: 295/80, Michelin, alinhamento"
+            placeholder="Ex.: 295/80; Michelin; alinhamento"
           />
         </label>
       </div>
-      <div className="message-template">
-        {segmento.template}
+      <label className="campaign-message-editor">
+        Mensagem da campanha
+        <textarea
+          value={mensagemModelo}
+          onChange={(event) => {
+            setMensagemModelo(event.target.value)
+            setActiveCampanhaId('')
+          }}
+          rows={3}
+        />
+      </label>
+      <div className="campaign-save-bar">
+        <span>{activeCampanhaId ? 'Campanha salva selecionada.' : 'Ajuste filtros e mensagem antes de salvar para reutilizar.'}</span>
+        <button className="button primary" disabled={isSaving} onClick={saveCurrentCampaign} type="button">
+          {isSaving ? 'Salvando...' : 'Salvar campanha'}
+        </button>
       </div>
       {nextClient && (
         <div className="next-campaign-target">
