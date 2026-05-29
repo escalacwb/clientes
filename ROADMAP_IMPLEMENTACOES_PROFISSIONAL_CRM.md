@@ -1303,6 +1303,24 @@ Validacao:
 Proximo passo tecnico:
 - Criar campanhas salvas diretamente a partir de uma selecao feita em Oportunidades/Rodobens, preservando o segmento e evitando duplicidade por cliente.
 
+### 2026-05-29 - Deduplicacao de interacoes de campanha
+
+Status: concluido.
+
+Entregue:
+- Criado indice unico `interacoes_campanha_cliente_resultado_idx` para impedir evento repetido por cliente/campanha/status.
+- `InteracaoInput` passou a aceitar `campanhaId` e `orcamentoId`.
+- Acoes de campanha agora registram a interacao vinculada ao ID real da campanha.
+- `createInteracao` reaproveita interacao de campanha existente quando o mesmo status ja foi registrado, evitando timeline poluida em reprocessamento de lote.
+
+Validacao:
+- SQL aplicado com `node scripts/run-sql-file.mjs supabase/queries/interacoes_campanha_deduplicacao.sql`.
+- Consulta direta confirmou o indice no banco.
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Criar campanhas salvas diretamente a partir de uma selecao feita em Oportunidades/Rodobens, preservando o segmento e evitando duplicidade por cliente.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

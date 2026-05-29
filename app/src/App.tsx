@@ -5704,7 +5704,7 @@ function Campanhas({
     setCampaignError('')
 
     try {
-      await upsertCampanhaEnvio({
+      const envio = await upsertCampanhaEnvio({
         campanhaId: activeCampanhaId || segmento.campanhaId,
         campanhaNome: activeCampanhaId ? saveName || segmento.campanhaNome : segmento.campanhaNome,
         clienteId: cliente.id,
@@ -5720,6 +5720,7 @@ function Campanhas({
         tipo: 'campanha',
         resumo: campaignSummary(status, mensagemFinal),
         resultado: status,
+        campanhaId: envio.campanhaId,
       })
       if (status === 'virou_orcamento') {
         await onAddTask({

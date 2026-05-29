@@ -13,6 +13,8 @@ type InteracaoRow = {
   resultado: string
   proxima_acao: string | null
   data_proxima_acao: string | null
+  campanha_id: string | null
+  orcamento_id: string | null
 }
 
 export async function listInteracoes(limit = 200): Promise<Interacao[]> {
@@ -40,6 +42,11 @@ export async function createInteracao(input: InteracaoInput): Promise<Interacao>
     }
   }
 
+  if (input.campanhaId && input.canal === 'Campanha') {
+    const existing = await findCampanhaInteracao(input)
+    if (existing) return existing
+  }
+
   const { data, error } = await supabase
     .from('interacoes')
     .insert({
@@ -52,13 +59,39 @@ export async function createInteracao(input: InteracaoInput): Promise<Interacao>
       resultado: input.resultado,
       proxima_acao: input.proximaAcao ?? null,
       data_proxima_acao: input.dataProximaAcao ?? null,
+      campanha_id: input.campanhaId ?? null,
+      orcamento_id: input.orcamentoId ?? null,
     })
     .select('*')
     .single()
 
-  if (error) throw error
+  if (error) {
+    if (error.code === '23505' && input.campanhaId && input.canal === 'Campanha') {
+      const existing = await findCampanhaInteracao(input)
+      if (existing) return existing
+    }
+    throw error
+  }
 
   return mapInteracao(data as InteracaoRow)
+}
+
+async function findCampanhaInteracao(input: InteracaoInput): Promise<Interacao | null> {
+  const supabase = await getSupabase()
+  if (!supabase || !input.campanhaId) return null
+
+  const { data, error } = await supabase
+    .from('interacoes')
+    .select('*')
+    .eq('cliente_id', input.clienteId)
+    .eq('campanha_id', input.campanhaId)
+    .eq('canal', 'Campanha')
+    .eq('resultado', input.resultado)
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw error
+  return data ? mapInteracao(data as InteracaoRow) : null
 }
 
 function mapInteracao(row: InteracaoRow): Interacao {
@@ -73,5 +106,7 @@ function mapInteracao(row: InteracaoRow): Interacao {
     resultado: row.resultado,
     proximaAcao: row.proxima_acao ?? undefined,
     dataProximaAcao: row.data_proxima_acao ?? undefined,
+    campanhaId: row.campanha_id ?? undefined,
+    orcamentoId: row.orcamento_id ?? undefined,
   }
 }

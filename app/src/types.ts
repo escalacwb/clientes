@@ -75,6 +75,8 @@ export type Interacao = {
   resultado: string
   proximaAcao?: string
   dataProximaAcao?: string
+  campanhaId?: string
+  orcamentoId?: string
 }
 
 export type InteracaoInput = Omit<Interacao, 'id' | 'data'> & {

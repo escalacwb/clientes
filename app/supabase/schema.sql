@@ -472,6 +472,9 @@ create index clientes_ultima_compra_idx on public.clientes(ultima_compra_em desc
 create index vendas_cliente_data_idx on public.vendas_itens(cliente_id, data_venda desc);
 create index servicos_cliente_data_idx on public.servicos_itens(cliente_id, data_servico desc);
 create index interacoes_cliente_data_idx on public.interacoes(cliente_id, data_interacao desc);
+create unique index if not exists interacoes_campanha_cliente_resultado_idx
+on public.interacoes (cliente_id, campanha_id, resultado)
+where canal = 'Campanha' and campanha_id is not null;
 create index tarefas_vendedor_vencimento_idx on public.tarefas(vendedor_id, data_vencimento);
 create unique index if not exists tarefas_abertas_cliente_origem_idx
 on public.tarefas (cliente_id, origem)
