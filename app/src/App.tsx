@@ -4402,7 +4402,15 @@ function FichaCliente({
       return { ...item, valorTotal }
     })
   const budgetTotal = validBudgetItems.reduce((total, item) => total + (item.valorTotal ?? 0), 0)
-  const quoteMessage = buildQuoteMessage(cliente, validBudgetItems, budgetForm.validade, budgetForm.formaPagamento, budgetForm.observacao)
+  const quoteMessage = buildQuoteMessage(
+    cliente,
+    validBudgetItems,
+    budgetForm.validade,
+    budgetForm.observacao,
+    budgetForm.formaPagamento
+      ? [{ id: budgetForm.formaPagamento, label: budgetForm.formaPagamento, adjustment: 0, total: budgetTotal }]
+      : [],
+  )
   const quoteWhatsUrl = cliente.whatsapp && validBudgetItems.length > 0
     ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(quoteMessage)}`
     : undefined
@@ -4904,17 +4912,33 @@ function OrcamentoEditor({
   onCreateTask: (task: TarefaInput) => Promise<Tarefa>
   onCreate: (orcamento: OrcamentoInput) => Promise<Orcamento>
 }) {
-  const [validade, setValidade] = useState(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10))
+  const [validade, setValidade] = useState(() => new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10))
   const [previsaoFechamento, setPrevisaoFechamento] = useState('')
   const [paymentMode, setPaymentMode] = useState('A vista')
   const [customPayment, setCustomPayment] = useState('')
   const [paymentAdjustments, setPaymentAdjustments] = useState<Record<string, number>>({
     'A vista': -3,
-    '30 dias': 0,
-    '30/60 dias': 2,
-    '30/60/90 dias': 4,
-    Cartao: 5,
+    '30 dias': 3,
+    '30/60 dias': 4.5,
+    '30/60/90 dias': 6,
+    '60 dias': 6,
+    '90 dias': 9,
+    '120 dias': 12,
+    cartao: 1,
+    custom1: 0,
+    custom2: 0,
   })
+  const [enabledPaymentConditions, setEnabledPaymentConditions] = useState<Record<string, boolean>>({
+    'A vista': true,
+    '30 dias': true,
+    '30/60 dias': true,
+    cartao: false,
+    custom1: false,
+    custom2: false,
+  })
+  const [cardInstallments, setCardInstallments] = useState(3)
+  const [customCondition1, setCustomCondition1] = useState('')
+  const [customCondition2, setCustomCondition2] = useState('')
   const [observacao, setObservacao] = useState('')
   const [catalogSearch, setCatalogSearch] = useState('')
   const [items, setItems] = useState<OrcamentoItemInput[]>(() =>
@@ -4942,9 +4966,17 @@ function OrcamentoEditor({
     .map((item) => ({ ...item, valorTotal: quoteItemTotal(item) }))
   const total = validItems.reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
   const formaPagamento = paymentMode === 'Personalizado' ? customPayment : paymentMode
-  const paymentScenarios = quotePaymentScenarios(total, paymentAdjustments)
+  const paymentConditionDrafts = quoteConditionDrafts(total, paymentAdjustments, enabledPaymentConditions, cardInstallments, customCondition1, customCondition2)
+  const paymentScenarios = paymentConditionDrafts.filter((scenario) => {
+    if (!scenario.enabled) return false
+    if ((scenario.id === 'custom1' || scenario.id === 'custom2') && scenario.label.startsWith('Condicao personalizada')) return false
+    return true
+  })
   const approvalWarnings = quoteApprovalWarnings(validItems, catalogo, regrasDesconto)
-  const quoteMessage = buildQuoteMessage(cliente, validItems, validade, formaPagamento, observacao, paymentScenarios)
+  const generatedQuoteMessage = buildQuoteMessage(cliente, validItems, validade, observacao, paymentScenarios)
+  const [manualQuoteMessage, setManualQuoteMessage] = useState('')
+  const [isQuoteMessageEdited, setIsQuoteMessageEdited] = useState(false)
+  const quoteMessage = isQuoteMessageEdited ? manualQuoteMessage : generatedQuoteMessage
   const waUrl = cliente.whatsapp && validItems.length > 0
     ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(quoteMessage)}`
     : undefined
@@ -4952,6 +4984,10 @@ function OrcamentoEditor({
 
   function updateItem(index: number, patch: Partial<OrcamentoItemInput>) {
     setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item))
+  }
+
+  function togglePaymentCondition(id: string, enabled: boolean) {
+    setEnabledPaymentConditions((current) => ({ ...current, [id]: enabled }))
   }
 
   async function loadCatalogSuggestions(catalogoItemId: string) {
@@ -5117,6 +5153,7 @@ function OrcamentoEditor({
               <span>Qtd.</span>
               <span>Unitario</span>
               <span>Desc.</span>
+              <span>Grupo/uso</span>
               <span>Total</span>
             </div>
             {items.map((item, index) => (
@@ -5133,6 +5170,7 @@ function OrcamentoEditor({
                 <input type="number" min="0" step="0.01" value={item.quantidade} onChange={(event) => updateItem(index, { quantidade: Number(event.target.value) })} />
                 <input type="number" min="0" step="0.01" value={item.valorUnitario} onChange={(event) => updateItem(index, { valorUnitario: Number(event.target.value) })} />
                 <input type="number" min="0" max="100" step="0.01" value={item.descontoPercentual ?? 0} onChange={(event) => updateItem(index, { descontoPercentual: Number(event.target.value) })} />
+                <input value={item.observacao ?? ''} onChange={(event) => updateItem(index, { observacao: event.target.value })} placeholder="Ex.: Opcao pneu direcional" />
                 <strong>{money(quoteItemTotal(item))}</strong>
               </div>
             ))}
@@ -5173,19 +5211,34 @@ function OrcamentoEditor({
           </label>
           <div className="quote-payment-scenarios">
             <div>
-              <strong>Condicoes comparativas</strong>
-              <small>Percentual positivo acresce no total; negativo aplica desconto.</small>
+              <strong>Condicoes para enviar</strong>
+              <small>Selecione apenas as condicoes que devem aparecer na mensagem. A vista inicia com -3%; prazos usam 3% a cada 30 dias de prazo medio.</small>
             </div>
-            {paymentScenarios.map((scenario) => (
-              <label key={scenario.label}>
-                <span>{scenario.label}</span>
+            {paymentConditionDrafts.map((scenario) => (
+              <label key={scenario.id} className="quote-condition-row">
+                <input
+                  type="checkbox"
+                  checked={scenario.enabled}
+                  onChange={(event) => togglePaymentCondition(scenario.id, event.target.checked)}
+                />
+                {scenario.id === 'custom1' || scenario.id === 'custom2' ? (
+                  <input
+                    value={scenario.id === 'custom1' ? customCondition1 : customCondition2}
+                    onChange={(event) => scenario.id === 'custom1' ? setCustomCondition1(event.target.value) : setCustomCondition2(event.target.value)}
+                    placeholder="Nome da condicao"
+                  />
+                ) : scenario.id === 'cartao' ? (
+                  <span>Cartao em <input className="inline-number" type="number" min="1" max="24" value={cardInstallments} onChange={(event) => setCardInstallments(Math.max(1, Number(event.target.value) || 1))} />x</span>
+                ) : (
+                  <span>{scenario.label}</span>
+                )}
                 <input
                   type="number"
                   step="0.1"
-                  value={paymentAdjustments[scenario.label] ?? 0}
+                  value={paymentAdjustments[scenario.id] ?? 0}
                   onChange={(event) => setPaymentAdjustments((current) => ({
                     ...current,
-                    [scenario.label]: Number(event.target.value),
+                    [scenario.id]: Number(event.target.value),
                   }))}
                 />
                 <strong>{money(scenario.total)}</strong>
@@ -5232,8 +5285,20 @@ function OrcamentoEditor({
           </div>
           <label>
             Mensagem WhatsApp
-            <textarea readOnly value={quoteMessage} />
+            <textarea
+              value={quoteMessage}
+              onChange={(event) => {
+                setIsQuoteMessageEdited(true)
+                setManualQuoteMessage(event.target.value)
+              }}
+            />
           </label>
+          <button className="button" type="button" onClick={() => {
+            setIsQuoteMessageEdited(false)
+            setManualQuoteMessage('')
+          }}>
+            Regerar mensagem
+          </button>
           <button className="button" type="button" onClick={copyMessage} disabled={validItems.length === 0}>
             Copiar mensagem
           </button>
@@ -5283,16 +5348,76 @@ function discountRuleSpecificity(regra: CatalogoRegraDesconto) {
   return [regra.codigo, regra.marca, regra.subgrupo, regra.grupo, regra.tipo].filter(Boolean).length
 }
 
-function quotePaymentScenarios(total: number, adjustments: Record<string, number>) {
+type QuoteConditionScenario = {
+  id: string
+  label: string
+  adjustment: number
+  total: number
+  enabled?: boolean
+}
+
+function quotePaymentScenarios(total: number, adjustments: Record<string, number>): QuoteConditionScenario[] {
   return Object.entries(adjustments).map(([label, adjustment]) => ({
+    id: label,
     label,
     adjustment,
     total: total * (1 + adjustment / 100),
   }))
 }
 
+function quoteConditionDrafts(
+  total: number,
+  adjustments: Record<string, number>,
+  enabled: Record<string, boolean>,
+  cardInstallments: number,
+  customCondition1: string,
+  customCondition2: string,
+): QuoteConditionScenario[] {
+  const base: QuoteConditionScenario[] = [
+    'A vista',
+    '30 dias',
+    '30/60 dias',
+    '30/60/90 dias',
+    '60 dias',
+    '90 dias',
+    '120 dias',
+  ].map((id) => ({
+    id,
+    label: id,
+    adjustment: adjustments[id] ?? 0,
+    total: total * (1 + (adjustments[id] ?? 0) / 100),
+    enabled: Boolean(enabled[id]),
+  }))
+
+  const cardAdjustment = cardInstallments * (adjustments.cartao ?? 1)
+  base.push({
+    id: 'cartao',
+    label: `Cartao ${cardInstallments}x`,
+    adjustment: cardAdjustment,
+    total: total * (1 + cardAdjustment / 100),
+    enabled: Boolean(enabled.cartao),
+  })
+
+  base.push({
+    id: 'custom1',
+    label: customCondition1.trim() || 'Condicao personalizada 1',
+    adjustment: adjustments.custom1 ?? 0,
+    total: total * (1 + (adjustments.custom1 ?? 0) / 100),
+    enabled: Boolean(enabled.custom1),
+  })
+  base.push({
+    id: 'custom2',
+    label: customCondition2.trim() || 'Condicao personalizada 2',
+    adjustment: adjustments.custom2 ?? 0,
+    total: total * (1 + (adjustments.custom2 ?? 0) / 100),
+    enabled: Boolean(enabled.custom2),
+  })
+
+  return base
+}
+
 function quoteConditionInputs(
-  scenarios: Array<{ label: string; adjustment: number; total: number }>,
+  scenarios: QuoteConditionScenario[],
 ): OrcamentoCondicaoInput[] {
   return scenarios.map((scenario, index) => ({
     label: scenario.label,
@@ -5308,6 +5433,7 @@ function quoteScenariosFromBudget(orcamento: Orcamento) {
     return [...orcamento.condicoes]
       .sort((a, b) => a.ordem - b.ordem)
       .map((condicao) => ({
+        id: condicao.label,
         label: condicao.label,
         adjustment: condicao.ajustePercentual,
         total: condicao.valorTotal,
@@ -5316,9 +5442,12 @@ function quoteScenariosFromBudget(orcamento: Orcamento) {
 
   return quotePaymentScenarios(orcamento.valorTotal, {
     'A vista': -3,
-    '30 dias': 0,
-    '30/60 dias': 2,
-    '30/60/90 dias': 4,
+    '30 dias': 3,
+    '30/60 dias': 4.5,
+    '30/60/90 dias': 6,
+    '60 dias': 6,
+    '90 dias': 9,
+    '120 dias': 12,
   })
 }
 
@@ -5333,33 +5462,61 @@ function buildQuoteMessage(
   cliente: Cliente,
   itens: OrcamentoItemInput[],
   validade?: string,
-  formaPagamento?: string,
   observacao?: string,
-  paymentScenarios: Array<{ label: string; adjustment: number; total: number }> = [],
+  paymentScenarios: QuoteConditionScenario[] = [],
 ) {
+  const total = itens.reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
+  const grouped = groupQuoteItemsForMessage(itens)
   const lines = [
-    `Ola, ${cliente.responsavel ?? cliente.nome}. Segue orcamento Capital Truck Center:`,
+    `Ola, ${cliente.responsavel ?? cliente.nome}.`,
     '',
-    ...itens.map((item, index) => {
-      const desconto = item.descontoPercentual ? `, desc. ${item.descontoPercentual}%` : ''
-      return `${index + 1}. ${item.quantidade}x ${item.descricao} - ${money(item.valorUnitario)} un.${desconto} = ${money(item.valorTotal ?? 0)}`
-    }),
+    '*Capital Truck Center*',
+    'Segue proposta comercial:',
     '',
-    `Total: ${money(itens.reduce((total, item) => total + (item.valorTotal ?? 0), 0))}`,
+    '*Itens cotados*',
   ]
 
-  if (formaPagamento?.trim()) lines.push(`Condicao: ${formaPagamento.trim()}`)
+  grouped.forEach((group, groupIndex) => {
+    if (group.title) lines.push(`${groupIndex + 1}. ${group.title}`)
+    group.items.forEach((item, index) => {
+      const prefix = group.title ? `   ${String.fromCharCode(97 + index)})` : `${groupIndex + 1}.`
+      lines.push(`${prefix} ${formatQuantity(item.quantidade)}x ${item.descricao}`)
+      lines.push(`   Unit.: ${money(item.valorUnitario)} | Total: ${money(item.valorTotal ?? 0)}`)
+    })
+  })
+
+  lines.push('', `*Total base:* ${money(total)}`)
   if (paymentScenarios.length > 0) {
-    lines.push('', 'Condicoes opcionais:')
+    lines.push('', '*Condicoes de pagamento*')
     paymentScenarios.forEach((scenario) => {
-      const suffix = scenario.adjustment === 0 ? '' : ` (${scenario.adjustment > 0 ? '+' : ''}${scenario.adjustment}%)`
-      lines.push(`- ${scenario.label}: ${money(scenario.total)}${suffix}`)
+      lines.push(`- ${scenario.label}: ${money(scenario.total)}`)
     })
   }
-  if (validade) lines.push(`Validade: ${dateLabel(validade)}`)
-  if (observacao?.trim()) lines.push('', observacao.trim())
+  if (validade) lines.push('', `Validade: ${dateLabel(validade)}`)
+  if (observacao?.trim()) lines.push('', '*Observacoes*', observacao.trim())
   lines.push('', 'Posso confirmar disponibilidade e prazo para voce?')
   return lines.join('\n')
+}
+
+function groupQuoteItemsForMessage(itens: OrcamentoItemInput[]) {
+  const groups = new Map<string, OrcamentoItemInput[]>()
+  const order: string[] = []
+  itens.forEach((item) => {
+    const key = item.observacao?.trim() || `__single_${order.length}`
+    if (!groups.has(key)) {
+      groups.set(key, [])
+      order.push(key)
+    }
+    groups.get(key)?.push(item)
+  })
+  return order.map((key) => ({
+    title: key.startsWith('__single_') ? '' : key,
+    items: groups.get(key) ?? [],
+  }))
+}
+
+function formatQuantity(quantity: number) {
+  return Number.isInteger(quantity) ? quantity.toString() : quantity.toLocaleString('pt-BR', { maximumFractionDigits: 2 })
 }
 
 function quoteItemFromVenda(venda: VendaItem): OrcamentoItemInput {
@@ -8421,7 +8578,7 @@ function OrcamentoWorkspace({
   const [error, setError] = useState('')
   const validItems = (orcamento.itens ?? []).map((item) => ({ ...item, valorTotal: item.valorTotal ?? quoteItemTotal(item) }))
   const scenarios = quoteScenariosFromBudget(orcamento)
-  const message = buildQuoteMessage(cliente, validItems, orcamento.validade, orcamento.formaPagamento, orcamento.observacao, scenarios)
+  const message = buildQuoteMessage(cliente, validItems, orcamento.validade, orcamento.observacao, scenarios)
   const waUrl = cliente.whatsapp && validItems.length > 0
     ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(message)}`
     : undefined
@@ -8691,14 +8848,14 @@ function OrcamentoRevisionEditor({
   onCancel: () => void
   onSave: (orcamento: OrcamentoInput) => Promise<void>
 }) {
-  const [validade, setValidade] = useState(orcamento.validade || new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10))
+  const [validade, setValidade] = useState(() => orcamento.validade || new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10))
   const [previsaoFechamento, setPrevisaoFechamento] = useState(orcamento.previsaoFechamento ?? '')
   const [formaPagamento, setFormaPagamento] = useState(orcamento.formaPagamento ?? 'A vista')
   const [paymentAdjustments, setPaymentAdjustments] = useState<Record<string, number>>(() => {
     if (orcamento.condicoes?.length) {
       return Object.fromEntries(orcamento.condicoes.map((condicao) => [condicao.label, condicao.ajustePercentual]))
     }
-    return { 'A vista': -3, '30 dias': 0, '30/60 dias': 2, '30/60/90 dias': 4 }
+    return { 'A vista': -3, '30 dias': 3, '30/60 dias': 4.5, '30/60/90 dias': 6, '60 dias': 6, '90 dias': 9, '120 dias': 12 }
   })
   const [observacao, setObservacao] = useState(orcamento.observacao ?? '')
   const [catalogSearch, setCatalogSearch] = useState('')
@@ -8732,7 +8889,7 @@ function OrcamentoRevisionEditor({
   const total = validItems.reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
   const approvalWarnings = quoteApprovalWarnings(validItems, catalogo)
   const paymentScenarios = quotePaymentScenarios(total, paymentAdjustments)
-  const quoteMessage = buildQuoteMessage(cliente, validItems, validade, formaPagamento, observacao, paymentScenarios)
+  const quoteMessage = buildQuoteMessage(cliente, validItems, validade, observacao, paymentScenarios)
 
   function updateItem(index: number, patch: Partial<OrcamentoItemInput>) {
     setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item))
@@ -8834,6 +8991,7 @@ function OrcamentoRevisionEditor({
               <span>Qtd.</span>
               <span>Unitario</span>
               <span>Desc.</span>
+              <span>Grupo/uso</span>
               <span>Total</span>
             </div>
             {items.map((item, index) => (
@@ -8850,6 +9008,7 @@ function OrcamentoRevisionEditor({
                 <input type="number" min="0" step="0.01" value={item.quantidade} onChange={(event) => updateItem(index, { quantidade: Number(event.target.value) })} />
                 <input type="number" min="0" step="0.01" value={item.valorUnitario} onChange={(event) => updateItem(index, { valorUnitario: Number(event.target.value) })} />
                 <input type="number" min="0" max="100" step="0.01" value={item.descontoPercentual ?? 0} onChange={(event) => updateItem(index, { descontoPercentual: Number(event.target.value) })} />
+                <input value={item.observacao ?? ''} onChange={(event) => updateItem(index, { observacao: event.target.value })} placeholder="Opcao, eixo ou uso" />
                 <strong>{money(quoteItemTotal(item))}</strong>
               </div>
             ))}

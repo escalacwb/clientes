@@ -1619,12 +1619,17 @@ h3 {
 
 .quote-payment-scenarios label {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) 90px minmax(110px, auto);
+  grid-template-columns: 18px minmax(120px, 1fr) 90px minmax(110px, auto);
   gap: 10px;
   align-items: center;
   color: #52625d;
   font-size: 12px;
   font-weight: 700;
+}
+
+.quote-condition-row .inline-number {
+  width: 58px;
+  margin: 0 4px;
 }
 
 .quote-payment-scenarios input {
@@ -1637,6 +1642,13 @@ h3 {
   padding: 0 8px;
 }
 
+.quote-payment-scenarios input[type='checkbox'] {
+  width: 16px;
+  min-height: 16px;
+  padding: 0;
+  justify-self: center;
+}
+
 .quote-items {
   display: grid;
   gap: 8px;
@@ -1645,7 +1657,7 @@ h3 {
 .quote-item-head,
 .quote-item-row {
   display: grid;
-  grid-template-columns: minmax(190px, 1fr) minmax(180px, 1fr) 72px 104px 80px 104px;
+  grid-template-columns: minmax(170px, 1fr) minmax(180px, 1fr) 72px 104px 80px minmax(150px, 0.8fr) 104px;
   gap: 8px;
   align-items: center;
 }
