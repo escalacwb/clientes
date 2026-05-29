@@ -77,14 +77,18 @@ Entregue nesta rodada:
 
 ## Sprint D - Automacoes e sequencias
 
-Status: Pendente.
+Status: Parcial.
 
 Proximos pontos:
 - Tabela de regras de automacao.
 - Log de automacao executada.
-- Sequencias de WhatsApp manual: dia 0, dia 2, dia 7, dia 15.
 - Pausar sequencia quando cliente responde, vira orcamento ou marca nao contatar.
 - Criar tarefa gerente quando sequencia estagnar.
+
+Entregue nesta rodada:
+- Tabelas de sequencias comerciais, etapas e execucoes.
+- Sequencia padrao de WhatsApp manual 0/2/7/15.
+- Acao em lote no motor de oportunidades para iniciar a cadencia.
 
 ## Sprint E - Qualidade de dados e governanca
 

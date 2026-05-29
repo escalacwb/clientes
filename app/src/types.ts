@@ -393,6 +393,20 @@ export type OportunidadePipelineInput = Omit<
   encerradaEm?: string
 }
 
+export type SequenciaExecucao = {
+  id: string
+  sequenciaId: string
+  sequenciaNome: string
+  clienteId: string
+  clienteNome: string
+  vendedorId?: string
+  status: 'ativa' | 'pausada' | 'concluida' | 'cancelada'
+  etapaAtual: number
+  proximaAcaoEm: string
+  criadoEm: string
+  encerradaEm?: string
+}
+
 export type ClienteMesclagem = {
   id: string
   clientePrincipalId: string

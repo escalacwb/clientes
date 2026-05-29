@@ -267,7 +267,7 @@ Pronto quando:
 
 ### M10 - Sequencias comerciais multietapa
 
-Status: Pendente.
+Status: Parcial.
 
 Objetivo:
 Criar fluxos de contato com etapas manuais e automacoes.
@@ -277,6 +277,12 @@ Entregas:
 - Etapas podem esperar tarefa manual concluida antes de avancar.
 - Pausar sequencia quando cliente responde ou vira orcamento.
 - Aplicar sequencia a segmento, campanha ou lead Rodobens.
+
+Ja entregue:
+- Criadas tabelas `sequencias_comerciais`, `sequencia_etapas` e `sequencia_execucoes`.
+- Criada view `vw_sequencias_execucao` com cliente, vendedor, etapa atual e proxima acao.
+- Motor de oportunidades ganhou acao em lote `Sequencia 0/2/7/15` para iniciar cadencia manual sem duplicar clientes ja existentes na sequencia.
+- Sequencia padrao de WhatsApp comercial cria etapas de dia 0, dia 2, dia 7 e dia 15.
 
 Pronto quando:
 - A equipe consegue fazer cadencias consistentes sem lembrar manualmente cada passo.

@@ -138,6 +138,7 @@ import { reviseOrcamento } from './repositories/orcamentosRepository'
 import { updateOrcamentoStatus } from './repositories/orcamentosRepository'
 import { listOportunidadesPage, listOportunidadesResumo, markOportunidadeComTarefa, refreshOportunidadesCache, type OportunidadeFilter, type OportunidadeResumo } from './repositories/oportunidadesRepository'
 import { createPipelineFromSuggestion, listPipelineOportunidades, updatePipelineStage } from './repositories/pipelineRepository'
+import { startDefaultCommercialSequence } from './repositories/sequenciasRepository'
 import {
   completeTarefa,
   createTarefa,
@@ -1781,6 +1782,7 @@ function App() {
               setPipelineOportunidades((current) => current.map((item) => (item.id === dealId ? updated : item)))
               return updated
             }}
+            onStartSequence={async (clienteIds) => startDefaultCommercialSequence(clienteIds, session.id)}
             onCreateCampaignFromSelection={async (clienteIds, tipo) => {
               const tipoLabel = tipo === 'todos' ? 'oportunidades' : opportunityTypeLabel(tipo)
               const { campanha, enviosCriados } = await createCampanhaFromClienteIds({
@@ -3762,6 +3764,7 @@ function Oportunidades({
   onCreateTask,
   onCreatePipeline,
   onUpdatePipelineStage,
+  onStartSequence,
   onCreateCampaignFromSelection,
 }: {
   oportunidades: Oportunidade[]
@@ -3783,6 +3786,7 @@ function Oportunidades({
   onCreateTask: (oportunidade: Oportunidade) => Promise<Tarefa>
   onCreatePipeline: (oportunidade: Oportunidade) => Promise<OportunidadePipeline>
   onUpdatePipelineStage: (dealId: string, estagio: OportunidadeEstagio, motivoPerda?: string) => Promise<OportunidadePipeline>
+  onStartSequence: (clienteIds: string[]) => Promise<number>
   onCreateCampaignFromSelection: (clienteIds: string[], tipo: string) => Promise<number>
 }) {
   const [createdTasks, setCreatedTasks] = useState<string[]>([])
@@ -3793,6 +3797,7 @@ function Oportunidades({
   const [bulkVendedorId, setBulkVendedorId] = useState('')
   const [isAssigning, setIsAssigning] = useState(false)
   const [isCreatingCampaign, setIsCreatingCampaign] = useState(false)
+  const [isStartingSequence, setIsStartingSequence] = useState(false)
   const vendedores = usuarios.filter((usuario) => usuario.role === 'vendedor')
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const totalAtivas = resumo.reduce((sum, item) => sum + item.ativas, 0)
@@ -4002,6 +4007,27 @@ function Oportunidades({
           }}
         >
           {isCreatingCampaign ? 'Gerando...' : 'Gerar campanha'}
+        </button>
+        <button
+          className="button"
+          type="button"
+          disabled={selectedIds.length === 0 || isStartingSequence}
+          onClick={async () => {
+            setError('')
+            setIsStartingSequence(true)
+            try {
+              const clienteIds = selectedOportunidades.map((oportunidade) => oportunidade.clienteId)
+              const totalSequencias = await onStartSequence(clienteIds)
+              setSelectedIds([])
+              setError(`${totalSequencias} sequencias comerciais iniciadas. Clientes ja existentes na cadencia foram ignorados.`)
+            } catch (exception) {
+              setError(exception instanceof Error ? exception.message : 'Nao foi possivel iniciar a sequencia.')
+            } finally {
+              setIsStartingSequence(false)
+            }
+          }}
+        >
+          {isStartingSequence ? 'Iniciando...' : 'Sequencia 0/2/7/15'}
         </button>
         <span className="status-pill">{selectedIds.length} selecionados</span>
       </div>
