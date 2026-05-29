@@ -6027,42 +6027,61 @@ async function downloadQuotePdf(element: HTMLElement | null, clienteNome: string
     import('html2canvas'),
     import('jspdf'),
   ])
-  const canvas = await html2canvas(element, {
-    backgroundColor: '#ffffff',
-    scale: Math.min(window.devicePixelRatio || 1, 2),
-    useCORS: true,
-  })
-  const pdf = new jsPDF('p', 'mm', 'a4')
-  const pageWidth = pdf.internal.pageSize.getWidth()
-  const pageHeight = pdf.internal.pageSize.getHeight()
-  const margin = 10
-  const contentWidth = pageWidth - margin * 2
-  const contentHeight = pageHeight - margin * 2
-  const imageWidth = contentWidth
-  const imageHeight = (canvas.height * imageWidth) / canvas.width
-  const pageCanvasHeight = Math.floor((contentHeight * canvas.width) / imageWidth)
-  let sourceY = 0
-  let pageIndex = 0
+  const exportStage = document.createElement('div')
+  const exportElement = element.cloneNode(true) as HTMLElement
+  exportStage.className = 'pdf-export-stage'
+  exportStage.appendChild(exportElement)
+  document.body.appendChild(exportStage)
 
-  while (sourceY < canvas.height) {
-    const sliceHeight = Math.min(pageCanvasHeight, canvas.height - sourceY)
-    const pageCanvas = document.createElement('canvas')
-    pageCanvas.width = canvas.width
-    pageCanvas.height = sliceHeight
-    const context = pageCanvas.getContext('2d')
-    if (!context) break
-    context.drawImage(canvas, 0, sourceY, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight)
-    if (pageIndex > 0) pdf.addPage()
-    const sliceImageHeight = (sliceHeight * imageWidth) / canvas.width
-    pdf.addImage(pageCanvas.toDataURL('image/png'), 'PNG', margin, margin, imageWidth, Math.min(sliceImageHeight, contentHeight))
-    sourceY += sliceHeight
-    pageIndex += 1
-  }
+  try {
+    await waitForImages(exportElement)
+    const canvas = await html2canvas(exportElement, {
+      backgroundColor: '#ffffff',
+      scale: 2,
+      useCORS: true,
+      windowWidth: exportElement.scrollWidth,
+    })
+    const pdf = new jsPDF('p', 'mm', 'a4')
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const pageHeight = pdf.internal.pageSize.getHeight()
+    const margin = 10
+    const contentWidth = pageWidth - margin * 2
+    const contentHeight = pageHeight - margin * 2
+    const imageWidth = contentWidth
+    const pageCanvasHeight = Math.floor((contentHeight * canvas.width) / imageWidth)
+    let sourceY = 0
+    let pageIndex = 0
 
-  if (imageHeight <= contentHeight && pageIndex === 0) {
-    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', margin, margin, imageWidth, imageHeight)
+    while (sourceY < canvas.height) {
+      const sliceHeight = Math.min(pageCanvasHeight, canvas.height - sourceY)
+      const pageCanvas = document.createElement('canvas')
+      pageCanvas.width = canvas.width
+      pageCanvas.height = sliceHeight
+      const context = pageCanvas.getContext('2d')
+      if (!context) break
+      context.drawImage(canvas, 0, sourceY, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight)
+      if (pageIndex > 0) pdf.addPage()
+      const sliceImageHeight = (sliceHeight * imageWidth) / canvas.width
+      pdf.addImage(pageCanvas.toDataURL('image/png'), 'PNG', margin, margin, imageWidth, Math.min(sliceImageHeight, contentHeight))
+      sourceY += sliceHeight
+      pageIndex += 1
+    }
+
+    pdf.save(`${quotePdfFileName(clienteNome, date)}.pdf`)
+  } finally {
+    exportStage.remove()
   }
-  pdf.save(`${quotePdfFileName(clienteNome, date)}.pdf`)
+}
+
+function waitForImages(element: HTMLElement) {
+  const images = Array.from(element.querySelectorAll('img'))
+  return Promise.all(images.map((image) => {
+    if (image.complete) return Promise.resolve()
+    return new Promise<void>((resolve) => {
+      image.onload = () => resolve()
+      image.onerror = () => resolve()
+    })
+  }))
 }
 
 function groupQuoteItemsForMessage(itens: OrcamentoItemInput[]) {

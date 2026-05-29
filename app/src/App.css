@@ -2310,6 +2310,230 @@ h3 {
   color: #12312f;
 }
 
+.pdf-export-stage {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  z-index: -1;
+  width: 794px;
+  background: #ffffff;
+  color: #111827;
+  pointer-events: none;
+}
+
+.pdf-export-stage .proposal-preview {
+  display: block;
+  width: 794px;
+  max-width: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: #ffffff;
+  color: #111827;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 13px;
+  line-height: 1.32;
+  padding: 0;
+}
+
+.pdf-export-stage .proposal-preview > * {
+  margin-bottom: 10px;
+}
+
+.pdf-export-stage .proposal-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 210px;
+  gap: 38px;
+  align-items: start;
+  border-bottom: 3px solid #12312f;
+  padding-bottom: 12px;
+}
+
+.pdf-export-stage .proposal-heading > div,
+.pdf-export-stage .proposal-meta,
+.pdf-export-stage .proposal-lines,
+.pdf-export-stage .proposal-alternatives,
+.pdf-export-stage .proposal-blocks,
+.pdf-export-stage .proposal-block,
+.pdf-export-stage .proposal-block-title,
+.pdf-export-stage .proposal-block-totals,
+.pdf-export-stage .proposal-commercial,
+.pdf-export-stage .proposal-breakdown,
+.pdf-export-stage .proposal-condition-block,
+.pdf-export-stage .proposal-notes,
+.pdf-export-stage .proposal-footer {
+  display: grid;
+  gap: 7px;
+}
+
+.pdf-export-stage .proposal-logo {
+  width: 230px;
+  max-height: 110px;
+  object-fit: contain;
+  object-position: left center;
+  margin-bottom: 4px;
+}
+
+.pdf-export-stage .proposal-heading strong {
+  display: block;
+  color: #12312f;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.pdf-export-stage .proposal-heading span,
+.pdf-export-stage .proposal-client span,
+.pdf-export-stage .proposal-preview small {
+  color: #64736f;
+}
+
+.pdf-export-stage .proposal-meta {
+  border: 1px solid #dfe7e1;
+  border-radius: 0;
+  padding: 10px;
+  justify-items: stretch;
+  text-align: left;
+}
+
+.pdf-export-stage .proposal-client,
+.pdf-export-stage .proposal-commercial {
+  border: 1px solid #dfe7e1;
+  border-radius: 0;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.pdf-export-stage .proposal-client strong,
+.pdf-export-stage .proposal-commercial strong {
+  color: #12312f;
+  font-size: 16px;
+}
+
+.pdf-export-stage .proposal-commercial {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.pdf-export-stage .proposal-blocks {
+  gap: 10px;
+}
+
+.pdf-export-stage .proposal-block {
+  border: 1px solid #d9e2dc;
+  border-radius: 0;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.pdf-export-stage .proposal-block-title {
+  display: block;
+  border-bottom: 1px solid #e4ebe6;
+  padding-bottom: 6px;
+}
+
+.pdf-export-stage .proposal-block-title strong {
+  color: #12312f;
+  font-size: 16px;
+}
+
+.pdf-export-stage .proposal-block-title span {
+  display: none;
+}
+
+.pdf-export-stage .proposal-lines,
+.pdf-export-stage .proposal-alternatives {
+  gap: 0;
+  padding: 6px 0 0;
+}
+
+.pdf-export-stage .proposal-lines div,
+.pdf-export-stage .proposal-alternatives div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 125px;
+  gap: 12px;
+  align-items: start;
+  border-bottom: 1px solid #eef2ef;
+  padding: 6px 0;
+}
+
+.pdf-export-stage .proposal-lines span,
+.pdf-export-stage .proposal-alternatives span {
+  overflow-wrap: anywhere;
+}
+
+.pdf-export-stage .proposal-lines strong,
+.pdf-export-stage .proposal-alternatives strong,
+.pdf-export-stage .proposal-subtotal strong,
+.pdf-export-stage .proposal-block-totals strong,
+.pdf-export-stage .proposal-condition-block b {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.pdf-export-stage .proposal-alternatives {
+  border-top: 1px dashed #cbd8d0;
+  margin-top: 6px;
+}
+
+.pdf-export-stage .proposal-alternatives > strong {
+  margin-bottom: 3px;
+  text-align: left;
+}
+
+.pdf-export-stage .proposal-subtotal,
+.pdf-export-stage .proposal-total,
+.pdf-export-stage .proposal-block-totals div,
+.pdf-export-stage .proposal-condition-block div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 130px;
+  align-items: center;
+  gap: 12px;
+}
+
+.pdf-export-stage .proposal-subtotal {
+  background: #f6f8f6;
+  border-top: 1px solid #dfe7e1;
+  margin-top: 6px;
+  padding: 8px;
+}
+
+.pdf-export-stage .proposal-total strong {
+  color: #12312f;
+  font-size: 18px;
+}
+
+.pdf-export-stage .proposal-block-totals,
+.pdf-export-stage .proposal-condition-block {
+  border: 1px solid #dfe7e1;
+  border-radius: 0;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.pdf-export-stage .proposal-block-totals > strong,
+.pdf-export-stage .proposal-condition-block > strong {
+  display: block;
+  border-bottom: 1px solid #e8eee9;
+  color: #12312f;
+  margin-bottom: 5px;
+  padding-bottom: 4px;
+}
+
+.pdf-export-stage .proposal-conditions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pdf-export-stage .proposal-notes,
+.pdf-export-stage .proposal-footer {
+  border-top: 1px solid #dfe7e1;
+  padding-top: 10px;
+}
+
+.pdf-export-stage .proposal-footer {
+  margin-bottom: 0;
+}
+
 .quote-version-panel {
   display: grid;
   gap: 16px;
