@@ -59,6 +59,22 @@ export type FunilGerencialResumo = {
   tarefasVencidas: number
 }
 
+export type MotivoPerdaResumo = {
+  motivo: string
+  total: number
+  valorTotal: number
+  ultimoRegistro?: string
+}
+
+export type AtividadeDiaResumo = {
+  vendedorId: string
+  vendedorNome: string
+  contatosHoje: number
+  orcamentosHoje: number
+  tarefasConcluidasHoje: number
+  tarefasVencidas: number
+}
+
 type DashboardResumoRow = {
   clientes_total: number
   clientes_ativos_90: number
@@ -118,6 +134,22 @@ type FunilGerencialRow = {
   tarefas_vencidas: number
 }
 
+type MotivoPerdaRow = {
+  motivo: string
+  total: number
+  valor_total: number
+  ultimo_registro: string | null
+}
+
+type AtividadeDiaRow = {
+  vendedor_id: string
+  vendedor_nome: string
+  contatos_hoje: number
+  orcamentos_hoje: number
+  tarefas_concluidas_hoje: number
+  tarefas_vencidas: number
+}
+
 export async function getDashboardResumo(): Promise<DashboardResumo | undefined> {
   const supabase = await getSupabase()
   if (!supabase) return undefined
@@ -173,6 +205,44 @@ export async function listFunilGerencial(): Promise<FunilGerencialResumo[]> {
     perdidos30d: Number(row.perdidos_30d ?? 0),
     pipelineAberto: Number(row.pipeline_aberto ?? 0),
     tempoMedioFechamento: Number(row.tempo_medio_fechamento ?? 0),
+    tarefasVencidas: Number(row.tarefas_vencidas ?? 0),
+  }))
+}
+
+export async function listMotivosPerda(): Promise<MotivoPerdaResumo[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('vw_motivos_perda')
+    .select('*')
+    .order('total', { ascending: false })
+    .limit(10)
+
+  if (error) throw error
+  return (data as MotivoPerdaRow[] | null ?? []).map((row) => ({
+    motivo: row.motivo,
+    total: Number(row.total ?? 0),
+    valorTotal: Number(row.valor_total ?? 0),
+    ultimoRegistro: row.ultimo_registro ?? undefined,
+  }))
+}
+
+export async function listAtividadesDia(): Promise<AtividadeDiaResumo[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('vw_atividades_dia')
+    .select('*')
+
+  if (error) throw error
+  return (data as AtividadeDiaRow[] | null ?? []).map((row) => ({
+    vendedorId: row.vendedor_id,
+    vendedorNome: row.vendedor_nome,
+    contatosHoje: Number(row.contatos_hoje ?? 0),
+    orcamentosHoje: Number(row.orcamentos_hoje ?? 0),
+    tarefasConcluidasHoje: Number(row.tarefas_concluidas_hoje ?? 0),
     tarefasVencidas: Number(row.tarefas_vencidas ?? 0),
   }))
 }

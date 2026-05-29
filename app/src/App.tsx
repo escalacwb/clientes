@@ -74,12 +74,16 @@ import { updateClienteComercial } from './repositories/clientesRepository'
 import { listConflitos, resolveConflito } from './repositories/conflitosRepository'
 import {
   getDashboardResumo,
+  listAtividadesDia,
   listFunilGerencial,
+  listMotivosPerda,
   listRankingMedidas,
   listRankingServicos,
   listVendedoresResumo,
   type DashboardResumo,
+  type AtividadeDiaResumo,
   type FunilGerencialResumo,
+  type MotivoPerdaResumo,
   type RankingResumo,
   type VendedorResumo,
 } from './repositories/dashboardRepository'
@@ -254,6 +258,8 @@ function App() {
   const [rankingMedidas, setRankingMedidas] = useState<RankingResumo[]>([])
   const [rankingServicos, setRankingServicos] = useState<RankingResumo[]>([])
   const [funilGerencial, setFunilGerencial] = useState<FunilGerencialResumo[]>([])
+  const [motivosPerda, setMotivosPerda] = useState<MotivoPerdaResumo[]>([])
+  const [atividadesDia, setAtividadesDia] = useState<AtividadeDiaResumo[]>([])
   const [rodobensLeads, setRodobensLeads] = useState<Cliente[]>([])
   const [rodobensTotal, setRodobensTotal] = useState(0)
   const [rodobensPage, setRodobensPage] = useState(1)
@@ -329,6 +335,8 @@ function App() {
           loadedRankingMedidas,
           loadedRankingServicos,
           loadedFunilGerencial,
+          loadedMotivosPerda,
+          loadedAtividadesDia,
         ] = await Promise.all([
           listInteracoes(),
           listOrcamentos(),
@@ -346,6 +354,8 @@ function App() {
           listRankingMedidas(),
           listRankingServicos(),
           listFunilGerencial(),
+          listMotivosPerda(),
+          listAtividadesDia(),
         ])
 
         if (!isMounted) return
@@ -365,6 +375,8 @@ function App() {
         setRankingMedidas(loadedRankingMedidas)
         setRankingServicos(loadedRankingServicos)
         setFunilGerencial(loadedFunilGerencial)
+        setMotivosPerda(loadedMotivosPerda)
+        setAtividadesDia(loadedAtividadesDia)
       } catch (exception) {
         if (!isMounted) return
         setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar os dados.')
@@ -1311,6 +1323,8 @@ function App() {
             rankingMedidas={rankingMedidas}
             rankingServicos={rankingServicos}
             funilGerencial={funilGerencial}
+            motivosPerda={motivosPerda}
+            atividadesDia={atividadesDia}
             interacoes={interacoes}
             orcamentos={orcamentos}
             importacoes={importacoes}
@@ -5855,6 +5869,8 @@ function Relatorios({
   rankingMedidas,
   rankingServicos,
   funilGerencial,
+  motivosPerda,
+  atividadesDia,
   interacoes,
   orcamentos,
   importacoes,
@@ -5871,6 +5887,8 @@ function Relatorios({
   rankingMedidas: RankingResumo[]
   rankingServicos: RankingResumo[]
   funilGerencial: FunilGerencialResumo[]
+  motivosPerda: MotivoPerdaResumo[]
+  atividadesDia: AtividadeDiaResumo[]
   interacoes: Interacao[]
   orcamentos: Orcamento[]
   importacoes: Importacao[]
@@ -6031,6 +6049,60 @@ function Relatorios({
             </div>
           ))}
           {funilGerencial.length === 0 && <div className="empty-state">Sem dados agregados de funil.</div>}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Motivos de perda</h2>
+            <p>Principais razoes registradas em propostas perdidas.</p>
+          </div>
+          <AlertTriangle size={18} />
+        </div>
+        <div className="table compact">
+          <div className="table-head loss-report">
+            <span>Motivo</span>
+            <span>Qtd.</span>
+            <span>Valor</span>
+          </div>
+          {motivosPerda.map((row) => (
+            <div className="table-row loss-report" key={row.motivo}>
+              <span><strong>{lossReasonLabel(row.motivo)}</strong><small>{dateLabel(row.ultimoRegistro)}</small></span>
+              <span>{row.total}</span>
+              <span>{money(row.valorTotal)}</span>
+            </div>
+          ))}
+          {motivosPerda.length === 0 && <div className="empty-state">Sem perdas registradas.</div>}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Atividades de hoje</h2>
+            <p>Contatos, propostas e tarefas por vendedor.</p>
+          </div>
+          <CalendarClock size={18} />
+        </div>
+        <div className="table compact">
+          <div className="table-head activity-report">
+            <span>Vendedor</span>
+            <span>Cont.</span>
+            <span>Orc.</span>
+            <span>Feitas</span>
+            <span>Atrasos</span>
+          </div>
+          {atividadesDia.map((row) => (
+            <div className="table-row activity-report" key={row.vendedorId}>
+              <span><strong>{row.vendedorNome}</strong></span>
+              <span>{row.contatosHoje}</span>
+              <span>{row.orcamentosHoje}</span>
+              <span>{row.tarefasConcluidasHoje}</span>
+              <span>{row.tarefasVencidas}</span>
+            </div>
+          ))}
+          {atividadesDia.length === 0 && <div className="empty-state">Sem atividades registradas hoje.</div>}
         </div>
       </section>
 

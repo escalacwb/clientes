@@ -1005,6 +1005,24 @@ Validacao:
 Proximo passo tecnico:
 - Adicionar motivos de perda e atividades feitas no dia ao relatorio gerencial.
 
+### 2026-05-28 - Motivos de perda e atividades do dia
+
+Status: concluido.
+
+Entregue:
+- Substituido o SQL isolado do funil por `relatorios_gerenciais.sql`, concentrando as views gerenciais.
+- Corrigida a view `vw_funil_gerencial` para agregar clientes, contatos, orcamentos e tarefas em CTEs separadas, evitando inflar valores por combinacao de joins.
+- Criadas as views `vw_motivos_perda` e `vw_atividades_dia` com `security_invoker`.
+- Relatorios agora exibem motivos de perda e atividade diaria por vendedor alem do funil.
+
+Validacao:
+- SQL aplicado com `node scripts/run-sql-file.mjs supabase/queries/relatorios_gerenciais.sql`.
+- Build passou com `npm run build`.
+- Consulta direta validou funil por vendedor, motivos de perda sem registros no momento e atividades do dia para Mateus, Wagner e William.
+
+Proximo passo tecnico:
+- Evoluir relatorios para filtros de periodo/vendedor e exportacao gerencial.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

@@ -638,6 +638,20 @@ h3 {
   margin-top: 2px;
 }
 
+.loss-report {
+  grid-template-columns: minmax(170px, 1fr) 64px 110px;
+}
+
+.activity-report {
+  grid-template-columns: minmax(140px, 1fr) 58px 58px 64px 70px;
+}
+
+.loss-report small {
+  display: block;
+  color: #66736f;
+  margin-top: 2px;
+}
+
 .campaign {
   grid-template-columns: minmax(190px, 0.8fr) minmax(260px, 1.4fr) 130px minmax(360px, 1fr);
 }

@@ -133,7 +133,7 @@ Pronto quando:
 
 ### Q06 - Ficha 360 realmente acionavel
 
-Status: Parcial.
+Status: Concluido.
 
 Objetivo:
 Fazer a ficha do cliente virar a central viva do relacionamento.
@@ -270,10 +270,9 @@ Ja entregue:
 - Tempo medio ate fechamento.
 - Pipeline aberto por vendedor.
 - View `vw_funil_gerencial` no Supabase com security invoker.
-
-Proximas entregas:
 - Motivos de perda.
 - Atividades feitas no dia.
+- Correcao da agregacao do funil para evitar soma duplicada por cruzamento de tabelas.
 
 Pronto quando:
 - Gerente consegue conduzir reuniao diaria olhando o sistema.
