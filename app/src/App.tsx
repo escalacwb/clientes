@@ -11745,6 +11745,38 @@ function Relatorios({
     ? rankingServicos.map((item) => ({ label: item.label, count: item.itens }))
     : rankBy(servicosItens, (servico) => servico.servicoNome)
   const metasBySeller = new Map(metasVendedores.map((meta) => [meta.vendedorId, meta]))
+  const commercialDisciplineRows = usuarios
+    .filter((usuario) => usuario.role === 'vendedor')
+    .map((usuario) => {
+      const contatosHoje = atividadesDia.find((row) => row.vendedorId === usuario.id)?.contatosHoje
+        ?? interacoes.filter((interacao) => interacao.vendedorId === usuario.id && interacao.data.slice(0, 10) === new Date().toISOString().slice(0, 10)).length
+      const funil = funilGerencial.find((row) => row.vendedorId === usuario.id)
+      const contatos30d = funil?.contatos30d ?? interacoes.filter((interacao) => interacao.vendedorId === usuario.id && daysSince(interacao.data) <= 30).length
+      const orcamentos30d = funil?.orcamentos30d ?? orcamentos.filter((orcamento) => orcamento.vendedorId === usuario.id && daysSince(orcamento.data) <= 30).length
+      const followupsAbertos = tarefas.filter((tarefa) => tarefa.vendedorId === usuario.id && tarefa.status === 'aberta' && isCommercialFollowupTask(tarefa)).length
+      const followupsVencidos = tarefas.filter((tarefa) => tarefa.vendedorId === usuario.id && tarefa.status === 'aberta' && isCommercialFollowupTask(tarefa) && daysSince(tarefa.dataVencimento) > 0).length
+      const semProximaAcao = clientes.filter((cliente) =>
+        cliente.vendedorId === usuario.id &&
+        cliente.status !== 'Nao contatar' &&
+        !tarefas.some((tarefa) => tarefa.clienteId === cliente.id && tarefa.status === 'aberta') &&
+        !orcamentos.some((orcamento) => orcamento.clienteId === cliente.id && ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando'].includes(orcamento.status)),
+      ).length
+      const conversaoContatoOrcamento = contatos30d ? Math.round((orcamentos30d / contatos30d) * 100) : 0
+      const disciplina = Math.max(0, Math.min(100, 55 + contatosHoje * 8 + conversaoContatoOrcamento - followupsVencidos * 12 - Math.min(semProximaAcao, 20)))
+      return {
+        vendedorId: usuario.id,
+        vendedorNome: usuario.nome,
+        contatosHoje,
+        contatos30d,
+        orcamentos30d,
+        conversaoContatoOrcamento,
+        followupsAbertos,
+        followupsVencidos,
+        semProximaAcao,
+        disciplina,
+      }
+    })
+    .sort((a, b) => a.disciplina - b.disciplina)
 
   const vendedorRows = vendedoresResumo.length > 0
     ? vendedoresResumo
@@ -11896,6 +11928,45 @@ function Relatorios({
             </div>
           ))}
           {forecastVendedor.length === 0 && <div className="empty-state">Sem dados de forecast ainda.</div>}
+        </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Disciplina comercial</h2>
+            <p>Contato, follow-up e conversao em propostas por vendedor.</p>
+          </div>
+          <Phone size={18} />
+        </div>
+        <div className="table">
+          <div className="table-head commercial-discipline-report">
+            <span>Vendedor</span>
+            <span>Hoje</span>
+            <span>30 dias</span>
+            <span>Orc. 30d</span>
+            <span>Conv.</span>
+            <span>Follow-ups</span>
+            <span>Sem prox.</span>
+            <span>Disciplina</span>
+          </div>
+          {commercialDisciplineRows.map((row) => (
+            <div className="table-row commercial-discipline-report" key={row.vendedorId}>
+              <span><strong>{row.vendedorNome}</strong></span>
+              <span>{row.contatosHoje}</span>
+              <span>{row.contatos30d}</span>
+              <span>{row.orcamentos30d}</span>
+              <span>{row.conversaoContatoOrcamento}%</span>
+              <span className={row.followupsVencidos > 0 ? 'score danger' : 'score'}>
+                {row.followupsAbertos}
+                <small>{row.followupsVencidos} vencidos</small>
+              </span>
+              <span>{row.semProximaAcao}</span>
+              <span className={row.disciplina >= 75 ? 'status-pill ok' : row.disciplina >= 50 ? 'status-pill warn' : 'status-pill danger'}>
+                {row.disciplina}%
+              </span>
+            </div>
+          ))}
         </div>
       </section>
 
