@@ -225,6 +225,7 @@ Prioridade: alta.
    - Janela minima entre campanhas.
    - Primeira trava visual entregue: sem WhatsApp, nao contatar e contato recente ficam bloqueados antes do WA.ME.
    - Elegibilidade no banco entregue em `vw_clientes_campanha_elegibilidade`, com motivo do bloqueio e proximo envio permitido.
+   - Janela minima configuravel por campanha e opt-out com motivo/data/usuario entregues.
 
 4. Relatorio de campanha.
    - Alcance.
@@ -1509,6 +1510,25 @@ Validacao:
 
 Proximo passo tecnico:
 - Transformar a janela de 7 dias em configuracao de campanha/regra e criar opt-out auditavel com motivo, data e usuario.
+
+### 2026-05-29 - Janela configuravel e opt-out auditavel
+
+Status: concluido - segunda entrega do M08.
+
+Entregue:
+- Campanhas ganharam campo `Janela entre campanhas`, salvo em `filtro_usado.janelaMinimaDias`.
+- O bloqueio de contato recente passou a respeitar a janela definida por campanha na tela.
+- Cliente recebeu campos `whatsapp_opt_out_motivo`, `whatsapp_opt_out_em` e `whatsapp_opt_out_por`.
+- Ao marcar `Nao contatar` em campanhas, o app pede motivo e grava a justificativa no cliente.
+- A view de elegibilidade passou a expor motivo/data/usuario do opt-out.
+
+Validacao:
+- SQL aplicado no Supabase com `node scripts/run-sql-file.mjs supabase/queries/campanha_optout_governanca.sql`.
+- Build passou com `npm run build`.
+- Playwright local validou a tela de Campanhas, o campo de janela e a view de elegibilidade sem erros.
+
+Proximo passo tecnico:
+- Criar Inbox dedicado de respostas de campanha com classificacao de trabalho: pediu preco, pediu retorno, virar orcamento, ganho e perdido.
 
 ## Criterio de qualidade
 

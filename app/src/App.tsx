@@ -6342,6 +6342,7 @@ function Campanhas({
   const [campaignObjective, setCampaignObjective] = useState('')
   const [campaignCost, setCampaignCost] = useState('')
   const [campaignRevenueGoal, setCampaignRevenueGoal] = useState('')
+  const [campaignWindowDays, setCampaignWindowDays] = useState('7')
   const [campaignImage, setCampaignImage] = useState<CampanhaImagemPadrao | undefined>()
   const [campaignClipboardMessage, setCampaignClipboardMessage] = useState('')
   const [clientes, setClientes] = useState<Cliente[]>([])
@@ -6363,7 +6364,7 @@ function Campanhas({
   const campanhaClientes = clientes
   const campaignQuality = campanhaClientes.reduce(
     (acc, cliente) => {
-      const readiness = campaignContactReadiness(cliente, elegibilidade[cliente.id])
+      const readiness = campaignContactReadiness(cliente, elegibilidade[cliente.id], numberFromInput(campaignWindowDays) || 7)
       if (readiness.blocked) acc.bloqueados += 1
       if (!cliente.whatsapp) acc.semWhatsapp += 1
       if (cliente.status === 'Nao contatar' || cliente.leadQualificacaoStatus === 'nao_contatar') acc.optOut += 1
@@ -6372,7 +6373,7 @@ function Campanhas({
     { bloqueados: 0, semWhatsapp: 0, optOut: 0 },
   )
   const nextClient = campanhaClientes
-    .filter((cliente) => (statuses[cliente.id] ?? 'pendente') === 'pendente' && !campaignContactReadiness(cliente, elegibilidade[cliente.id]).blocked)
+    .filter((cliente) => (statuses[cliente.id] ?? 'pendente') === 'pendente' && !campaignContactReadiness(cliente, elegibilidade[cliente.id], numberFromInput(campaignWindowDays) || 7).blocked)
     .sort((a, b) => (b.totalComprado + b.totalServicos) - (a.totalComprado + a.totalServicos))[0]
   const campaignCounts = campanhaClientes.reduce<Record<CampanhaEnvioStatus, number>>(
     (acc, cliente) => {
@@ -6383,7 +6384,7 @@ function Campanhas({
     { pendente: 0, enviado: 0, respondeu: 0, nao_respondeu: 0, virou_orcamento: 0, ganhou: 0, perdido: 0, nao_contatar: 0 },
   )
   const filteredClientes = campanhaClientes.filter((cliente) => statusFilter === 'todos' || (statuses[cliente.id] ?? 'pendente') === statusFilter)
-  const selectableCampaignIds = filteredClientes.filter((cliente) => !campaignContactReadiness(cliente, elegibilidade[cliente.id]).blocked).map((cliente) => cliente.id)
+  const selectableCampaignIds = filteredClientes.filter((cliente) => !campaignContactReadiness(cliente, elegibilidade[cliente.id], numberFromInput(campaignWindowDays) || 7).blocked).map((cliente) => cliente.id)
   const allCampaignRowsSelected = selectableCampaignIds.length > 0 && selectableCampaignIds.every((id) => selectedCampaignClientIds.includes(id))
 
   useEffect(() => {
@@ -6489,6 +6490,7 @@ function Campanhas({
     setCampaignObjective(campanha.objetivo ?? '')
     setCampaignCost(campanha.custoEstimado ? String(campanha.custoEstimado) : '')
     setCampaignRevenueGoal(campanha.metaReceita ? String(campanha.metaReceita) : '')
+    setCampaignWindowDays(String(campanha.filtroUsado.janelaMinimaDias ?? 7))
     setCampaignImage(campanha.filtroUsado.imagemPadrao)
     setCampaignClipboardMessage('')
     setPage(1)
@@ -6527,6 +6529,7 @@ function Campanhas({
           clienteIds: activeSavedCampaign?.filtroUsado.clienteIds,
           origemLista: activeSavedCampaign?.filtroUsado.origemLista,
           imagemPadrao: campaignImage,
+          janelaMinimaDias: numberFromInput(campaignWindowDays) || 7,
         },
         criadaPor: currentUser.id,
       })
@@ -6540,7 +6543,7 @@ function Campanhas({
     }
   }
 
-  async function markStatus(cliente: Cliente, status: CampanhaEnvioStatus, mensagemFinal: string) {
+  async function markStatus(cliente: Cliente, status: CampanhaEnvioStatus, mensagemFinal: string, optOutMotivo?: string) {
     setCampaignError('')
 
     try {
@@ -6574,7 +6577,11 @@ function Campanhas({
         })
       }
       if (status === 'nao_contatar') {
-        updateClienteComercial(cliente.id, { status: 'Nao contatar' }).catch((exception) => {
+        updateClienteComercial(cliente.id, {
+          status: 'Nao contatar',
+          optOutMotivo: optOutMotivo || 'Bloqueado pela campanha',
+          optOutPor: currentUser.id,
+        }).catch((exception) => {
           setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel marcar cliente como nao contatar.')
         })
       }
@@ -6583,6 +6590,12 @@ function Campanhas({
     } catch (exception) {
       setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o envio.')
     }
+  }
+
+  async function markCampaignOptOut(cliente: Cliente, mensagemFinal: string) {
+    const motivo = window.prompt('Motivo para marcar este cliente como nao contatar:', 'Solicitou nao receber campanhas')
+    if (motivo === null) return
+    await markStatus(cliente, 'nao_contatar', mensagemFinal, motivo.trim() || 'Sem motivo informado')
   }
 
   async function markSelectedCampaignStatus(status: CampanhaEnvioStatus) {
@@ -6794,6 +6807,18 @@ function Campanhas({
               setActiveCampanhaId('')
             }}
             placeholder="0,00"
+          />
+        </label>
+        <label>
+          Janela entre campanhas
+          <input
+            inputMode="numeric"
+            value={campaignWindowDays}
+            onChange={(event) => {
+              setCampaignWindowDays(event.target.value.replace(/\D/g, ''))
+              setActiveCampanhaId('')
+            }}
+            placeholder="7"
           />
         </label>
         <label>
@@ -7084,7 +7109,7 @@ function Campanhas({
         </div>
         {filteredClientes.map((cliente) => {
           const finalMessage = messageFor(cliente)
-          const readiness = campaignContactReadiness(cliente, elegibilidade[cliente.id])
+          const readiness = campaignContactReadiness(cliente, elegibilidade[cliente.id], numberFromInput(campaignWindowDays) || 7)
 
           return (
             <div className="table-row campaign campaign-bulk-row" key={cliente.id}>
@@ -7148,7 +7173,7 @@ function Campanhas({
                 <button className="button" type="button" onClick={() => markStatus(cliente, 'perdido', finalMessage)}>
                   Perdido
                 </button>
-                <button className="button" type="button" onClick={() => markStatus(cliente, 'nao_contatar', finalMessage)}>
+                <button className="button" type="button" onClick={() => markCampaignOptOut(cliente, finalMessage)}>
                   Nao contatar
                 </button>
               </span>
@@ -7206,8 +7231,20 @@ function campaignTaskPriority(status: CampanhaEnvioStatus) {
   return 50
 }
 
-function campaignContactReadiness(cliente: Cliente, elegibilidade?: CampanhaElegibilidade) {
+function campaignContactReadiness(cliente: Cliente, elegibilidade?: CampanhaElegibilidade, windowDays = 7) {
   if (elegibilidade) {
+    if (elegibilidade.motivoBloqueio === 'Nao contatar' || elegibilidade.motivoBloqueio.startsWith('Nao contatar')) {
+      return {
+        blocked: true,
+        reason: elegibilidade.optOutMotivo ? `Nao contatar: ${elegibilidade.optOutMotivo}` : elegibilidade.motivoBloqueio,
+      }
+    }
+    if (elegibilidade.motivoBloqueio === 'Sem WhatsApp') {
+      return { blocked: true, reason: elegibilidade.motivoBloqueio }
+    }
+    if (daysSince(elegibilidade.ultimoAcionamento) <= windowDays) {
+      return { blocked: true, reason: `Contato recente: aguardar ${windowDays}d` }
+    }
     return {
       blocked: !elegibilidade.elegivel,
       reason: elegibilidade.motivoBloqueio,
@@ -7217,7 +7254,7 @@ function campaignContactReadiness(cliente: Cliente, elegibilidade?: CampanhaEleg
     return { blocked: true, reason: 'Nao contatar' }
   }
   if (!cliente.whatsapp) return { blocked: true, reason: 'Sem WhatsApp' }
-  if (daysSince(cliente.ultimoContatoEm) <= 7) return { blocked: true, reason: 'Contato recente' }
+  if (daysSince(cliente.ultimoContatoEm) <= windowDays) return { blocked: true, reason: `Contato recente: aguardar ${windowDays}d` }
   return { blocked: false, reason: 'Apto' }
 }
 

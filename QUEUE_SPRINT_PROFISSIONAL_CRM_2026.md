@@ -51,10 +51,10 @@ Entregue nesta rodada:
 - Campanhas salvas preservam os filtros avancados no `filtro_usado`, permitindo reabrir o mesmo publico sem remontar manualmente.
 - Segmentacao passou a cruzar vendedor historico, status de lead, medida, placa/veiculo e faixa de KM com vendas, servicos e cadastro de veiculos.
 - Criada view `vw_clientes_campanha_elegibilidade` para centralizar bloqueios de campanha por nao contatar, falta de WhatsApp e contato recente.
+- Campanhas agora salvam janela minima entre acionamentos, permitindo ajustar o bloqueio de contato recente por campanha.
+- Opt-out de WhatsApp passou a registrar motivo, data e usuario no cliente.
 
 Proximos pontos:
-- Janela configuravel entre campanhas por cliente.
-- Opt-out com motivo, data e usuario.
 - Inbox dedicado de respostas com status de trabalho: respondeu, pediu preco, pediu retorno, virou orcamento, ganho, perdido.
 - Relatorio de campanha por vendedor com enviados, respostas, tarefas, orcamentos, ganhos, receita e ROI.
 

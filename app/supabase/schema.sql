@@ -49,6 +49,9 @@ create table public.clientes (
   lead_qualificacao_status text not null default 'novo' check (lead_qualificacao_status in ('novo', 'contatado', 'qualificado', 'virou_cliente', 'descartado', 'nao_contatar')),
   lead_qualificacao_observacao text,
   lead_qualificado_em timestamptz,
+  whatsapp_opt_out_motivo text,
+  whatsapp_opt_out_em timestamptz,
+  whatsapp_opt_out_por uuid references public.users(id),
   primeira_compra_em date,
   ultima_compra_em date,
   ultimo_servico_em date,
@@ -384,6 +387,9 @@ base as (
     c.whatsapp_principal,
     c.status_comercial,
     c.lead_qualificacao_status,
+    c.whatsapp_opt_out_motivo,
+    c.whatsapp_opt_out_em,
+    c.whatsapp_opt_out_por,
     c.ultimo_contato_em,
     u.ultimo_envio_campanha,
     greatest(
@@ -401,6 +407,9 @@ select
   whatsapp_principal,
   status_comercial,
   lead_qualificacao_status,
+  whatsapp_opt_out_motivo as opt_out_motivo,
+  whatsapp_opt_out_em as opt_out_em,
+  whatsapp_opt_out_por as opt_out_por,
   ultimo_contato_em,
   ultimo_envio_campanha,
   nullif(ultimo_acionamento, '-infinity'::timestamptz) as ultimo_acionamento,
@@ -792,6 +801,38 @@ $$;
 create trigger clientes_auditar_alteracoes
 after update on public.clientes
 for each row execute function public.auditar_cliente_alteracoes();
+
+create or replace function public.auditar_cliente_optout_campanha()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  usuario_atual uuid;
+begin
+  usuario_atual := public.current_app_user_id();
+
+  if old.whatsapp_opt_out_motivo is distinct from new.whatsapp_opt_out_motivo
+    or old.whatsapp_opt_out_em is distinct from new.whatsapp_opt_out_em then
+    insert into public.cliente_alteracoes (cliente_id, usuario_id, campo, valor_anterior, valor_novo, origem)
+    values (
+      new.id,
+      coalesce(new.whatsapp_opt_out_por, usuario_atual),
+      'whatsapp_opt_out',
+      coalesce(old.whatsapp_opt_out_motivo, ''),
+      coalesce(new.whatsapp_opt_out_motivo, ''),
+      'campanha'
+    );
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger clientes_auditar_optout_campanha
+after update of whatsapp_opt_out_motivo, whatsapp_opt_out_em, whatsapp_opt_out_por on public.clientes
+for each row execute function public.auditar_cliente_optout_campanha();
 
 create or replace function public.calcular_score_oportunidade(cliente public.clientes)
 returns integer

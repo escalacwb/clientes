@@ -39,6 +39,7 @@ export type CampanhaFiltroUsado = {
   clienteIds?: string[]
   origemLista?: string
   imagemPadrao?: CampanhaImagemPadrao
+  janelaMinimaDias?: number
 }
 
 export type CampanhaImagemPadrao = {
@@ -91,6 +92,7 @@ export type CampanhaElegibilidade = {
   motivoBloqueio: string
   ultimoAcionamento?: string
   proximoEnvioEm?: string
+  optOutMotivo?: string
 }
 
 type CampanhaEnvioRow = {
@@ -160,6 +162,7 @@ type CampanhaElegibilidadeRow = {
   motivo_bloqueio: string
   ultimo_acionamento: string | null
   proximo_envio_em: string | null
+  opt_out_motivo: string | null
 }
 
 export const campanhaSegmentos: CampanhaSegmento[] = [
@@ -439,7 +442,7 @@ export async function listCampanhaElegibilidade(clienteIds: string[]): Promise<R
 
   const { data, error } = await supabase
     .from('vw_clientes_campanha_elegibilidade')
-    .select('cliente_id,elegivel,motivo_bloqueio,ultimo_acionamento,proximo_envio_em')
+    .select('cliente_id,elegivel,motivo_bloqueio,ultimo_acionamento,proximo_envio_em,opt_out_motivo')
     .in('cliente_id', clienteIds)
 
   if (error) return {}
@@ -452,6 +455,7 @@ export async function listCampanhaElegibilidade(clienteIds: string[]): Promise<R
       motivoBloqueio: item.motivo_bloqueio,
       ultimoAcionamento: item.ultimo_acionamento ?? undefined,
       proximoEnvioEm: item.proximo_envio_em ?? undefined,
+      optOutMotivo: item.opt_out_motivo ?? undefined,
     }
     return acc
   }, {})

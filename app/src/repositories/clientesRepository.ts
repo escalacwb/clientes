@@ -247,8 +247,10 @@ export async function updateClienteComercial(
     telefone?: string
     whatsapp?: string
     responsavel?: string
-    status?: string
-    observacoes?: string
+  status?: string
+  observacoes?: string
+  optOutMotivo?: string
+  optOutPor?: string
   },
 ): Promise<void> {
   const supabase = await getSupabase()
@@ -262,6 +264,9 @@ export async function updateClienteComercial(
       responsavel_nome: input.responsavel,
       status_comercial: input.status ? toDbStatus(input.status) : undefined,
       observacoes_comerciais: input.observacoes,
+      whatsapp_opt_out_motivo: input.optOutMotivo,
+      whatsapp_opt_out_por: input.optOutPor,
+      whatsapp_opt_out_em: input.optOutMotivo ? new Date().toISOString() : undefined,
     })
     .eq('id', clienteId)
 

@@ -65,3 +65,36 @@ select
     else (ultimo_acionamento + interval '7 days')::date
   end as proximo_envio_em
 from base;
+
+create or replace function public.auditar_cliente_optout_campanha()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  usuario_atual uuid;
+begin
+  usuario_atual := public.current_app_user_id();
+
+  if old.whatsapp_opt_out_motivo is distinct from new.whatsapp_opt_out_motivo
+    or old.whatsapp_opt_out_em is distinct from new.whatsapp_opt_out_em then
+    insert into public.cliente_alteracoes (cliente_id, usuario_id, campo, valor_anterior, valor_novo, origem)
+    values (
+      new.id,
+      coalesce(new.whatsapp_opt_out_por, usuario_atual),
+      'whatsapp_opt_out',
+      coalesce(old.whatsapp_opt_out_motivo, ''),
+      coalesce(new.whatsapp_opt_out_motivo, ''),
+      'campanha'
+    );
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists clientes_auditar_optout_campanha on public.clientes;
+create trigger clientes_auditar_optout_campanha
+after update of whatsapp_opt_out_motivo, whatsapp_opt_out_em, whatsapp_opt_out_por on public.clientes
+for each row execute function public.auditar_cliente_optout_campanha();
