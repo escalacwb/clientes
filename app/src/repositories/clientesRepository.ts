@@ -95,7 +95,7 @@ export async function listClientes(): Promise<Cliente[]> {
   const data = await fetchAllPages<ClienteRow>((from, to) =>
     supabase
       .from('clientes')
-      .select('*,users(nome)')
+      .select('*,users!clientes_vendedor_id_fkey(nome)')
       .is('excluido_em', null)
       .order('nome', { ascending: true })
       .range(from, to),
@@ -121,7 +121,7 @@ export async function listClientesPage(input: {
   const to = from + input.pageSize - 1
   let query = supabase
     .from('clientes')
-    .select('*,users(nome)', { count: 'exact' })
+    .select('*,users!clientes_vendedor_id_fkey(nome)', { count: 'exact' })
     .is('excluido_em', null)
 
   query = applyClienteFilters(query, input)
