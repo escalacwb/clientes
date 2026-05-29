@@ -163,6 +163,7 @@ Prioridade: maxima.
    - Cabecalho com cliente, vendedor, validade, condicao, status.
    - Editor tabular de itens.
    - Preview WhatsApp e preview proposta.
+   - Primeira tela propria entregue em `Proposta comercial`, aberta pela lista de orcamentos.
 
 2. Melhorar busca de catalogo.
    - Buscar por codigo, nome, medida, marca, grupo e tipo.

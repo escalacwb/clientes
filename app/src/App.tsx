@@ -254,6 +254,7 @@ function App() {
   const [orcamentosTotal, setOrcamentosTotal] = useState(isSupabaseConfigured ? 0 : seedOrcamentos.length)
   const [orcamentosPage, setOrcamentosPage] = useState(1)
   const [orcamentosFilter, setOrcamentosFilter] = useState<OrcamentoListFilter>('todos')
+  const [selectedOrcamentoId, setSelectedOrcamentoId] = useState('')
   const [importacoes, setImportacoes] = useState<Importacao[]>(isSupabaseConfigured ? [] : seedImportacoes)
   const [conflitos, setConflitos] = useState<ImportacaoConflito[]>(isSupabaseConfigured ? [] : seedConflitos)
   const [usuarios, setUsuarios] = useState(isSupabaseConfigured ? authUsuarios : seedVendedores)
@@ -827,6 +828,10 @@ function App() {
     if (!session || session.role === 'admin') return orcamentos
     return orcamentos.filter((orcamento) => scopedClientIds.has(orcamento.clienteId) || orcamento.vendedorId === session.id)
   }, [orcamentos, scopedClientIds, session])
+  const selectedOrcamento = useMemo(
+    () => scopedOrcamentos.find((orcamento) => orcamento.id === selectedOrcamentoId),
+    [scopedOrcamentos, selectedOrcamentoId],
+  )
   const scopedVendasItens = useMemo(() => {
     if (!session || session.role === 'admin') return vendasItens
     return vendasItens.filter((venda) => scopedClientIds.has(venda.clienteId))
@@ -1590,6 +1595,11 @@ function App() {
               setOrcamentosFilter(filter)
               setOrcamentosPage(1)
             }}
+            onOpenDetail={(orcamento) => {
+              setSelectedOrcamentoId(orcamento.id)
+              setSelectedClientId(orcamento.clienteId)
+              setView('orcamento-detalhe')
+            }}
             onRevise={async (id, input) => {
               const revised = await reviseOrcamento(id, input, input.itens)
               setOrcamentos((current) => current.map((orcamento) => (orcamento.id === id ? revised : orcamento)))
@@ -1621,6 +1631,48 @@ function App() {
               )
             }}
           />
+        )}
+        {canUseScopedClientViews && view === 'orcamento-detalhe' && selectedOrcamento && (
+          <OrcamentoWorkspace
+            orcamento={selectedOrcamento}
+            cliente={clientes.find((item) => item.id === selectedOrcamento.clienteId) ?? clienteFromOrcamento(selectedOrcamento)}
+            vendedor={usuarios.find((item) => item.id === selectedOrcamento.vendedorId)}
+            currentUser={session}
+            catalogo={catalogo}
+            onBack={() => setView('orcamentos')}
+            onRevise={async (id, input) => {
+              const revised = await reviseOrcamento(id, input, input.itens)
+              setOrcamentos((current) => current.map((orcamento) => (orcamento.id === id ? revised : orcamento)))
+              return revised
+            }}
+            onStatusChange={async (status, motivoPerda) => {
+              await updateOrcamentoStatus(selectedOrcamento.id, status, motivoPerda, status === 'enviado' ? session.id : undefined)
+              if (status === 'ganho') {
+                await attributeCampanhaRevenueByOrcamento(selectedOrcamento.id, selectedOrcamento.valorTotal)
+              }
+              setOrcamentos((current) =>
+                current.map((orcamento) =>
+                  orcamento.id === selectedOrcamento.id
+                    ? {
+                        ...orcamento,
+                        status,
+                        motivoPerda,
+                        aprovadoPor: status === 'enviado' ? session.id : orcamento.aprovadoPor,
+                        aprovadoEm: status === 'enviado' ? new Date().toISOString() : orcamento.aprovadoEm,
+                      }
+                    : orcamento,
+                ),
+              )
+            }}
+          />
+        )}
+        {canUseScopedClientViews && view === 'orcamento-detalhe' && !selectedOrcamento && (
+          <section className="panel wide">
+            <div className="empty-state">
+              Orcamento nao encontrado na pagina atual.
+              <button className="button" type="button" onClick={() => setView('orcamentos')}>Voltar para orcamentos</button>
+            </div>
+          </section>
         )}
         {canUseScopedClientViews && view === 'catalogo' && (
           <Catalogo
@@ -1730,6 +1782,7 @@ function titleFor(view: string) {
     clientes: 'Base unica de clientes',
     rodobens: 'Inbox Rodobens',
     'orcamento-editor': 'Editor de proposta',
+    'orcamento-detalhe': 'Proposta comercial',
     carteira: 'Fila diaria do vendedor',
     oportunidades: 'Oportunidades automaticas',
     tarefas: 'Tarefas e proximas acoes',
@@ -6988,6 +7041,7 @@ function Orcamentos({
   isLoading,
   onPageChange,
   onStatusFilterChange,
+  onOpenDetail,
   onRevise,
   onStatusChange,
 }: {
@@ -7003,6 +7057,7 @@ function Orcamentos({
   isLoading: boolean
   onPageChange: (page: number) => void
   onStatusFilterChange: (filter: OrcamentoListFilter) => void
+  onOpenDetail: (orcamento: Orcamento) => void
   onRevise: (id: string, orcamento: OrcamentoInput) => Promise<Orcamento>
   onStatusChange: (id: string, status: Orcamento['status'], motivoPerda?: string) => void
 }) {
@@ -7171,6 +7226,9 @@ function Orcamentos({
                   <button className="button" type="button" onClick={() => openVersionHistory(orcamento)}>
                     Versoes
                   </button>
+                  <button className="button primary" type="button" onClick={() => onOpenDetail(orcamento)}>
+                    Abrir proposta
+                  </button>
                   <button className="button" type="button" onClick={() => setRevisionTarget(orcamento)}>
                     Revisar
                   </button>
@@ -7253,6 +7311,298 @@ function Orcamentos({
             const revised = await onRevise(revisionTarget.id, input)
             setRevisionTarget(null)
             setVersionTarget(revised)
+            setVersions(await listOrcamentoVersoes(revised.id))
+          }}
+        />
+      )}
+    </section>
+  )
+}
+
+function OrcamentoWorkspace({
+  orcamento,
+  cliente,
+  vendedor,
+  currentUser,
+  catalogo,
+  onBack,
+  onRevise,
+  onStatusChange,
+}: {
+  orcamento: Orcamento
+  cliente: Cliente
+  vendedor?: Vendedor
+  currentUser: SessaoUsuario
+  catalogo: CatalogoItem[]
+  onBack: () => void
+  onRevise: (id: string, orcamento: OrcamentoInput) => Promise<Orcamento>
+  onStatusChange: (status: Orcamento['status'], motivoPerda?: string) => Promise<void>
+}) {
+  const [activeTab, setActiveTab] = useState<'resumo' | 'itens' | 'mensagem' | 'versoes'>('resumo')
+  const [versions, setVersions] = useState<OrcamentoVersao[]>([])
+  const [versionsLoading, setVersionsLoading] = useState(false)
+  const [revisionTarget, setRevisionTarget] = useState<Orcamento | null>(null)
+  const [lossReason, setLossReason] = useState('')
+  const [approvalRejectReason, setApprovalRejectReason] = useState('')
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
+  const [feedback, setFeedback] = useState('')
+  const [error, setError] = useState('')
+  const validItems = (orcamento.itens ?? []).map((item) => ({ ...item, valorTotal: item.valorTotal ?? quoteItemTotal(item) }))
+  const scenarios = quotePaymentScenarios(orcamento.valorTotal, {
+    'A vista': -3,
+    '30 dias': 0,
+    '30/60 dias': 2,
+    '30/60/90 dias': 4,
+  })
+  const message = buildQuoteMessage(cliente, validItems, orcamento.validade, orcamento.formaPagamento, orcamento.observacao, scenarios)
+  const waUrl = cliente.whatsapp && validItems.length > 0
+    ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(message)}`
+    : undefined
+  const isExpired = ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando'].includes(orcamento.status) && daysSince(orcamento.validade) > 0
+  const canApprove = currentUser.role === 'admin'
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadVersions() {
+      if (activeTab !== 'versoes') return
+      setVersionsLoading(true)
+      try {
+        const data = await listOrcamentoVersoes(orcamento.id)
+        if (isMounted) setVersions(data)
+      } catch {
+        if (isMounted) setVersions([])
+      } finally {
+        if (isMounted) setVersionsLoading(false)
+      }
+    }
+
+    void loadVersions()
+    return () => {
+      isMounted = false
+    }
+  }, [activeTab, orcamento.id])
+
+  async function updateStatus(status: Orcamento['status'], motivo?: string) {
+    setIsUpdatingStatus(true)
+    setError('')
+    setFeedback('')
+    try {
+      await onStatusChange(status, motivo)
+      setFeedback(`Status atualizado para ${status}.`)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o status.')
+    } finally {
+      setIsUpdatingStatus(false)
+    }
+  }
+
+  async function copyMessage() {
+    await navigator.clipboard.writeText(message)
+    setFeedback('Mensagem copiada.')
+  }
+
+  return (
+    <section className="quote-workspace">
+      <section className={isExpired ? 'panel wide quote-workspace-hero expired-budget' : 'panel wide quote-workspace-hero'}>
+        <div>
+          <p className="eyebrow">Proposta {orcamento.id.slice(0, 8)}</p>
+          <h2>{cliente.nome}</h2>
+          <p>{cliente.cidade}/{cliente.uf} - {cliente.whatsapp ?? cliente.telefone ?? 'sem contato'} - {vendedor?.nome ?? orcamento.vendedorNome ?? 'sem vendedor'}</p>
+        </div>
+        <div className="toolbar-actions">
+          <button className="button" type="button" onClick={onBack}>Voltar</button>
+          <button className="button" type="button" onClick={() => window.print()}>Imprimir/PDF</button>
+          <a className={!waUrl ? 'button disabled' : 'button primary'} href={waUrl} target="_blank" rel="noreferrer">
+            <MessageCircle size={16} /> Enviar WA.ME
+          </a>
+        </div>
+      </section>
+
+      {feedback && <div className="success-alert">{feedback}</div>}
+      {error && <div className="alert">{error}</div>}
+
+      <section className="panel wide">
+        <div className="info-grid quote-kpis">
+          <Info label="Status" value={isExpired ? 'Vencido' : orcamento.status} />
+          <Info label="Total" value={money(orcamento.valorTotal)} />
+          <Info label="Validade" value={dateLabel(orcamento.validade)} />
+          <Info label="Previsao" value={dateLabel(orcamento.previsaoFechamento)} />
+          <Info label="Condicao" value={orcamento.formaPagamento ?? 'Nao informada'} />
+        </div>
+        <div className="quote-workspace-actions">
+          {orcamento.status === 'aguardando_aprovacao' && canApprove && (
+            <button className="button primary" type="button" disabled={isUpdatingStatus} onClick={() => updateStatus('enviado')}>
+              Aprovar e marcar enviado
+            </button>
+          )}
+          {orcamento.status === 'aguardando_aprovacao' && canApprove && (
+            <>
+              <select className="assign-select" value={approvalRejectReason} onChange={(event) => setApprovalRejectReason(event.target.value)}>
+                <option value="">Motivo rejeicao</option>
+                <option value="desconto_excessivo">Desconto excessivo</option>
+                <option value="margem_insuficiente">Margem insuficiente</option>
+                <option value="preco_desatualizado">Preco desatualizado</option>
+                <option value="sem_estoque">Sem estoque</option>
+                <option value="revisar_comercial">Revisar condicao comercial</option>
+              </select>
+              <button className="button danger" type="button" disabled={!approvalRejectReason || isUpdatingStatus} onClick={() => updateStatus('perdido', `aprovacao_rejeitada:${approvalRejectReason}`)}>
+                Rejeitar
+              </button>
+            </>
+          )}
+          <button className="button" type="button" disabled={isUpdatingStatus} onClick={() => updateStatus('enviado')}>Enviado</button>
+          <button className="button" type="button" disabled={isUpdatingStatus} onClick={() => updateStatus('negociando')}>Negociando</button>
+          <button className="button" type="button" disabled={isUpdatingStatus} onClick={() => updateStatus('ganho')}>Ganho</button>
+          <select className="assign-select" value={lossReason} onChange={(event) => setLossReason(event.target.value)}>
+            <option value="">Motivo perda</option>
+            <option value="preco">Preco</option>
+            <option value="prazo">Prazo</option>
+            <option value="concorrente">Concorrente</option>
+            <option value="sem_estoque">Sem estoque</option>
+            <option value="nao_respondeu">Nao respondeu</option>
+            <option value="aprovacao_rejeitada">Aprovacao rejeitada</option>
+          </select>
+          <button className="button" type="button" disabled={!lossReason || isUpdatingStatus} onClick={() => updateStatus('perdido', lossReason)}>Perdido</button>
+          <button className="button primary" type="button" onClick={() => setRevisionTarget(orcamento)}>Revisar proposta</button>
+        </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="tabs">
+          {[
+            ['resumo', 'Resumo'],
+            ['itens', 'Itens'],
+            ['mensagem', 'Mensagem'],
+            ['versoes', 'Versoes'],
+          ].map(([tab, label]) => (
+            <button key={tab} className={activeTab === tab ? 'active' : ''} type="button" onClick={() => setActiveTab(tab as typeof activeTab)}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'resumo' && (
+          <div className="quote-workspace-grid">
+            <div className="proposal-preview">
+              <div className="proposal-heading">
+                <strong>Capital Truck Center</strong>
+                <span>Proposta comercial</span>
+              </div>
+              <div className="proposal-client">
+                <strong>{cliente.nome}</strong>
+                <span>{cliente.cidade}/{cliente.uf}</span>
+                <span>{cliente.cpfCnpj ?? cliente.codigoErp ?? 'Cadastro sem documento'}</span>
+              </div>
+              <div className="proposal-lines">
+                {validItems.map((item, index) => (
+                  <div key={`${item.id}-${index}`}>
+                    <span>{index + 1}. {item.quantidade}x {item.descricao}</span>
+                    <strong>{money(item.valorTotal ?? 0)}</strong>
+                  </div>
+                ))}
+              </div>
+              <div className="proposal-total">
+                <span>Total</span>
+                <strong>{money(orcamento.valorTotal)}</strong>
+              </div>
+              <small>Validade: {dateLabel(orcamento.validade)} - Condicao: {orcamento.formaPagamento ?? 'nao informada'}</small>
+            </div>
+            <div className="summary-box">
+              <strong>Controle comercial</strong>
+              <p>{orcamento.observacao ?? 'Sem observacoes comerciais registradas.'}</p>
+              {orcamento.aprovacaoMotivo && <p>Aprovacao: {orcamento.aprovacaoMotivo}</p>}
+              {orcamento.motivoPerda && <p>Motivo perda: {lossReasonLabel(orcamento.motivoPerda)}</p>}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'itens' && (
+          <div className="table">
+            <div className="table-head five">
+              <span>Item</span>
+              <span>Tipo</span>
+              <span>Quantidade</span>
+              <span>Unitario</span>
+              <span>Total</span>
+            </div>
+            {validItems.map((item) => (
+              <div className="table-row five" key={item.id}>
+                <span><strong>{item.descricao}</strong><small>{item.codigo ?? item.catalogoItemId ?? 'manual'}</small></span>
+                <span>{item.tipo}</span>
+                <span>{item.quantidade}</span>
+                <span>{money(item.valorUnitario)}<small>{item.descontoPercentual ? `${item.descontoPercentual}% desc.` : 'sem desconto'}</small></span>
+                <span><strong>{money(item.valorTotal ?? 0)}</strong></span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {activeTab === 'mensagem' && (
+          <div className="quote-message-grid">
+            <label>
+              Mensagem WhatsApp
+              <textarea readOnly value={message} />
+            </label>
+            <div className="quote-payment-scenarios">
+              <strong>Condicoes comparativas</strong>
+              {scenarios.map((scenario) => (
+                <div className="status-row" key={scenario.label}>
+                  <span>{scenario.label}</span>
+                  <strong>{money(scenario.total)}</strong>
+                </div>
+              ))}
+              <button className="button" type="button" onClick={copyMessage}>Copiar mensagem</button>
+              <a className={!waUrl ? 'button disabled' : 'button primary'} href={waUrl} target="_blank" rel="noreferrer">
+                <MessageCircle size={16} /> Abrir WhatsApp
+              </a>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'versoes' && (
+          <>
+            {versionsLoading && <div className="empty-state">Carregando versoes...</div>}
+            {!versionsLoading && versions.length === 0 && <div className="empty-state">Nenhuma versao registrada.</div>}
+            {!versionsLoading && versions.length > 0 && (
+              <div className="quote-version-grid">
+                {versions.map((version) => (
+                  <article className="quote-version-card" key={version.id}>
+                    <div>
+                      <strong>v{version.numero} - {version.status}</strong>
+                      <small>{dateLabel(version.criadoEm)} - {version.origem ?? 'sem origem'}</small>
+                    </div>
+                    <div className="proposal-lines">
+                      {version.itens.slice(0, 8).map((item, index) => (
+                        <div key={`${version.id}-${index}`}>
+                          <span>{item.quantidade}x {item.descricao}</span>
+                          <strong>{money(item.valorTotal ?? 0)}</strong>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="proposal-total">
+                      <span>Total</span>
+                      <strong>{money(version.valorTotal)}</strong>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      {revisionTarget && (
+        <OrcamentoRevisionEditor
+          orcamento={revisionTarget}
+          cliente={cliente}
+          catalogo={catalogo}
+          onCancel={() => setRevisionTarget(null)}
+          onSave={async (input) => {
+            const revised = await onRevise(revisionTarget.id, input)
+            setRevisionTarget(null)
+            setFeedback(`Proposta ${revised.id.slice(0, 8)} revisada e versionada.`)
+            setActiveTab('versoes')
             setVersions(await listOrcamentoVersoes(revised.id))
           }}
         />

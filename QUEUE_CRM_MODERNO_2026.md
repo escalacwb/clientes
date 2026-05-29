@@ -119,7 +119,7 @@ Pronto quando:
 
 ### M04 - Orcamento full-page profissional
 
-Status: Pendente.
+Status: Parcial.
 
 Objetivo:
 Transformar o editor atual em pagina completa de proposta.
@@ -131,6 +131,12 @@ Entregas:
 - Multiplas condicoes comerciais na mesma proposta.
 - Preview de WhatsApp e preview de proposta.
 - Historico de versoes visivel na mesma pagina.
+
+Ja entregue:
+- Lista de orcamentos ganhou acao `Abrir proposta`.
+- Criada tela `Proposta comercial` por orcamento, com resumo, itens, mensagem WhatsApp, condicoes comparativas, versoes e acoes de status.
+- A tela permite aprovar/enviar, negociar, marcar ganho/perdido e revisar proposta com nova versao.
+- Preview da proposta e mensagem WA.ME ficam na mesma area operacional.
 
 Pronto quando:
 - Criar, revisar, enviar e aprovar uma proposta acontece em uma tela unica.
