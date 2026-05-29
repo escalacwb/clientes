@@ -62,6 +62,7 @@ import {
   type CampanhaResumo,
   type CampanhaSalva,
   type CampanhaSegmentoId,
+  attributeCampanhaRevenueByOrcamento,
 } from './repositories/campanhasRepository'
 import { listCatalogoItens } from './repositories/catalogoRepository'
 import { assignClienteVendedor } from './repositories/clientesRepository'
@@ -745,6 +746,7 @@ function App() {
                   telefone: selectedClient.whatsapp,
                   mensagemFinal: created.observacao || `Orcamento ${created.id.slice(0, 8)} criado a partir da campanha ${quoteOriginContext.label}.`,
                   status: 'virou_orcamento',
+                  orcamentoId: created.id,
                 })
               }
               const interacao = await createInteracao({
@@ -952,9 +954,16 @@ function App() {
               return revised
             }}
             onStatusChange={(id, status, motivoPerda) => {
+              const changedOrcamento = orcamentos.find((orcamento) => orcamento.id === id)
               updateOrcamentoStatus(id, status, motivoPerda, status === 'enviado' ? session.id : undefined).catch((exception) => {
                 setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o orcamento.')
               })
+              if (status === 'ganho' && changedOrcamento) {
+                attributeCampanhaRevenueByOrcamento(id, changedOrcamento.valorTotal)
+                  .catch((exception) => {
+                    setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel atribuir receita da campanha.')
+                  })
+              }
               setOrcamentos((current) =>
                 current.map((orcamento) =>
                   orcamento.id === id
@@ -4317,6 +4326,7 @@ function Campanhas({
           <Info label="Responderam" value={(activeCampaignResumo?.responderam ?? campaignCounts.respondeu).toString()} />
           <Info label="Orcamentos" value={(activeCampaignResumo?.viraramOrcamento ?? campaignCounts.virou_orcamento).toString()} />
           <Info label="Ganhos" value={(activeCampaignResumo?.viraramVenda ?? campaignCounts.ganhou).toString()} />
+          <Info label="Receita atribuida" value={money(activeCampaignResumo?.receitaAtribuida ?? 0)} />
           <Info label="Perdidos" value={(activeCampaignResumo?.perdidos ?? campaignCounts.perdido).toString()} />
         </div>
       </div>
@@ -4347,7 +4357,7 @@ function Campanhas({
           >
             <span>
               <strong>{resumo.nome}</strong>
-              <small>{resumo.total} envios · {resumo.responderam} respostas · {resumo.viraramOrcamento} orcamentos</small>
+              <small>{resumo.total} envios · {resumo.responderam} respostas · {resumo.viraramOrcamento} orcamentos · {money(resumo.receitaAtribuida)}</small>
             </span>
             <b>{conversionRate(resumo.viraramVenda || resumo.viraramOrcamento, resumo.total)}%</b>
           </button>

@@ -136,6 +136,10 @@ alter table public.orcamentos
   add column if not exists aprovado_em timestamptz,
   add column if not exists observacao text;
 
+alter table public.campanha_envios
+  add column if not exists orcamento_id uuid references public.orcamentos(id),
+  add column if not exists receita_atribuida numeric(14, 2) not null default 0;
+
 alter table public.clientes
   add column if not exists vendedor_codigo_erp text,
   add column if not exists vendedor_nome_erp text,

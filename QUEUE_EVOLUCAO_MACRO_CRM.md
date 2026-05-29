@@ -51,7 +51,7 @@ Pronto quando:
 
 ### Q03 - Orcamentos como funil real
 
-Status: Em andamento.
+Status: Concluido.
 
 Objetivo:
 Transformar orcamento em processo comercial controlado, da criacao ao ganho/perda.
@@ -71,9 +71,10 @@ Ja entregue:
 - Snapshot inicial de versao da proposta com itens, total, condicao, origem e mensagem.
 - Tela para consultar e comparar versoes anteriores da proposta.
 - Revisao/edicao de proposta criando nova versao.
+- Receita atribuida quando orcamento de campanha vira ganho.
 
 Proximas entregas:
-- Receita atribuida quando orcamento de campanha vira ganho.
+- Evolucoes futuras entram em Q08: ROI, custo de campanha e relatorio mais profundo.
 
 Pronto quando:
 - Gerente enxerga pipeline por status e vendedor.

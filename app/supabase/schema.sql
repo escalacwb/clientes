@@ -312,6 +312,8 @@ create table public.campanha_envios (
   resposta_cliente text,
   virou_orcamento boolean not null default false,
   virou_venda boolean not null default false,
+  orcamento_id uuid references public.orcamentos(id),
+  receita_atribuida numeric(14, 2) not null default 0,
   criado_em timestamptz not null default now(),
   unique (campanha_id, cliente_id)
 );

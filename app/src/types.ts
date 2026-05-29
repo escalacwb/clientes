@@ -218,6 +218,8 @@ export type CampanhaEnvio = {
   respostaCliente?: string
   virouOrcamento: boolean
   virouVenda: boolean
+  orcamentoId?: string
+  receitaAtribuida?: number
 }
 
 export type VendaItem = {

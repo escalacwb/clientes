@@ -49,6 +49,7 @@ export type CampanhaResumo = {
   viraramVenda: number
   perdidos: number
   naoContatar: number
+  receitaAtribuida: number
 }
 
 type CampanhaEnvioRow = {
@@ -64,6 +65,8 @@ type CampanhaEnvioRow = {
   resposta_cliente: string | null
   virou_orcamento: boolean
   virou_venda: boolean
+  orcamento_id: string | null
+  receita_atribuida: number | null
 }
 
 type CampanhaRow = {
@@ -77,6 +80,7 @@ type CampanhaRow = {
     status: CampanhaEnvioStatus | string | null
     virou_orcamento: boolean | null
     virou_venda: boolean | null
+    receita_atribuida: number | null
   }>
 }
 
@@ -223,7 +227,7 @@ export async function listCampanhasResumo(): Promise<CampanhaResumo[]> {
 
   const { data, error } = await supabase
     .from('campanhas')
-    .select('id,nome,criada_em,filtro_usado,campanha_envios(status,virou_orcamento,virou_venda)')
+    .select('id,nome,criada_em,filtro_usado,campanha_envios(status,virou_orcamento,virou_venda,receita_atribuida)')
     .order('criada_em', { ascending: false })
     .limit(50)
 
@@ -314,6 +318,8 @@ export async function upsertCampanhaEnvio(input: {
   telefone?: string
   mensagemFinal: string
   status: CampanhaEnvioStatus
+  orcamentoId?: string
+  receitaAtribuida?: number
 }): Promise<CampanhaEnvio> {
   const supabase = await getSupabase()
   if (!supabase) {
@@ -329,6 +335,8 @@ export async function upsertCampanhaEnvio(input: {
       dataMarcadoEnviado: input.status !== 'pendente' ? new Date().toISOString() : undefined,
       virouOrcamento: input.status === 'virou_orcamento' || input.status === 'ganhou',
       virouVenda: input.status === 'ganhou',
+      orcamentoId: input.orcamentoId,
+      receitaAtribuida: input.receitaAtribuida,
     }
   }
 
@@ -348,6 +356,8 @@ export async function upsertCampanhaEnvio(input: {
         data_marcado_enviado: input.status !== 'pendente' ? new Date().toISOString() : undefined,
         virou_orcamento: input.status === 'virou_orcamento' || input.status === 'ganhou',
         virou_venda: input.status === 'ganhou',
+        orcamento_id: input.orcamentoId ?? undefined,
+        receita_atribuida: input.receitaAtribuida ?? undefined,
       },
       { onConflict: 'campanha_id,cliente_id' },
     )
@@ -357,6 +367,24 @@ export async function upsertCampanhaEnvio(input: {
   if (error) throw error
 
   return mapEnvio(data as CampanhaEnvioRow)
+}
+
+export async function attributeCampanhaRevenueByOrcamento(orcamentoId: string, receita: number): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase) return
+
+  const { error } = await supabase
+    .from('campanha_envios')
+    .update({
+      status: 'ganhou',
+      virou_orcamento: true,
+      virou_venda: true,
+      receita_atribuida: receita,
+      data_marcado_enviado: new Date().toISOString(),
+    })
+    .eq('orcamento_id', orcamentoId)
+
+  if (error) throw error
 }
 
 async function ensureCampanha(
@@ -410,6 +438,8 @@ function mapEnvio(row: CampanhaEnvioRow): CampanhaEnvio {
     respostaCliente: row.resposta_cliente ?? undefined,
     virouOrcamento: row.virou_orcamento,
     virouVenda: row.virou_venda,
+    orcamentoId: row.orcamento_id ?? undefined,
+    receitaAtribuida: row.receita_atribuida ?? undefined,
   }
 }
 
@@ -440,5 +470,6 @@ function mapCampanhaResumo(row: CampanhaRow): CampanhaResumo {
     viraramVenda: envios.filter((envio) => envio.virou_venda).length,
     perdidos: envios.filter((envio) => envio.status === 'perdido').length,
     naoContatar: envios.filter((envio) => envio.status === 'nao_contatar').length,
+    receitaAtribuida: envios.reduce((total, envio) => total + Number(envio.receita_atribuida ?? 0), 0),
   }
 }

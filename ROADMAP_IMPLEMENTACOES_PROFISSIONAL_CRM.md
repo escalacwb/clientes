@@ -546,6 +546,24 @@ Validacao:
 Proximo passo tecnico:
 - Atribuir receita de campanhas quando uma proposta originada de campanha virar `ganho`.
 
+### 2026-05-28 - Receita atribuida por campanha
+
+Status: concluido.
+
+Entregue:
+- `campanha_envios` recebeu `orcamento_id` e `receita_atribuida`.
+- Quando um orcamento nasce de uma campanha salva, o envio guarda o ID do orcamento.
+- Quando esse orcamento vira `ganho`, o envio da campanha passa para `ganhou`, marca venda e grava a receita atribuida.
+- Resumo de campanhas passou a buscar e exibir receita atribuida.
+- SQL incremental aplicado no Supabase e colunas validadas.
+
+Validacao:
+- Build passou com `npm run build`.
+- `reference_import_schema.sql` aplicado no Supabase.
+
+Proximo passo tecnico:
+- Avancar para performance global por modulo: paginar orcamentos/tarefas/campanhas por query, em vez de carregar payloads completos.
+
 ### 2026-05-28 - Campanhas com construtor de publico
 
 Status: concluido.
