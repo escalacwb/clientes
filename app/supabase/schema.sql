@@ -164,6 +164,8 @@ create table public.tarefas (
   prioridade integer not null default 0,
   origem text,
   concluida_em timestamptz,
+  reagendada_em timestamptz,
+  reagendamento_motivo text,
   criado_em timestamptz not null default now()
 );
 

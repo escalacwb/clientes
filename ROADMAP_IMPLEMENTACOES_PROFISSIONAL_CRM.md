@@ -1378,6 +1378,27 @@ Observacao:
 Proximo passo tecnico:
 - Avancar para M02: SLA/follow-up com reagendamento, prazos por origem e alerta gerencial.
 
+### 2026-05-29 - Reagendamento com motivo em tarefas
+
+Status: concluido - primeira entrega do M02.
+
+Entregue:
+- Tabela `tarefas` recebeu `reagendada_em` e `reagendamento_motivo`.
+- Criado SQL incremental `supabase/queries/tarefas_reagendamento.sql` e aplicado no Supabase.
+- Repository ganhou `rescheduleTarefa`.
+- Cockpit permite reagendar tarefa critica com motivo obrigatorio.
+- Tela de Tarefas permite reagendar tarefas abertas inline.
+- Tarefa passa a exibir motivo do reagendamento quando existir.
+
+Validacao:
+- SQL aplicado com `node scripts/run-sql-file.mjs supabase/queries/tarefas_reagendamento.sql`.
+- Build passou com `npm run build`.
+- Playwright local validou o botao `Reagendar` e a abertura do modal no Cockpit.
+- Registro temporario de teste foi removido do Supabase apos a validacao.
+
+Proximo passo tecnico:
+- Adicionar SLA visual por origem e alerta gerencial de tarefas criticas atrasadas por vendedor.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

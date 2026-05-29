@@ -132,6 +132,7 @@ import {
   listClienteTarefas,
   listTarefas,
   listTarefasPage,
+  rescheduleTarefa,
   type TarefaOriginFilter,
   type TarefaStatusFilter,
 } from './repositories/tarefasRepository'
@@ -1053,6 +1054,12 @@ function App() {
               setCockpitTarefasVencidas((current) => current.filter((tarefa) => tarefa.id !== id))
               setTarefas((current) => current.map((tarefa) => tarefa.id === id ? { ...tarefa, status: 'concluida', concluidaEm: new Date().toISOString() } : tarefa))
             }}
+            onRescheduleTask={async (id, dataVencimento, motivo) => {
+              const updated = await rescheduleTarefa(id, dataVencimento, motivo)
+              setCockpitTarefas((current) => current.map((tarefa) => tarefa.id === id ? updated : tarefa).filter((tarefa) => tarefa.status === 'aberta'))
+              setCockpitTarefasVencidas((current) => current.filter((tarefa) => tarefa.id !== id))
+              setTarefas((current) => current.map((tarefa) => tarefa.id === id ? updated : tarefa))
+            }}
           />
         )}
         {view === 'dashboard' && (
@@ -1469,6 +1476,11 @@ function App() {
                 ),
               )
             }}
+            onReschedule={async (id, dataVencimento, motivo) => {
+              const updated = await rescheduleTarefa(id, dataVencimento, motivo)
+              setTarefas((current) => current.map((tarefa) => tarefa.id === id ? updated : tarefa))
+              return updated
+            }}
           />
         )}
         {session.role !== 'admin' && adminOnlyViews.has(view) && (
@@ -1802,6 +1814,7 @@ function Cockpit({
   onOpenBudget,
   onOpenModule,
   onCompleteTask,
+  onRescheduleTask,
 }: {
   currentUser: SessaoUsuario
   usuarios: Vendedor[]
@@ -1816,8 +1829,13 @@ function Cockpit({
   onOpenBudget: (clienteId: string, originContext: QuoteOriginContext) => Promise<void>
   onOpenModule: (target: 'tarefas' | 'orcamentos' | 'rodobens' | 'oportunidades' | 'campanhas') => void
   onCompleteTask: (id: string) => Promise<void>
+  onRescheduleTask: (id: string, dataVencimento: string, motivo: string) => Promise<void>
 }) {
   const [busyTaskId, setBusyTaskId] = useState('')
+  const [rescheduleTarget, setRescheduleTarget] = useState<Tarefa | null>(null)
+  const [rescheduleDate, setRescheduleDate] = useState(tomorrowDate())
+  const [rescheduleReason, setRescheduleReason] = useState('')
+  const [rescheduleError, setRescheduleError] = useState('')
   const todayTasks = tarefas.filter((tarefa) => daysSince(tarefa.dataVencimento) >= 0)
   const highPriorityTasks = tarefas
     .filter((tarefa) => tarefa.prioridade >= 80 && !todayTasks.some((item) => item.id === tarefa.id))
@@ -1838,6 +1856,32 @@ function Cockpit({
     setBusyTaskId(id)
     try {
       await onCompleteTask(id)
+    } finally {
+      setBusyTaskId('')
+    }
+  }
+
+  function openReschedule(tarefa: Tarefa) {
+    setRescheduleTarget(tarefa)
+    setRescheduleDate(tomorrowDate())
+    setRescheduleReason('')
+    setRescheduleError('')
+  }
+
+  async function submitReschedule() {
+    if (!rescheduleTarget) return
+    if (!rescheduleReason.trim()) {
+      setRescheduleError('Informe o motivo do reagendamento.')
+      return
+    }
+
+    setBusyTaskId(rescheduleTarget.id)
+    setRescheduleError('')
+    try {
+      await onRescheduleTask(rescheduleTarget.id, rescheduleDate, rescheduleReason.trim())
+      setRescheduleTarget(null)
+    } catch (exception) {
+      setRescheduleError(exception instanceof Error ? exception.message : 'Nao foi possivel reagendar a tarefa.')
     } finally {
       setBusyTaskId('')
     }
@@ -1919,6 +1963,9 @@ function Cockpit({
                   onClick={() => complete(tarefa.id)}
                 >
                   {busyTaskId === tarefa.id ? 'Concluindo...' : 'Concluir'}
+                </button>
+                <button className="button" type="button" onClick={() => openReschedule(tarefa)}>
+                  Reagendar
                 </button>
               </div>
             </article>
@@ -2017,6 +2064,31 @@ function Cockpit({
               </div>
             ))}
           </div>
+        </section>
+      )}
+      {rescheduleTarget && (
+        <section className="floating-panel">
+          <div className="panel-header">
+            <div>
+              <h2>Reagendar tarefa</h2>
+              <p>{rescheduleTarget.titulo} - {rescheduleTarget.clienteNome}</p>
+            </div>
+            <button className="button" type="button" onClick={() => setRescheduleTarget(null)}>Fechar</button>
+          </div>
+          <div className="task-form compact-form">
+            <label>
+              Nova data
+              <input type="date" value={rescheduleDate} onChange={(event) => setRescheduleDate(event.target.value)} />
+            </label>
+            <label className="span-2">
+              Motivo
+              <textarea value={rescheduleReason} onChange={(event) => setRescheduleReason(event.target.value)} placeholder="Ex.: cliente pediu retorno amanha" />
+            </label>
+            <button className="button primary" type="button" disabled={busyTaskId === rescheduleTarget.id} onClick={submitReschedule}>
+              {busyTaskId === rescheduleTarget.id ? 'Reagendando...' : 'Salvar reagendamento'}
+            </button>
+          </div>
+          {rescheduleError && <div className="alert">{rescheduleError}</div>}
         </section>
       )}
     </section>
@@ -3160,6 +3232,7 @@ function Tarefas({
   onOpenBudgetEditor,
   onCreate,
   onComplete,
+  onReschedule,
 }: {
   clientes: Cliente[]
   usuarios: Vendedor[]
@@ -3180,9 +3253,12 @@ function Tarefas({
   onOpenBudgetEditor: (clienteId: string, originContext?: QuoteOriginContext) => void
   onCreate: (task: TarefaInput) => Promise<Tarefa>
   onComplete: (id: string) => void
+  onReschedule: (id: string, dataVencimento: string, motivo: string) => Promise<Tarefa>
 }) {
   const [showCreate, setShowCreate] = useState(false)
   const [createdSuggestions, setCreatedSuggestions] = useState<string[]>([])
+  const [reschedulingId, setReschedulingId] = useState('')
+  const [rescheduleDrafts, setRescheduleDrafts] = useState<Record<string, { data: string; motivo: string }>>({})
   const [form, setForm] = useState({
     clienteId: clientes[0]?.id ?? '',
     vendedorId: '',
@@ -3259,6 +3335,27 @@ function Tarefas({
     tarefas: bucket.tarefas.sort((a, b) => b.prioridade - a.prioridade || a.dataVencimento.localeCompare(b.dataVencimento)),
   }))
   const filtered = tarefas
+
+  async function saveTaskReschedule(tarefa: Tarefa) {
+    const draft = rescheduleDrafts[tarefa.id]
+    if (!draft?.data || !draft.motivo.trim()) {
+      setError('Informe nova data e motivo para reagendar.')
+      return
+    }
+    setError('')
+    try {
+      const updated = await onReschedule(tarefa.id, draft.data, draft.motivo.trim())
+      setReschedulingId('')
+      setRescheduleDrafts((current) => {
+        const next = { ...current }
+        delete next[tarefa.id]
+        return next
+      })
+      setError(`${updated.titulo} reagendada para ${dateLabel(updated.dataVencimento)}.`)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel reagendar a tarefa.')
+    }
+  }
 
   return (
     <section className="panel wide">
@@ -3492,6 +3589,7 @@ function Tarefas({
             <span>
               <strong>{tarefa.titulo}</strong>
               <small>{tarefa.descricao ?? tarefa.origem}</small>
+              {tarefa.reagendamentoMotivo && <small>Reagendada: {tarefa.reagendamentoMotivo}</small>}
             </span>
             <span>{tarefa.clienteNome}</span>
             <span>{tarefa.vendedorNome ?? 'Sem vendedor'}</span>
@@ -3499,9 +3597,46 @@ function Tarefas({
             <span className="score">{tarefa.prioridade}</span>
             <span>
               {tarefa.status === 'aberta' ? (
-                <button className="button primary" onClick={() => onComplete(tarefa.id)} type="button">
-                  Concluir
-                </button>
+                <div className="task-action-stack">
+                  <button className="button primary" onClick={() => onComplete(tarefa.id)} type="button">
+                    Concluir
+                  </button>
+                  {reschedulingId === tarefa.id ? (
+                    <div className="reschedule-inline">
+                      <input
+                        type="date"
+                        value={rescheduleDrafts[tarefa.id]?.data ?? tomorrowDate()}
+                        onChange={(event) => setRescheduleDrafts((current) => ({
+                          ...current,
+                          [tarefa.id]: { data: event.target.value, motivo: current[tarefa.id]?.motivo ?? '' },
+                        }))}
+                      />
+                      <input
+                        value={rescheduleDrafts[tarefa.id]?.motivo ?? ''}
+                        onChange={(event) => setRescheduleDrafts((current) => ({
+                          ...current,
+                          [tarefa.id]: { data: current[tarefa.id]?.data ?? tomorrowDate(), motivo: event.target.value },
+                        }))}
+                        placeholder="Motivo"
+                      />
+                      <button className="button" type="button" onClick={() => saveTaskReschedule(tarefa)}>Salvar</button>
+                    </div>
+                  ) : (
+                    <button
+                      className="button"
+                      type="button"
+                      onClick={() => {
+                        setReschedulingId(tarefa.id)
+                        setRescheduleDrafts((current) => ({
+                          ...current,
+                          [tarefa.id]: current[tarefa.id] ?? { data: tomorrowDate(), motivo: '' },
+                        }))
+                      }}
+                    >
+                      Reagendar
+                    </button>
+                  )}
+                </div>
               ) : (
                 <span className="status-pill">concluida</span>
               )}
@@ -6644,6 +6779,10 @@ function campaignTaskPriority(status: CampanhaEnvioStatus) {
   if (status === 'pendente' || status === 'enviado') return 80
   if (status === 'nao_respondeu') return 70
   return 50
+}
+
+function tomorrowDate() {
+  return new Date(Date.now() + 86400000).toISOString().slice(0, 10)
 }
 
 function conversionRate(conversions: number, total: number) {

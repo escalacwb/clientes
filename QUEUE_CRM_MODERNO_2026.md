@@ -62,7 +62,7 @@ Dependencias:
 
 ### M02 - SLA e fila de follow-up comercial
 
-Status: Pendente.
+Status: Parcial.
 
 Objetivo:
 Transformar tarefas e campanhas em rotina com prazo, atraso e escalonamento.
@@ -73,6 +73,18 @@ Entregas:
 - Tarefas geradas automaticamente quando campanha responde ou orcamento vence.
 - Reagendamento com motivo.
 - Alerta gerente para tarefas criticas atrasadas.
+
+Ja entregue:
+- Tarefas ganharam campos de ultimo reagendamento e motivo.
+- Repository `rescheduleTarefa` atualiza vencimento, motivo e data do reagendamento.
+- Cockpit permite reagendar tarefas criticas com motivo obrigatorio.
+- Tela de Tarefas permite reagendar tarefas abertas inline.
+- Ficha/lista de tarefas exibe o motivo do reagendamento quando existir.
+
+Proximas entregas:
+- SLA visual por origem com prazo esperado e atraso em horas/dias.
+- Alertas gerenciais por vendedor com limite configuravel.
+- Automacoes adicionais para criar tarefas quando orcamento vencer ou campanha responder.
 
 Pronto quando:
 - O gerente sabe quem esta atrasado e em qual etapa.

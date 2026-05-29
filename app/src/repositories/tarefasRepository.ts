@@ -13,6 +13,8 @@ type TarefaRow = {
   prioridade: number
   origem: string | null
   concluida_em: string | null
+  reagendada_em: string | null
+  reagendamento_motivo: string | null
   clientes?: { nome: string } | null
   users?: { nome: string } | null
 }
@@ -176,6 +178,34 @@ export async function completeTarefa(id: string): Promise<void> {
   if (error) throw error
 }
 
+export async function rescheduleTarefa(id: string, dataVencimento: string, motivo: string): Promise<Tarefa> {
+  const supabase = await getSupabase()
+  if (!supabase) {
+    const tarefa = mockTarefas.find((item) => item.id === id)
+    if (!tarefa) throw new Error('Tarefa nao encontrada.')
+    return {
+      ...tarefa,
+      dataVencimento,
+      reagendadaEm: new Date().toISOString(),
+      reagendamentoMotivo: motivo,
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('tarefas')
+    .update({
+      data_vencimento: dataVencimento,
+      reagendada_em: new Date().toISOString(),
+      reagendamento_motivo: motivo,
+    })
+    .eq('id', id)
+    .select('*, clientes(nome), users(nome)')
+    .single()
+
+  if (error) throw error
+  return mapTarefa(data as TarefaRow)
+}
+
 function mapTarefa(row: TarefaRow): Tarefa {
   return {
     id: row.id,
@@ -190,6 +220,8 @@ function mapTarefa(row: TarefaRow): Tarefa {
     prioridade: row.prioridade,
     origem: row.origem ?? 'app',
     concluidaEm: row.concluida_em ?? undefined,
+    reagendadaEm: row.reagendada_em ?? undefined,
+    reagendamentoMotivo: row.reagendamento_motivo ?? undefined,
   }
 }
 

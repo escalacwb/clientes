@@ -209,6 +209,8 @@ export type Tarefa = {
   prioridade: number
   origem: string
   concluidaEm?: string
+  reagendadaEm?: string
+  reagendamentoMotivo?: string
 }
 
 export type TarefaInput = Omit<Tarefa, 'id' | 'clienteNome' | 'vendedorNome' | 'status'> & {
