@@ -89,6 +89,7 @@ import { listImportacoes } from './repositories/importacoesRepository'
 import { createMesclagem, listMesclagens, listPossiveisDuplicados } from './repositories/mesclagensRepository'
 import { createOrcamento } from './repositories/orcamentosRepository'
 import { listOrcamentos } from './repositories/orcamentosRepository'
+import { listOrcamentosPage, type OrcamentoListFilter } from './repositories/orcamentosRepository'
 import { listOrcamentoVersoes } from './repositories/orcamentosRepository'
 import { reviseOrcamento } from './repositories/orcamentosRepository'
 import { updateOrcamentoStatus } from './repositories/orcamentosRepository'
@@ -184,6 +185,9 @@ function App() {
   )
   const [interacoes, setInteracoes] = useState<Interacao[]>(isSupabaseConfigured ? [] : seedInteracoes)
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>(isSupabaseConfigured ? [] : seedOrcamentos)
+  const [orcamentosTotal, setOrcamentosTotal] = useState(isSupabaseConfigured ? 0 : seedOrcamentos.length)
+  const [orcamentosPage, setOrcamentosPage] = useState(1)
+  const [orcamentosFilter, setOrcamentosFilter] = useState<OrcamentoListFilter>('todos')
   const [importacoes, setImportacoes] = useState<Importacao[]>(isSupabaseConfigured ? [] : seedImportacoes)
   const [conflitos, setConflitos] = useState<ImportacaoConflito[]>(isSupabaseConfigured ? [] : seedConflitos)
   const [usuarios, setUsuarios] = useState(isSupabaseConfigured ? authUsuarios : seedVendedores)
@@ -208,6 +212,7 @@ function App() {
   const [isLoadingData, setIsLoadingData] = useState(isSupabaseConfigured)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [isLoadingClientes, setIsLoadingClientes] = useState(isSupabaseConfigured)
+  const [isLoadingOrcamentos, setIsLoadingOrcamentos] = useState(false)
   const [dataError, setDataError] = useState('')
 
   useEffect(() => {
@@ -355,6 +360,43 @@ function App() {
       window.clearTimeout(handle)
     }
   }, [clienteFiltro, clientesPage, isCheckingSession, query, session])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadOrcamentosPage() {
+      if (isCheckingSession) return
+      if (isSupabaseConfigured && !session) {
+        setOrcamentos([])
+        setOrcamentosTotal(0)
+        return
+      }
+      if (view !== 'orcamentos') return
+
+      setIsLoadingOrcamentos(true)
+      try {
+        const result = await listOrcamentosPage({
+          page: orcamentosPage,
+          pageSize: 50,
+          status: orcamentosFilter,
+          vendedorId: session?.role === 'vendedor' ? session.id : undefined,
+        })
+        if (!isMounted) return
+        setOrcamentos(result.orcamentos)
+        setOrcamentosTotal(result.total)
+      } catch (exception) {
+        if (isMounted) setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar os orcamentos.')
+      } finally {
+        if (isMounted) setIsLoadingOrcamentos(false)
+      }
+    }
+
+    loadOrcamentosPage()
+
+    return () => {
+      isMounted = false
+    }
+  }, [isCheckingSession, orcamentosFilter, orcamentosPage, session, view])
 
   useEffect(() => {
     let isMounted = true
@@ -944,10 +986,20 @@ function App() {
         {canUseScopedClientViews && view === 'orcamentos' && (
           <Orcamentos
             clientes={scopedClientes}
-            orcamentos={scopedOrcamentos}
+            orcamentos={orcamentos}
             usuarios={usuarios}
             currentUser={session}
             catalogo={catalogo}
+            page={orcamentosPage}
+            pageSize={50}
+            total={orcamentosTotal}
+            statusFilter={orcamentosFilter}
+            isLoading={isLoadingOrcamentos}
+            onPageChange={setOrcamentosPage}
+            onStatusFilterChange={(filter) => {
+              setOrcamentosFilter(filter)
+              setOrcamentosPage(1)
+            }}
             onRevise={async (id, input) => {
               const revised = await reviseOrcamento(id, input, input.itens)
               setOrcamentos((current) => current.map((orcamento) => (orcamento.id === id ? revised : orcamento)))
@@ -4490,6 +4542,13 @@ function Orcamentos({
   usuarios,
   currentUser,
   catalogo,
+  page,
+  pageSize,
+  total,
+  statusFilter,
+  isLoading,
+  onPageChange,
+  onStatusFilterChange,
   onRevise,
   onStatusChange,
 }: {
@@ -4498,23 +4557,24 @@ function Orcamentos({
   usuarios: Vendedor[]
   currentUser: SessaoUsuario
   catalogo: CatalogoItem[]
+  page: number
+  pageSize: number
+  total: number
+  statusFilter: OrcamentoListFilter
+  isLoading: boolean
+  onPageChange: (page: number) => void
+  onStatusFilterChange: (filter: OrcamentoListFilter) => void
   onRevise: (id: string, orcamento: OrcamentoInput) => Promise<Orcamento>
   onStatusChange: (id: string, status: Orcamento['status'], motivoPerda?: string) => void
 }) {
   const [lossReasons, setLossReasons] = useState<Record<string, string>>({})
   const [approvalRejectReasons, setApprovalRejectReasons] = useState<Record<string, string>>({})
-  const [statusFilter, setStatusFilter] = useState<Orcamento['status'] | 'todos' | 'vencidos'>('todos')
   const [versionTarget, setVersionTarget] = useState<Orcamento | null>(null)
   const [revisionTarget, setRevisionTarget] = useState<Orcamento | null>(null)
   const [versions, setVersions] = useState<OrcamentoVersao[]>([])
   const [versionsLoading, setVersionsLoading] = useState(false)
   const [versionsError, setVersionsError] = useState('')
   const openStatuses: Orcamento['status'][] = ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando']
-  const filteredOrcamentos = orcamentos.filter((orcamento) => {
-    if (statusFilter === 'todos') return true
-    if (statusFilter === 'vencidos') return openStatuses.includes(orcamento.status) && daysSince(orcamento.validade) > 0
-    return orcamento.status === statusFilter
-  })
   const valorAberto = orcamentos
     .filter((orcamento) => openStatuses.includes(orcamento.status))
     .reduce((total, orcamento) => total + orcamento.valorTotal, 0)
@@ -4523,11 +4583,12 @@ function Orcamentos({
   const negociando = orcamentos.filter((orcamento) => orcamento.status === 'negociando').length
   const ganhos = orcamentos.filter((orcamento) => orcamento.status === 'ganho').length
   const canApprove = currentUser.role === 'admin'
-  const targetClient = versionTarget ? clientes.find((item) => item.id === versionTarget.clienteId) : undefined
+  const targetClient = versionTarget ? clientes.find((item) => item.id === versionTarget.clienteId) ?? clienteFromOrcamento(versionTarget) : undefined
   const targetVendor = versionTarget ? usuarios.find((item) => item.id === versionTarget.vendedorId) : undefined
-  const revisionClient = revisionTarget ? clientes.find((item) => item.id === revisionTarget.clienteId) : undefined
+  const revisionClient = revisionTarget ? clientes.find((item) => item.id === revisionTarget.clienteId) ?? clienteFromOrcamento(revisionTarget) : undefined
   const latestVersion = versions[0]
   const firstVersion = versions[versions.length - 1]
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   async function openVersionHistory(orcamento: Orcamento) {
     setVersionTarget(orcamento)
@@ -4553,7 +4614,7 @@ function Orcamentos({
         <div className="toolbar-actions">
           <label className="mini-select">
             <Filter size={15} />
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Orcamento['status'] | 'todos' | 'vencidos')}>
+            <select value={statusFilter} onChange={(event) => onStatusFilterChange(event.target.value as OrcamentoListFilter)}>
               <option value="todos">Todos os status</option>
               <option value="aberto">Abertos</option>
               <option value="aguardando_aprovacao">Aguardando aprovacao</option>
@@ -4582,13 +4643,14 @@ function Orcamentos({
           <span>Validade</span>
           <span>Vendedor</span>
         </div>
-        {filteredOrcamentos.map((orcamento) => {
+        {isLoading && <div className="empty-state compact">Carregando orcamentos...</div>}
+        {!isLoading && orcamentos.map((orcamento) => {
           const cliente = clientes.find((item) => item.id === orcamento.clienteId)
           const vendedor = usuarios.find((item) => item.id === orcamento.vendedorId)
           const isExpired = openStatuses.includes(orcamento.status) && daysSince(orcamento.validade) > 0
           return (
             <div className={isExpired ? 'table-row five expired-budget' : 'table-row five'} key={orcamento.id}>
-              <span><strong>{cliente?.nome}</strong></span>
+              <span><strong>{cliente?.nome ?? orcamento.clienteNome ?? 'Cliente nao carregado'}</strong></span>
               <span>
                 <span className={isExpired ? 'status-pill danger' : 'status-pill'}>{isExpired ? 'vencido' : orcamento.status}</span>
                 {orcamento.aprovacaoMotivo && <small>{orcamento.aprovacaoMotivo}</small>}
@@ -4604,7 +4666,7 @@ function Orcamentos({
                 {isExpired && <small>Follow-up imediato</small>}
               </span>
               <span>
-                <strong>{vendedor?.nome}</strong>
+                <strong>{vendedor?.nome ?? orcamento.vendedorNome ?? 'Vendedor nao carregado'}</strong>
                 <div className="budget-status-actions">
                   {orcamento.status === 'aguardando_aprovacao' && canApprove && (
                     <button className="button primary" type="button" onClick={() => onStatusChange(orcamento.id, 'enviado')}>
@@ -4678,7 +4740,18 @@ function Orcamentos({
             </div>
           )
         })}
-        {filteredOrcamentos.length === 0 && <div className="empty-state">Nenhum orcamento nesta visao.</div>}
+        {!isLoading && orcamentos.length === 0 && <div className="empty-state">Nenhum orcamento nesta visao.</div>}
+      </div>
+      <div className="pagination-bar">
+        <span>Pagina {page} de {totalPages} - {total} orcamentos</span>
+        <div className="toolbar-actions">
+          <button className="button" type="button" disabled={page <= 1 || isLoading} onClick={() => onPageChange(Math.max(1, page - 1))}>
+            Anterior
+          </button>
+          <button className="button" type="button" disabled={page >= totalPages || isLoading} onClick={() => onPageChange(Math.min(totalPages, page + 1))}>
+            Proxima
+          </button>
+        </div>
       </div>
       {versionTarget && (
         <section className="quote-version-panel">
@@ -4948,6 +5021,24 @@ function OrcamentoRevisionEditor({
       </form>
     </section>
   )
+}
+
+function clienteFromOrcamento(orcamento: Orcamento): Cliente {
+  return {
+    id: orcamento.clienteId,
+    codigoErp: '',
+    nome: orcamento.clienteNome ?? 'Cliente',
+    tipoCliente: '',
+    cidade: '',
+    uf: '',
+    vendedorId: orcamento.vendedorId,
+    vendedorNome: orcamento.vendedorNome,
+    status: 'Orcamento aberto',
+    origem: 'orcamento',
+    totalComprado: 0,
+    totalServicos: 0,
+    tags: [],
+  }
 }
 
 function Relatorios({

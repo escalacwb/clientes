@@ -564,6 +564,23 @@ Validacao:
 Proximo passo tecnico:
 - Avancar para performance global por modulo: paginar orcamentos/tarefas/campanhas por query, em vez de carregar payloads completos.
 
+### 2026-05-28 - Orcamentos paginados por query
+
+Status: concluido.
+
+Entregue:
+- Repository de orcamentos ganhou `listOrcamentosPage` com pagina, status, vencidos e filtro por vendedor.
+- Carga inicial de orcamentos foi limitada a contexto recente para reduzir payload do login.
+- Tela de orcamentos passou a carregar paginas de 50 registros diretamente do Supabase.
+- Filtro de status agora dispara consulta remota e reseta para a primeira pagina.
+- Listagem traz nome do cliente/vendedor junto do orcamento, sem depender da pagina atual de clientes.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Paginar tarefas por query e mover filtros de rotina para o Supabase.
+
 ### 2026-05-28 - Campanhas com construtor de publico
 
 Status: concluido.

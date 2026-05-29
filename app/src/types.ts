@@ -71,7 +71,9 @@ export type InteracaoInput = Omit<Interacao, 'id' | 'data'> & {
 export type Orcamento = {
   id: string
   clienteId: string
+  clienteNome?: string
   vendedorId: string
+  vendedorNome?: string
   data: string
   status: 'aberto' | 'aguardando_aprovacao' | 'enviado' | 'negociando' | 'ganho' | 'perdido'
   valorTotal: number

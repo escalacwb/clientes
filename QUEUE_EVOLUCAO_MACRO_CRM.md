@@ -13,7 +13,7 @@ Atualizado em: 2026-05-28
 
 ### Q01 - Importacao diaria robusta no app
 
-Status: Pendente.
+Status: Em andamento.
 
 Objetivo:
 Transformar a importacao dos arquivos referencia em fluxo confiavel para uso diario, sem depender de IA ou script manual.
@@ -88,8 +88,11 @@ Status: Pendente.
 Objetivo:
 Eliminar carregamentos grandes no browser.
 
-Entregas:
+Ja entregue:
 - Orcamentos paginados/filtrados no Supabase.
+- Carga inicial de orcamentos limitada a contexto recente, sem puxar historico completo.
+
+Proximas entregas:
 - Tarefas paginadas/filtradas no Supabase.
 - Campanhas com resumo por query/view, sem nested payload pesado.
 - Relatorios sempre por views agregadas.

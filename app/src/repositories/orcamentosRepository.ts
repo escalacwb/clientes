@@ -5,7 +5,9 @@ import type { Orcamento, OrcamentoInput, OrcamentoItem, OrcamentoItemInput, Orca
 type OrcamentoRow = {
   id: string
   cliente_id: string
+  clientes?: { nome: string | null } | null
   vendedor_id: string
+  users?: { nome: string | null } | null
   data_orcamento: string
   status: Orcamento['status']
   valor_total: number
@@ -48,14 +50,19 @@ type OrcamentoVersaoRow = {
   criado_em: string
 }
 
-export async function listOrcamentos(): Promise<Orcamento[]> {
+export type OrcamentoListFilter = Orcamento['status'] | 'todos' | 'vencidos'
+
+export async function listOrcamentos(limit = 100): Promise<Orcamento[]> {
   const supabase = await getSupabase()
   if (!supabase) return attachMockItems(mockOrcamentos)
 
-  const { data, error } = await supabase
+  const query = supabase
     .from('orcamentos')
     .select('*')
     .order('data_orcamento', { ascending: false })
+    .limit(limit)
+
+  const { data, error } = await query
 
   if (error) throw error
 
@@ -66,6 +73,55 @@ export async function listOrcamentos(): Promise<Orcamento[]> {
     ...orcamento,
     itens: itens.filter((item) => item.orcamentoId === orcamento.id),
   }))
+}
+
+export async function listOrcamentosPage(input: {
+  page: number
+  pageSize: number
+  status?: OrcamentoListFilter
+  vendedorId?: string
+}): Promise<{ orcamentos: Orcamento[]; total: number }> {
+  const supabase = await getSupabase()
+  if (!supabase) {
+    const filtered = filterMockOrcamentos(attachMockItems(mockOrcamentos), input.status, input.vendedorId)
+    const from = (input.page - 1) * input.pageSize
+    return {
+      orcamentos: filtered.slice(from, from + input.pageSize),
+      total: filtered.length,
+    }
+  }
+
+  const from = (input.page - 1) * input.pageSize
+  const to = from + input.pageSize - 1
+  let query = supabase
+    .from('orcamentos')
+    .select('*,clientes(nome),users(nome)', { count: 'exact' })
+    .order('data_orcamento', { ascending: false })
+    .range(from, to)
+
+  if (input.vendedorId) query = query.eq('vendedor_id', input.vendedorId)
+  if (input.status && input.status !== 'todos' && input.status !== 'vencidos') {
+    query = query.eq('status', input.status)
+  }
+  if (input.status === 'vencidos') {
+    query = query
+      .in('status', ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando'])
+      .lt('validade', new Date().toISOString().slice(0, 10))
+  }
+
+  const { data, error, count } = await query
+  if (error) throw error
+
+  const orcamentos = (data as OrcamentoRow[]).map(mapOrcamento)
+  const itens = await listOrcamentoItens(orcamentos.map((orcamento) => orcamento.id))
+
+  return {
+    orcamentos: orcamentos.map((orcamento) => ({
+      ...orcamento,
+      itens: itens.filter((item) => item.orcamentoId === orcamento.id),
+    })),
+    total: count ?? orcamentos.length,
+  }
 }
 
 export async function listOrcamentoVersoes(orcamentoId: string): Promise<OrcamentoVersao[]> {
@@ -331,7 +387,9 @@ function mapOrcamento(row: OrcamentoRow): Orcamento {
   return {
     id: row.id,
     clienteId: row.cliente_id,
+    clienteNome: row.clientes?.nome ?? undefined,
     vendedorId: row.vendedor_id,
+    vendedorNome: row.users?.nome ?? undefined,
     data: row.data_orcamento,
     status: row.status,
     valorTotal: row.valor_total,
@@ -384,4 +442,18 @@ function attachMockItems(orcamentos: Orcamento[]): Orcamento[] {
     ...orcamento,
     itens: mockOrcamentoItens.filter((item) => item.orcamentoId === orcamento.id),
   }))
+}
+
+function filterMockOrcamentos(
+  orcamentos: Orcamento[],
+  status: OrcamentoListFilter = 'todos',
+  vendedorId?: string,
+): Orcamento[] {
+  const openStatuses: Orcamento['status'][] = ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando']
+  return orcamentos.filter((orcamento) => {
+    if (vendedorId && orcamento.vendedorId !== vendedorId) return false
+    if (status === 'todos') return true
+    if (status === 'vencidos') return openStatuses.includes(orcamento.status) && new Date(orcamento.validade) < new Date()
+    return orcamento.status === status
+  })
 }
