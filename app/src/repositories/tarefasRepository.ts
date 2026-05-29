@@ -17,7 +17,19 @@ type TarefaRow = {
   users?: { nome: string } | null
 }
 
-export async function listTarefas(): Promise<Tarefa[]> {
+export type TarefaStatusFilter = 'abertas' | 'vencidas' | 'concluidas'
+
+export type TarefaOriginFilter =
+  | 'todas'
+  | 'manual'
+  | 'interacao'
+  | 'orcamento'
+  | 'importacao'
+  | 'campanha'
+  | 'oportunidade'
+  | 'rodobens'
+
+export async function listTarefas(limit = 100): Promise<Tarefa[]> {
   const supabase = await getSupabase()
   if (!supabase) return mockTarefas
 
@@ -26,10 +38,60 @@ export async function listTarefas(): Promise<Tarefa[]> {
     .select('*, clientes(nome), users(nome)')
     .order('status', { ascending: true })
     .order('data_vencimento', { ascending: true })
+    .limit(limit)
 
   if (error) throw error
 
   return (data as TarefaRow[]).map(mapTarefa)
+}
+
+export async function listTarefasPage(input: {
+  page: number
+  pageSize: number
+  status: TarefaStatusFilter
+  origem: TarefaOriginFilter
+  vendedorId?: string
+}): Promise<{ tarefas: Tarefa[]; total: number }> {
+  const supabase = await getSupabase()
+  if (!supabase) {
+    const filtered = filterMockTarefas(mockTarefas, input.status, input.origem, input.vendedorId)
+    const from = (input.page - 1) * input.pageSize
+    return {
+      tarefas: filtered.slice(from, from + input.pageSize),
+      total: filtered.length,
+    }
+  }
+
+  const from = (input.page - 1) * input.pageSize
+  const to = from + input.pageSize - 1
+  let query = supabase
+    .from('tarefas')
+    .select('*, clientes(nome), users(nome)', { count: 'exact' })
+    .order('data_vencimento', { ascending: true })
+    .order('prioridade', { ascending: false })
+    .range(from, to)
+
+  if (input.status === 'concluidas') {
+    query = query.eq('status', 'concluida')
+  } else {
+    query = query.eq('status', 'aberta')
+    if (input.status === 'vencidas') query = query.lt('data_vencimento', new Date().toISOString().slice(0, 10))
+  }
+
+  if (input.vendedorId) query = query.eq('vendedor_id', input.vendedorId)
+  if (input.origem !== 'todas') {
+    query = ['orcamento', 'oportunidade', 'rodobens'].includes(input.origem)
+      ? query.ilike('origem', `${input.origem}%`)
+      : query.eq('origem', input.origem)
+  }
+
+  const { data, error, count } = await query
+  if (error) throw error
+
+  return {
+    tarefas: (data as TarefaRow[]).map(mapTarefa),
+    total: count ?? data?.length ?? 0,
+  }
 }
 
 export async function createTarefa(input: TarefaInput): Promise<Tarefa> {
@@ -93,4 +155,25 @@ function mapTarefa(row: TarefaRow): Tarefa {
     origem: row.origem ?? 'app',
     concluidaEm: row.concluida_em ?? undefined,
   }
+}
+
+function filterMockTarefas(
+  tarefas: Tarefa[],
+  status: TarefaStatusFilter,
+  origem: TarefaOriginFilter,
+  vendedorId?: string,
+) {
+  return tarefas
+    .filter((tarefa) => {
+      if (vendedorId && tarefa.vendedorId !== vendedorId) return false
+      if (status === 'concluidas') return tarefa.status === 'concluida'
+      if (status === 'vencidas') return tarefa.status === 'aberta' && new Date(tarefa.dataVencimento) < new Date()
+      return tarefa.status === 'aberta'
+    })
+    .filter((tarefa) => {
+      if (origem === 'todas') return true
+      if (['orcamento', 'oportunidade', 'rodobens'].includes(origem)) return tarefa.origem.startsWith(origem)
+      return tarefa.origem === origem
+    })
+    .sort((a, b) => a.dataVencimento.localeCompare(b.dataVencimento) || b.prioridade - a.prioridade)
 }

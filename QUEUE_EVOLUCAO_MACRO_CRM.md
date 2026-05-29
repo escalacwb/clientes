@@ -91,9 +91,10 @@ Eliminar carregamentos grandes no browser.
 Ja entregue:
 - Orcamentos paginados/filtrados no Supabase.
 - Carga inicial de orcamentos limitada a contexto recente, sem puxar historico completo.
+- Tarefas paginadas/filtradas no Supabase por status, origem e vendedor.
+- Carga inicial de tarefas limitada a contexto recente.
 
 Proximas entregas:
-- Tarefas paginadas/filtradas no Supabase.
 - Campanhas com resumo por query/view, sem nested payload pesado.
 - Relatorios sempre por views agregadas.
 - Estados de loading vazios, sem fallback falso.

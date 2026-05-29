@@ -581,6 +581,23 @@ Validacao:
 Proximo passo tecnico:
 - Paginar tarefas por query e mover filtros de rotina para o Supabase.
 
+### 2026-05-28 - Tarefas paginadas por query
+
+Status: concluido.
+
+Entregue:
+- Repository de tarefas ganhou `listTarefasPage` com pagina, status, origem e vendedor.
+- Carga inicial de tarefas foi limitada a contexto recente.
+- Tela de tarefas passou a carregar paginas de 50 registros direto do Supabase.
+- Filtros de status, origem e vendedor agora disparam query remota e voltam para a primeira pagina.
+- Vendedores veem apenas suas tarefas pela query; admin pode filtrar por qualquer vendedor.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Otimizar campanhas com resumo por view/query, reduzindo nested payload em `campanha_envios`.
+
 ### 2026-05-28 - Campanhas com construtor de publico
 
 Status: concluido.

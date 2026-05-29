@@ -93,7 +93,14 @@ import { listOrcamentosPage, type OrcamentoListFilter } from './repositories/orc
 import { listOrcamentoVersoes } from './repositories/orcamentosRepository'
 import { reviseOrcamento } from './repositories/orcamentosRepository'
 import { updateOrcamentoStatus } from './repositories/orcamentosRepository'
-import { completeTarefa, createTarefa, listTarefas } from './repositories/tarefasRepository'
+import {
+  completeTarefa,
+  createTarefa,
+  listTarefas,
+  listTarefasPage,
+  type TarefaOriginFilter,
+  type TarefaStatusFilter,
+} from './repositories/tarefasRepository'
 import { listUsuarios } from './repositories/usuariosRepository'
 import type {
   CampanhaEnvioStatus,
@@ -193,6 +200,11 @@ function App() {
   const [usuarios, setUsuarios] = useState(isSupabaseConfigured ? authUsuarios : seedVendedores)
   const [alteracoes, setAlteracoes] = useState<ClienteAlteracao[]>(isSupabaseConfigured ? [] : seedAlteracoes)
   const [tarefas, setTarefas] = useState<Tarefa[]>(isSupabaseConfigured ? [] : seedTarefas)
+  const [tarefasTotal, setTarefasTotal] = useState(isSupabaseConfigured ? 0 : seedTarefas.length)
+  const [tarefasPage, setTarefasPage] = useState(1)
+  const [tarefasStatusFilter, setTarefasStatusFilter] = useState<TarefaStatusFilter>('abertas')
+  const [tarefasOriginFilter, setTarefasOriginFilter] = useState<TarefaOriginFilter>('todas')
+  const [tarefasOwnerFilter, setTarefasOwnerFilter] = useState('todos')
   const [vendasItens, setVendasItens] = useState<VendaItem[]>(isSupabaseConfigured ? [] : seedVendasItens)
   const [servicosItens, setServicosItens] = useState<ServicoItem[]>(isSupabaseConfigured ? [] : seedServicosItens)
   const [possiveisDuplicados, setPossiveisDuplicados] = useState<PossivelDuplicado[]>(isSupabaseConfigured ? [] : seedPossiveisDuplicados)
@@ -213,6 +225,7 @@ function App() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [isLoadingClientes, setIsLoadingClientes] = useState(isSupabaseConfigured)
   const [isLoadingOrcamentos, setIsLoadingOrcamentos] = useState(false)
+  const [isLoadingTarefas, setIsLoadingTarefas] = useState(false)
   const [dataError, setDataError] = useState('')
 
   useEffect(() => {
@@ -401,6 +414,48 @@ function App() {
   useEffect(() => {
     let isMounted = true
 
+    async function loadTarefasPage() {
+      if (isCheckingSession) return
+      if (isSupabaseConfigured && !session) {
+        setTarefas([])
+        setTarefasTotal(0)
+        return
+      }
+      if (view !== 'tarefas') return
+
+      setIsLoadingTarefas(true)
+      try {
+        const result = await listTarefasPage({
+          page: tarefasPage,
+          pageSize: 50,
+          status: tarefasStatusFilter,
+          origem: tarefasOriginFilter,
+          vendedorId: session?.role === 'vendedor'
+            ? session.id
+            : tarefasOwnerFilter === 'todos'
+              ? undefined
+              : tarefasOwnerFilter,
+        })
+        if (!isMounted) return
+        setTarefas(result.tarefas)
+        setTarefasTotal(result.total)
+      } catch (exception) {
+        if (isMounted) setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar as tarefas.')
+      } finally {
+        if (isMounted) setIsLoadingTarefas(false)
+      }
+    }
+
+    loadTarefasPage()
+
+    return () => {
+      isMounted = false
+    }
+  }, [isCheckingSession, session, tarefasOriginFilter, tarefasOwnerFilter, tarefasPage, tarefasStatusFilter, view])
+
+  useEffect(() => {
+    let isMounted = true
+
     async function loadRodobens() {
       if (isCheckingSession) return
       if (!session) {
@@ -479,10 +534,6 @@ function App() {
     if (!session || session.role === 'admin') return orcamentos
     return orcamentos.filter((orcamento) => scopedClientIds.has(orcamento.clienteId) || orcamento.vendedorId === session.id)
   }, [orcamentos, scopedClientIds, session])
-  const scopedTarefas = useMemo(() => {
-    if (!session || session.role === 'admin') return tarefas
-    return tarefas.filter((tarefa) => scopedClientIds.has(tarefa.clienteId) || tarefa.vendedorId === session.id)
-  }, [tarefas, scopedClientIds, session])
   const scopedVendasItens = useMemo(() => {
     if (!session || session.role === 'admin') return vendasItens
     return vendasItens.filter((venda) => scopedClientIds.has(venda.clienteId))
@@ -873,8 +924,28 @@ function App() {
           <Tarefas
             clientes={scopedClientes}
             usuarios={usuarios}
-            tarefas={scopedTarefas}
+            tarefas={tarefas}
             orcamentos={scopedOrcamentos}
+            page={tarefasPage}
+            pageSize={50}
+            total={tarefasTotal}
+            filter={tarefasStatusFilter}
+            originFilter={tarefasOriginFilter}
+            ownerFilter={session.role === 'vendedor' ? session.id : tarefasOwnerFilter}
+            isLoading={isLoadingTarefas}
+            onPageChange={setTarefasPage}
+            onFilterChange={(filter) => {
+              setTarefasStatusFilter(filter)
+              setTarefasPage(1)
+            }}
+            onOriginFilterChange={(filter) => {
+              setTarefasOriginFilter(filter)
+              setTarefasPage(1)
+            }}
+            onOwnerFilterChange={(ownerId) => {
+              setTarefasOwnerFilter(ownerId)
+              setTarefasPage(1)
+            }}
             onOpenClient={(clienteId) => {
               setSelectedClientId(clienteId)
               setView('cliente360')
@@ -1672,6 +1743,17 @@ function Tarefas({
   usuarios,
   tarefas,
   orcamentos,
+  page,
+  pageSize,
+  total,
+  filter,
+  originFilter,
+  ownerFilter,
+  isLoading,
+  onPageChange,
+  onFilterChange,
+  onOriginFilterChange,
+  onOwnerFilterChange,
   onOpenClient,
   onOpenBudgetEditor,
   onCreate,
@@ -1681,14 +1763,22 @@ function Tarefas({
   usuarios: Vendedor[]
   tarefas: Tarefa[]
   orcamentos: Orcamento[]
+  page: number
+  pageSize: number
+  total: number
+  filter: TarefaStatusFilter
+  originFilter: TarefaOriginFilter
+  ownerFilter: string
+  isLoading: boolean
+  onPageChange: (page: number) => void
+  onFilterChange: (filter: TarefaStatusFilter) => void
+  onOriginFilterChange: (filter: TarefaOriginFilter) => void
+  onOwnerFilterChange: (ownerId: string) => void
   onOpenClient: (clienteId: string) => void
   onOpenBudgetEditor: (clienteId: string, originContext?: QuoteOriginContext) => void
   onCreate: (task: TarefaInput) => Promise<Tarefa>
   onComplete: (id: string) => void
 }) {
-  const [filter, setFilter] = useState<'abertas' | 'vencidas' | 'concluidas'>('abertas')
-  const [originFilter, setOriginFilter] = useState('todas')
-  const [ownerFilter, setOwnerFilter] = useState('todos')
   const [showCreate, setShowCreate] = useState(false)
   const [createdSuggestions, setCreatedSuggestions] = useState<string[]>([])
   const [form, setForm] = useState({
@@ -1700,6 +1790,7 @@ function Tarefas({
     prioridade: '60',
   })
   const [error, setError] = useState('')
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const abertas = tarefas.filter((tarefa) => tarefa.status === 'aberta')
   const suggestionQueue = buildRoutineSuggestions(clientes, orcamentos, abertas)
   const vendedores = usuarios.filter((usuario) => usuario.role === 'vendedor')
@@ -1724,62 +1815,48 @@ function Tarefas({
       label: 'Orcamentos',
       hint: 'vencidos ou vencendo',
       tarefas: suggestionQueue.filter((item) => item.tipo.startsWith('orcamento')),
-      onClick: () => setOriginFilter('orcamento'),
+      onClick: () => onOriginFilterChange('orcamento'),
     },
     {
       id: 'rodobens',
       label: 'Rodobens',
       hint: 'primeiro contato',
       tarefas: suggestionQueue.filter((item) => item.tipo === 'rodobens'),
-      onClick: () => setOriginFilter('rodobens'),
+      onClick: () => onOriginFilterChange('rodobens'),
     },
     {
       id: 'vencidas',
       label: 'Vencidas',
       hint: 'pedem acao imediata',
       tarefas: abertas.filter((tarefa) => daysSince(tarefa.dataVencimento) > 0),
-      onClick: () => setFilter('vencidas'),
+      onClick: () => onFilterChange('vencidas'),
     },
     {
       id: 'hoje',
       label: 'Hoje',
       hint: 'para fechar o dia',
       tarefas: abertas.filter((tarefa) => daysSince(tarefa.dataVencimento) === 0),
-      onClick: () => setFilter('abertas'),
+      onClick: () => onFilterChange('abertas'),
     },
     {
       id: 'semana',
       label: 'Proximos 7 dias',
       hint: 'preparar abordagens',
       tarefas: abertas.filter((tarefa) => daysSince(tarefa.dataVencimento) < 0 && daysSince(tarefa.dataVencimento) >= -7),
-      onClick: () => setFilter('abertas'),
+      onClick: () => onFilterChange('abertas'),
     },
     {
       id: 'prioridade',
       label: 'Alta prioridade',
       hint: 'maior potencial',
       tarefas: abertas.filter((tarefa) => tarefa.prioridade >= 80),
-      onClick: () => setFilter('abertas'),
+      onClick: () => onFilterChange('abertas'),
     },
   ].map((bucket) => ({
     ...bucket,
     tarefas: bucket.tarefas.sort((a, b) => b.prioridade - a.prioridade || a.dataVencimento.localeCompare(b.dataVencimento)),
   }))
   const filtered = tarefas
-    .filter((tarefa) => {
-      if (filter === 'concluidas') return tarefa.status === 'concluida'
-      if (filter === 'vencidas') return tarefa.status === 'aberta' && daysSince(tarefa.dataVencimento) > 0
-      return tarefa.status === 'aberta'
-    })
-    .filter((tarefa) => {
-      if (originFilter === 'todas') return true
-      if (originFilter === 'oportunidade') return tarefa.origem.startsWith('oportunidade')
-      if (originFilter === 'orcamento') return tarefa.origem.startsWith('orcamento')
-      if (originFilter === 'rodobens') return tarefa.origem.startsWith('rodobens')
-      return tarefa.origem === originFilter
-    })
-    .filter((tarefa) => ownerFilter === 'todos' || tarefa.vendedorId === ownerFilter)
-    .sort((a, b) => b.prioridade - a.prioridade || a.dataVencimento.localeCompare(b.dataVencimento))
 
   return (
     <section className="panel wide">
@@ -1791,7 +1868,7 @@ function Tarefas({
         <div className="toolbar-actions">
           <label className="mini-select">
             <Filter size={15} />
-            <select value={originFilter} onChange={(event) => setOriginFilter(event.target.value)}>
+            <select value={originFilter} onChange={(event) => onOriginFilterChange(event.target.value as TarefaOriginFilter)}>
               <option value="todas">Todas as origens</option>
               <option value="manual">Manual</option>
               <option value="interacao">Interacao</option>
@@ -1804,19 +1881,19 @@ function Tarefas({
           </label>
           <label className="mini-select">
             <UserRound size={15} />
-            <select value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}>
+            <select value={ownerFilter} onChange={(event) => onOwnerFilterChange(event.target.value)}>
               <option value="todos">Todos vendedores</option>
               {vendedores.map((vendedor) => <option key={vendedor.id} value={vendedor.id}>{vendedor.nome}</option>)}
             </select>
           </label>
           <div className="segmented">
-            <button className={filter === 'abertas' ? 'active' : ''} onClick={() => setFilter('abertas')} type="button">
+            <button className={filter === 'abertas' ? 'active' : ''} onClick={() => onFilterChange('abertas')} type="button">
               Abertas
             </button>
-            <button className={filter === 'vencidas' ? 'active' : ''} onClick={() => setFilter('vencidas')} type="button">
+            <button className={filter === 'vencidas' ? 'active' : ''} onClick={() => onFilterChange('vencidas')} type="button">
               Vencidas
             </button>
-            <button className={filter === 'concluidas' ? 'active' : ''} onClick={() => setFilter('concluidas')} type="button">
+            <button className={filter === 'concluidas' ? 'active' : ''} onClick={() => onFilterChange('concluidas')} type="button">
               Concluidas
             </button>
           </div>
@@ -2007,7 +2084,8 @@ function Tarefas({
           <span>Prioridade</span>
           <span>Acoes</span>
         </div>
-        {filtered.map((tarefa) => (
+        {isLoading && <div className="empty-state compact">Carregando tarefas...</div>}
+        {!isLoading && filtered.map((tarefa) => (
           <div className={tarefa.status === 'concluida' ? 'table-row task done' : 'table-row task'} key={tarefa.id}>
             <span>
               <strong>{tarefa.titulo}</strong>
@@ -2028,7 +2106,18 @@ function Tarefas({
             </span>
           </div>
         ))}
-        {filtered.length === 0 && <div className="empty-state">Nenhuma tarefa nesta visao.</div>}
+        {!isLoading && filtered.length === 0 && <div className="empty-state">Nenhuma tarefa nesta visao.</div>}
+      </div>
+      <div className="pagination-bar">
+        <span>Pagina {page} de {totalPages} - {total} tarefas</span>
+        <div className="toolbar-actions">
+          <button className="button" type="button" disabled={page <= 1 || isLoading} onClick={() => onPageChange(Math.max(1, page - 1))}>
+            Anterior
+          </button>
+          <button className="button" type="button" disabled={page >= totalPages || isLoading} onClick={() => onPageChange(Math.min(totalPages, page + 1))}>
+            Proxima
+          </button>
+        </div>
       </div>
     </section>
   )
