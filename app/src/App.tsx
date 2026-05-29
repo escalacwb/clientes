@@ -3233,7 +3233,7 @@ function RodobensInbox({
                 </span>
                 <span>
                   <strong>{origemLabel(cliente.origemBase)}</strong>
-                  <small>{cliente.origemDetalhe ?? cliente.origem}</small>
+                  <small>{origemDetalheLabel(cliente)}</small>
                 </span>
                 <span>
                   <strong>{rodobensQualificacaoLabel(cliente.leadQualificacaoStatus ?? 'novo')}</strong>
@@ -5550,6 +5550,12 @@ function origemLabel(origemBase?: Cliente['origemBase']) {
     desconhecida: 'Origem pendente',
   }
   return origemBase ? labels[origemBase] : labels.desconhecida
+}
+
+function origemDetalheLabel(cliente: Cliente) {
+  const detalhe = cliente.origemDetalhe ?? cliente.origem
+  if (!detalhe) return 'Lista externa'
+  return detalhe.replace(/rodobens/gi, 'lista externa')
 }
 
 function campaignStatusLabel(status: CampanhaEnvioStatus) {
