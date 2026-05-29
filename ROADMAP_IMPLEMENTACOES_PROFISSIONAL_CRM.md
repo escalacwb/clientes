@@ -513,6 +513,22 @@ Validacao:
 Proximo passo tecnico:
 - Criar tela de consulta/comparacao de versoes e registrar novas versoes quando uma proposta for editada/revisada.
 
+### 2026-05-28 - Consulta de versoes de proposta
+
+Status: concluido.
+
+Entregue:
+- Tela de orcamentos ganhou acao `Versoes` por proposta.
+- Painel mostra cliente, vendedor, versoes registradas, primeira/ultima versao e diferenca contra o valor atual.
+- Cada versao lista itens, total, condicao, validade, origem e mensagem WhatsApp gravada.
+- Repository passou a carregar `orcamento_versoes` com fallback seguro quando a tabela ainda nao existir no ambiente local/mock.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Criar fluxo de revisar proposta existente salvando uma nova versao antes de alterar itens/condicoes.
+
 ### 2026-05-28 - Campanhas com construtor de publico
 
 Status: concluido.

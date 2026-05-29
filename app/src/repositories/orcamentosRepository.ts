@@ -1,6 +1,6 @@
 import { orcamentoItens as mockOrcamentoItens, orcamentos as mockOrcamentos } from '../data/mockData'
 import { getSupabase } from '../lib/supabase'
-import type { Orcamento, OrcamentoInput, OrcamentoItem, OrcamentoItemInput } from '../types'
+import type { Orcamento, OrcamentoInput, OrcamentoItem, OrcamentoItemInput, OrcamentoVersao } from '../types'
 
 type OrcamentoRow = {
   id: string
@@ -33,6 +33,21 @@ type OrcamentoItemRow = {
   observacao: string | null
 }
 
+type OrcamentoVersaoRow = {
+  id: string
+  orcamento_id: string
+  numero: number
+  status: Orcamento['status']
+  valor_total: number
+  validade: string | null
+  forma_pagamento: string | null
+  observacao: string | null
+  mensagem: string | null
+  origem: string | null
+  itens: OrcamentoItemInput[]
+  criado_em: string
+}
+
 export async function listOrcamentos(): Promise<Orcamento[]> {
   const supabase = await getSupabase()
   if (!supabase) return attachMockItems(mockOrcamentos)
@@ -51,6 +66,24 @@ export async function listOrcamentos(): Promise<Orcamento[]> {
     ...orcamento,
     itens: itens.filter((item) => item.orcamentoId === orcamento.id),
   }))
+}
+
+export async function listOrcamentoVersoes(orcamentoId: string): Promise<OrcamentoVersao[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('orcamento_versoes')
+    .select('*')
+    .eq('orcamento_id', orcamentoId)
+    .order('numero', { ascending: false })
+
+  if (error) {
+    console.warn('Nao foi possivel carregar versoes do orcamento.', error.message)
+    return []
+  }
+
+  return (data as OrcamentoVersaoRow[]).map(mapOrcamentoVersao)
 }
 
 export async function createOrcamento(input: OrcamentoInput, itens: OrcamentoItemInput[] = []): Promise<Orcamento> {
@@ -260,6 +293,23 @@ function mapOrcamentoItem(row: OrcamentoItemRow): OrcamentoItem {
     valorTotal: row.valor_total,
     descontoPercentual: row.desconto_percentual ?? undefined,
     observacao: row.observacao ?? undefined,
+  }
+}
+
+function mapOrcamentoVersao(row: OrcamentoVersaoRow): OrcamentoVersao {
+  return {
+    id: row.id,
+    orcamentoId: row.orcamento_id,
+    numero: row.numero,
+    status: row.status,
+    valorTotal: row.valor_total,
+    validade: row.validade ?? undefined,
+    formaPagamento: row.forma_pagamento ?? undefined,
+    observacao: row.observacao ?? undefined,
+    mensagem: row.mensagem ?? undefined,
+    origem: row.origem ?? undefined,
+    itens: Array.isArray(row.itens) ? row.itens : [],
+    criadoEm: row.criado_em,
   }
 }
 

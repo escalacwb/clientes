@@ -1121,6 +1121,39 @@ h3 {
   font-size: 18px;
 }
 
+.quote-version-panel {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+  border-top: 1px solid #edf1ee;
+  padding-top: 18px;
+}
+
+.quote-version-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.quote-version-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.quote-version-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #dfe7e1;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.quote-version-card textarea {
+  width: 100%;
+  min-height: 130px;
+  resize: vertical;
+}
+
 .proposal-conditions {
   display: grid;
   gap: 3px;
@@ -1938,7 +1971,9 @@ h3 {
   .quote-item-head,
   .quote-item-row,
   .quote-payment-scenarios label,
-  .quote-kpis {
+  .quote-kpis,
+  .quote-version-summary,
+  .quote-version-grid {
     grid-template-columns: 1fr;
   }
 

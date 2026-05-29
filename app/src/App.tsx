@@ -88,6 +88,7 @@ import { listImportacoes } from './repositories/importacoesRepository'
 import { createMesclagem, listMesclagens, listPossiveisDuplicados } from './repositories/mesclagensRepository'
 import { createOrcamento } from './repositories/orcamentosRepository'
 import { listOrcamentos } from './repositories/orcamentosRepository'
+import { listOrcamentoVersoes } from './repositories/orcamentosRepository'
 import { updateOrcamentoStatus } from './repositories/orcamentosRepository'
 import { completeTarefa, createTarefa, listTarefas } from './repositories/tarefasRepository'
 import { listUsuarios } from './repositories/usuariosRepository'
@@ -105,6 +106,7 @@ import type {
   Orcamento,
   OrcamentoInput,
   OrcamentoItemInput,
+  OrcamentoVersao,
   Oportunidade,
   PossivelDuplicado,
   ServicoItem,
@@ -4481,6 +4483,10 @@ function Orcamentos({
   const [lossReasons, setLossReasons] = useState<Record<string, string>>({})
   const [approvalRejectReasons, setApprovalRejectReasons] = useState<Record<string, string>>({})
   const [statusFilter, setStatusFilter] = useState<Orcamento['status'] | 'todos' | 'vencidos'>('todos')
+  const [versionTarget, setVersionTarget] = useState<Orcamento | null>(null)
+  const [versions, setVersions] = useState<OrcamentoVersao[]>([])
+  const [versionsLoading, setVersionsLoading] = useState(false)
+  const [versionsError, setVersionsError] = useState('')
   const openStatuses: Orcamento['status'][] = ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando']
   const filteredOrcamentos = orcamentos.filter((orcamento) => {
     if (statusFilter === 'todos') return true
@@ -4495,6 +4501,24 @@ function Orcamentos({
   const negociando = orcamentos.filter((orcamento) => orcamento.status === 'negociando').length
   const ganhos = orcamentos.filter((orcamento) => orcamento.status === 'ganho').length
   const canApprove = currentUser.role === 'admin'
+  const targetClient = versionTarget ? clientes.find((item) => item.id === versionTarget.clienteId) : undefined
+  const targetVendor = versionTarget ? usuarios.find((item) => item.id === versionTarget.vendedorId) : undefined
+  const latestVersion = versions[0]
+  const firstVersion = versions[versions.length - 1]
+
+  async function openVersionHistory(orcamento: Orcamento) {
+    setVersionTarget(orcamento)
+    setVersions([])
+    setVersionsError('')
+    setVersionsLoading(true)
+    try {
+      setVersions(await listOrcamentoVersoes(orcamento.id))
+    } catch (exception) {
+      setVersionsError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar as versoes.')
+    } finally {
+      setVersionsLoading(false)
+    }
+  }
 
   return (
     <section className="panel wide">
@@ -4620,6 +4644,9 @@ function Orcamentos({
                   >
                     Perdido
                   </button>
+                  <button className="button" type="button" onClick={() => openVersionHistory(orcamento)}>
+                    Versoes
+                  </button>
                 </div>
               </span>
             </div>
@@ -4627,6 +4654,57 @@ function Orcamentos({
         })}
         {filteredOrcamentos.length === 0 && <div className="empty-state">Nenhum orcamento nesta visao.</div>}
       </div>
+      {versionTarget && (
+        <section className="quote-version-panel">
+          <div className="panel-header">
+            <div>
+              <h3>Versoes da proposta {versionTarget.id.slice(0, 8)}</h3>
+              <p>{targetClient?.nome ?? 'Cliente'} - {targetVendor?.nome ?? 'Vendedor'} - status atual {versionTarget.status}</p>
+            </div>
+            <button className="button" type="button" onClick={() => setVersionTarget(null)}>Fechar</button>
+          </div>
+          {versionsLoading && <div className="empty-state">Carregando versoes...</div>}
+          {versionsError && <div className="alert">{versionsError}</div>}
+          {!versionsLoading && versions.length === 0 && (
+            <div className="empty-state">Nenhuma versao registrada para esta proposta ainda.</div>
+          )}
+          {!versionsLoading && versions.length > 0 && (
+            <>
+              <div className="info-grid quote-version-summary">
+                <Info label="Versoes" value={versions.length.toString()} />
+                <Info label="Primeira versao" value={firstVersion ? money(firstVersion.valorTotal) : '-'} />
+                <Info label="Ultima versao" value={latestVersion ? money(latestVersion.valorTotal) : '-'} />
+                <Info label="Diferenca atual" value={latestVersion ? money(versionTarget.valorTotal - latestVersion.valorTotal) : '-'} />
+              </div>
+              <div className="quote-version-grid">
+                {versions.map((version) => (
+                  <article className="quote-version-card" key={version.id}>
+                    <div>
+                      <strong>v{version.numero} - {version.status}</strong>
+                      <small>{dateLabel(version.criadoEm)} - {version.origem ?? 'sem origem'}</small>
+                    </div>
+                    <div className="proposal-lines">
+                      {version.itens.slice(0, 8).map((item, index) => (
+                        <div key={`${version.id}-${index}`}>
+                          <span>{item.quantidade}x {item.descricao}</span>
+                          <strong>{money(item.valorTotal ?? 0)}</strong>
+                        </div>
+                      ))}
+                      {version.itens.length > 8 && <small>+ {version.itens.length - 8} itens</small>}
+                    </div>
+                    <div className="proposal-total">
+                      <span>Total</span>
+                      <strong>{money(version.valorTotal)}</strong>
+                    </div>
+                    <small>Condicao: {version.formaPagamento ?? 'nao informada'} - Validade: {version.validade ? dateLabel(version.validade) : 'sem validade'}</small>
+                    {version.mensagem && <textarea readOnly value={version.mensagem} />}
+                  </article>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+      )}
     </section>
   )
 }
