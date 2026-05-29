@@ -2403,6 +2403,7 @@ function OrcamentoEditor({
   const [isSaving, setIsSaving] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [error, setError] = useState('')
+  const [copyFeedback, setCopyFeedback] = useState('')
 
   const filteredCatalog = catalogo
     .filter((item) => {
@@ -2416,6 +2417,7 @@ function OrcamentoEditor({
     .map((item) => ({ ...item, valorTotal: quoteItemTotal(item) }))
   const total = validItems.reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
   const formaPagamento = paymentMode === 'Personalizado' ? customPayment : paymentMode
+  const approvalWarnings = quoteApprovalWarnings(validItems, catalogo)
   const quoteMessage = buildQuoteMessage(cliente, validItems, validade, formaPagamento, observacao)
   const waUrl = cliente.whatsapp && validItems.length > 0
     ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(quoteMessage)}`
@@ -2470,6 +2472,12 @@ function OrcamentoEditor({
     }
   }
 
+  async function copyMessage() {
+    await navigator.clipboard.writeText(quoteMessage)
+    setCopyFeedback('Mensagem copiada.')
+    window.setTimeout(() => setCopyFeedback(''), 2000)
+  }
+
   return (
     <section className="panel wide quote-editor">
       <div className="panel-header">
@@ -2479,6 +2487,9 @@ function OrcamentoEditor({
         </div>
         <div className="toolbar-actions">
           <button className="button" type="button" onClick={onBack}>Voltar</button>
+          <button className="button" type="button" onClick={() => window.print()}>
+            Imprimir/PDF
+          </button>
           <a className={!waUrl ? 'button disabled' : 'button'} href={waUrl} target="_blank" rel="noreferrer">
             <MessageCircle size={16} /> Abrir WA.ME
           </a>
@@ -2486,6 +2497,13 @@ function OrcamentoEditor({
       </div>
       {error && <div className="alert">{error}</div>}
       {feedback && <div className="readiness ok">{feedback}</div>}
+      {copyFeedback && <div className="readiness ok">{copyFeedback}</div>}
+      {approvalWarnings.length > 0 && (
+        <div className="readiness warning">
+          <strong>Requer aprovacao comercial</strong>
+          {approvalWarnings.map((warning) => <span key={warning}>{warning}</span>)}
+        </div>
+      )}
       <form className="quote-layout" onSubmit={submit}>
         <section className="quote-main">
           <div className="quote-controls">
@@ -2559,12 +2577,40 @@ function OrcamentoEditor({
             <Info label="Itens validos" value={validItems.length.toString()} />
             <Info label="Total" value={money(total)} />
             <Info label="Catalogo" value={catalogo.length.toString()} />
-            <Info label="Validade" value={dateLabel(validade)} />
+            <Info label="Aprovacao" value={approvalWarnings.length > 0 ? 'Necessaria' : 'Dentro do limite'} />
+          </div>
+          <div className="proposal-preview">
+            <div className="proposal-heading">
+              <strong>Capital Truck Center</strong>
+              <span>Proposta comercial</span>
+            </div>
+            <div className="proposal-client">
+              <strong>{cliente.nome}</strong>
+              <span>{cliente.cidade}/{cliente.uf}</span>
+              <span>{cliente.whatsapp ?? cliente.telefone ?? 'Contato nao informado'}</span>
+            </div>
+            <div className="proposal-lines">
+              {validItems.map((item, index) => (
+                <div key={`${item.descricao}-${index}`}>
+                  <span>{index + 1}. {item.quantidade}x {item.descricao}</span>
+                  <strong>{money(item.valorTotal ?? 0)}</strong>
+                </div>
+              ))}
+              {validItems.length === 0 && <span className="muted">Adicione itens para montar a proposta.</span>}
+            </div>
+            <div className="proposal-total">
+              <span>Total</span>
+              <strong>{money(total)}</strong>
+            </div>
+            <small>Condicao: {formaPagamento || 'Nao informada'} - Validade: {dateLabel(validade)}</small>
           </div>
           <label>
             Mensagem WhatsApp
             <textarea readOnly value={quoteMessage} />
           </label>
+          <button className="button" type="button" onClick={copyMessage} disabled={validItems.length === 0}>
+            Copiar mensagem
+          </button>
           <button className="button primary" type="submit" disabled={isSaving}>
             {isSaving ? 'Criando...' : 'Criar orcamento'}
           </button>
@@ -2577,6 +2623,17 @@ function OrcamentoEditor({
 function quoteItemTotal(item: OrcamentoItemInput) {
   const discount = Math.min(Math.max(item.descontoPercentual ?? 0, 0), 100)
   return item.quantidade * item.valorUnitario * (1 - discount / 100)
+}
+
+function quoteApprovalWarnings(items: OrcamentoItemInput[], catalogo: CatalogoItem[]) {
+  return items.flatMap((item) => {
+    const catalogItem = item.catalogoItemId ? catalogo.find((entry) => entry.id === item.catalogoItemId) : undefined
+    const maxDiscount = catalogItem?.descontoMaximo
+    if (maxDiscount === undefined || maxDiscount === null) return []
+    const discount = item.descontoPercentual ?? 0
+    if (discount <= maxDiscount) return []
+    return [`${item.descricao}: desconto ${discount}% acima do limite ${maxDiscount}%.`]
+  })
 }
 
 function buildQuoteMessage(

@@ -977,6 +977,52 @@ h3 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.proposal-preview {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #dfe7e1;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.proposal-heading,
+.proposal-client,
+.proposal-lines,
+.proposal-total {
+  display: grid;
+  gap: 4px;
+}
+
+.proposal-heading strong {
+  color: #12312f;
+  font-size: 18px;
+}
+
+.proposal-heading span,
+.proposal-client span,
+.proposal-preview small {
+  color: #64736f;
+}
+
+.proposal-lines {
+  border-top: 1px solid #edf1ee;
+  border-bottom: 1px solid #edf1ee;
+  padding: 10px 0;
+}
+
+.proposal-lines div,
+.proposal-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.proposal-total strong {
+  color: #12312f;
+  font-size: 18px;
+}
+
 .button.primary {
   background: #12312f;
   color: #ffffff;
@@ -1636,6 +1682,31 @@ h3 {
 
   .task-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media print {
+  .sidebar,
+  .topbar,
+  .data-banner,
+  .quote-main,
+  .quote-summary-panel > label,
+  .quote-summary-panel > button,
+  .quote-editor > .panel-header .toolbar-actions {
+    display: none !important;
+  }
+
+  .app-shell,
+  .workspace,
+  .quote-layout {
+    display: block;
+  }
+
+  .quote-editor,
+  .quote-summary-panel,
+  .proposal-preview {
+    border: 0;
+    box-shadow: none;
   }
 }
 

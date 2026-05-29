@@ -437,6 +437,27 @@ Validacao local:
 Proximo passo tecnico:
 - Adicionar versoes/status da proposta, aprovacao de desconto e modelo formatado para impressao/PDF.
 
+### 2026-05-28 - Preview profissional e controles da proposta
+
+Status: concluido.
+
+Entregue:
+- Editor de proposta recebeu preview comercial formatado.
+- Botao `Imprimir/PDF` usa o modo de impressao do navegador com CSS dedicado.
+- Botao `Copiar mensagem` copia a mensagem WA.ME.
+- Resumo da proposta mostra status de aprovacao.
+- Alerta de aprovacao aparece quando desconto supera o limite maximo vindo do catalogo.
+
+Validacao local:
+- Abertura do editor a partir de cliente.
+- Item do catalogo selecionado.
+- Preview exibiu Capital Truck Center, cliente, item, total, condicao e validade.
+- Copia da mensagem exibiu confirmacao.
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Persistir fluxo de aprovacao de desconto no banco e criar status `aguardando_aprovacao` para orcamentos.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:
