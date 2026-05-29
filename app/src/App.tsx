@@ -77,6 +77,7 @@ import {
   listCatalogoItens,
   listCatalogoPage,
   listCatalogoPrecos,
+  listCatalogoRegrasDesconto,
   listCatalogoSugestoes,
   type CatalogoAtivoFilter,
   type CatalogoPrecoHistorico,
@@ -151,6 +152,7 @@ import type {
   CampanhaEnvio,
   CarteiraFiltro,
   CatalogoItem,
+  CatalogoRegraDesconto,
   Cliente,
   ClienteAlteracao,
   ClienteMesclagem,
@@ -288,6 +290,7 @@ function App() {
   const [possiveisDuplicados, setPossiveisDuplicados] = useState<PossivelDuplicado[]>(isSupabaseConfigured ? [] : seedPossiveisDuplicados)
   const [mesclagens, setMesclagens] = useState<ClienteMesclagem[]>(isSupabaseConfigured ? [] : seedMesclagens)
   const [catalogo, setCatalogo] = useState<CatalogoItem[]>([])
+  const [catalogoRegrasDesconto, setCatalogoRegrasDesconto] = useState<CatalogoRegraDesconto[]>([])
   const [catalogoLista, setCatalogoLista] = useState<CatalogoItem[]>([])
   const [catalogoTotal, setCatalogoTotal] = useState(0)
   const [catalogoPage, setCatalogoPage] = useState(1)
@@ -403,6 +406,7 @@ function App() {
           loadedPossiveisDuplicados,
           loadedMesclagens,
           loadedCatalogo,
+          loadedCatalogoRegrasDesconto,
           loadedDashboardResumo,
           loadedVendedoresResumo,
           loadedVendedoresHistoricosResumo,
@@ -423,6 +427,7 @@ function App() {
           listPossiveisDuplicados(),
           listMesclagens(),
           listCatalogoItens(),
+          listCatalogoRegrasDesconto(),
           getDashboardResumo(),
           listVendedoresResumo(),
           listVendedoresHistoricosResumo(),
@@ -445,6 +450,7 @@ function App() {
         setPossiveisDuplicados(loadedPossiveisDuplicados)
         setMesclagens(loadedMesclagens)
         setCatalogo(loadedCatalogo)
+        setCatalogoRegrasDesconto(loadedCatalogoRegrasDesconto)
         setDashboardResumo(loadedDashboardResumo)
         setVendedoresResumo(loadedVendedoresResumo)
         setVendedoresHistoricosResumo(loadedVendedoresHistoricosResumo)
@@ -1320,6 +1326,7 @@ function App() {
           <OrcamentoEditor
             cliente={selectedClient}
             catalogo={catalogo}
+            regrasDesconto={catalogoRegrasDesconto}
             originContext={quoteOriginContext}
             onBack={() => setView(quoteSourceView)}
             onCreateTask={async (task) => {
@@ -4769,6 +4776,7 @@ function FichaCliente({
 function OrcamentoEditor({
   cliente,
   catalogo,
+  regrasDesconto,
   originContext,
   onBack,
   onCreateTask,
@@ -4776,6 +4784,7 @@ function OrcamentoEditor({
 }: {
   cliente: Cliente
   catalogo: CatalogoItem[]
+  regrasDesconto: CatalogoRegraDesconto[]
   originContext: QuoteOriginContext
   onBack: () => void
   onCreateTask: (task: TarefaInput) => Promise<Tarefa>
@@ -4820,7 +4829,7 @@ function OrcamentoEditor({
   const total = validItems.reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
   const formaPagamento = paymentMode === 'Personalizado' ? customPayment : paymentMode
   const paymentScenarios = quotePaymentScenarios(total, paymentAdjustments)
-  const approvalWarnings = quoteApprovalWarnings(validItems, catalogo)
+  const approvalWarnings = quoteApprovalWarnings(validItems, catalogo, regrasDesconto)
   const quoteMessage = buildQuoteMessage(cliente, validItems, validade, formaPagamento, observacao, paymentScenarios)
   const waUrl = cliente.whatsapp && validItems.length > 0
     ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(quoteMessage)}`
@@ -5131,15 +5140,33 @@ function quoteItemTotal(item: OrcamentoItemInput) {
   return item.quantidade * item.valorUnitario * (1 - discount / 100)
 }
 
-function quoteApprovalWarnings(items: OrcamentoItemInput[], catalogo: CatalogoItem[]) {
+function quoteApprovalWarnings(items: OrcamentoItemInput[], catalogo: CatalogoItem[], regrasDesconto: CatalogoRegraDesconto[] = []) {
   return items.flatMap((item) => {
     const catalogItem = item.catalogoItemId ? catalogo.find((entry) => entry.id === item.catalogoItemId) : undefined
-    const maxDiscount = catalogItem?.descontoMaximo
+    const regra = catalogItem ? bestDiscountRule(catalogItem, regrasDesconto) : undefined
+    const maxDiscount = regra?.requerAprovacaoAcimaDe ?? catalogItem?.descontoMaximo
     if (maxDiscount === undefined || maxDiscount === null) return []
     const discount = item.descontoPercentual ?? 0
     if (discount <= maxDiscount) return []
-    return [`${item.descricao}: desconto ${discount}% acima do limite ${maxDiscount}%.`]
+    return [`${item.descricao}: desconto ${discount}% acima do limite ${maxDiscount}%${regra ? ` pela regra ${regra.nome}` : ''}.`]
   })
+}
+
+function bestDiscountRule(item: CatalogoItem, regras: CatalogoRegraDesconto[]) {
+  const matches = regras.filter((regra) => {
+    if (!regra.ativo) return false
+    if (regra.tipo && regra.tipo !== item.tipo) return false
+    if (regra.codigo && regra.codigo !== item.codigo) return false
+    if (regra.marca && regra.marca.toLowerCase() !== (item.marca ?? '').toLowerCase()) return false
+    if (regra.grupo && regra.grupo.toLowerCase() !== (item.grupo ?? '').toLowerCase()) return false
+    if (regra.subgrupo && regra.subgrupo.toLowerCase() !== (item.subgrupo ?? '').toLowerCase()) return false
+    return true
+  })
+  return matches.sort((a, b) => discountRuleSpecificity(b) - discountRuleSpecificity(a))[0]
+}
+
+function discountRuleSpecificity(regra: CatalogoRegraDesconto) {
+  return [regra.codigo, regra.marca, regra.subgrupo, regra.grupo, regra.tipo].filter(Boolean).length
 }
 
 function quotePaymentScenarios(total: number, adjustments: Record<string, number>) {

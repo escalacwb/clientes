@@ -1564,6 +1564,22 @@ Validacao:
 Proximo passo tecnico:
 - Avancar para CPQ profissional: regras de desconto por grupo/produto/servico, aprovacao formal e documento final.
 
+### 2026-05-29 - Regras comerciais de desconto
+
+Status: concluido - primeira entrega do M05.
+
+Entregue:
+- Criada tabela `catalogo_regras_desconto` com RLS e politicas admin.
+- Regras podem ser definidas por tipo, grupo, subgrupo, marca e codigo.
+- Editor de orcamento passou a usar a regra mais especifica para exigir aprovacao quando o desconto ultrapassar o limite.
+
+Validacao:
+- SQL aplicado no Supabase com `node scripts/run-sql-file.mjs supabase/queries/catalogo_regras_desconto.sql`.
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Criar historico formal de aprovacoes/rejeicoes com tabela propria e levar isso para a tela de proposta.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

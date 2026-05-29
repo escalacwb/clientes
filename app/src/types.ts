@@ -174,6 +174,19 @@ export type CatalogoItem = {
   estoque?: number
 }
 
+export type CatalogoRegraDesconto = {
+  id: string
+  nome: string
+  tipo?: CatalogoItem['tipo']
+  grupo?: string
+  subgrupo?: string
+  marca?: string
+  codigo?: string
+  descontoMaximo: number
+  requerAprovacaoAcimaDe: number
+  ativo: boolean
+}
+
 export type Importacao = {
   id: string
   tipo: 'base-inicial' | 'xml-diario' | 'clientes-semanal' | 'referencias-diarias'

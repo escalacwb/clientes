@@ -1,5 +1,5 @@
 import { getSupabase } from '../lib/supabase'
-import type { CatalogoItem } from '../types'
+import type { CatalogoItem, CatalogoRegraDesconto } from '../types'
 
 type CatalogoRow = {
   id: string
@@ -57,6 +57,19 @@ type CatalogoSugestaoRow = {
   clientes: number
 }
 
+type CatalogoRegraDescontoRow = {
+  id: string
+  nome: string
+  tipo: CatalogoItem['tipo'] | null
+  grupo: string | null
+  subgrupo: string | null
+  marca: string | null
+  codigo: string | null
+  desconto_maximo: number
+  requer_aprovacao_acima_de: number
+  ativo: boolean
+}
+
 export async function listCatalogoItens(): Promise<CatalogoItem[]> {
   const supabase = await getSupabase()
   if (!supabase) return []
@@ -99,6 +112,33 @@ export async function listCatalogoItens(): Promise<CatalogoItem[]> {
       estoque: preco?.estoque ?? undefined,
     }
   })
+}
+
+export async function listCatalogoRegrasDesconto(): Promise<CatalogoRegraDesconto[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('catalogo_regras_desconto')
+    .select('*')
+    .eq('ativo', true)
+    .order('codigo', { ascending: false, nullsFirst: false })
+    .order('marca', { ascending: false, nullsFirst: false })
+    .order('grupo', { ascending: true, nullsFirst: false })
+
+  if (error) return []
+  return ((data as CatalogoRegraDescontoRow[] | null) ?? []).map((row) => ({
+    id: row.id,
+    nome: row.nome,
+    tipo: row.tipo ?? undefined,
+    grupo: row.grupo ?? undefined,
+    subgrupo: row.subgrupo ?? undefined,
+    marca: row.marca ?? undefined,
+    codigo: row.codigo ?? undefined,
+    descontoMaximo: Number(row.desconto_maximo ?? 0),
+    requerAprovacaoAcimaDe: Number(row.requer_aprovacao_acima_de ?? row.desconto_maximo ?? 0),
+    ativo: row.ativo,
+  }))
 }
 
 export async function listCatalogoPage(input: {

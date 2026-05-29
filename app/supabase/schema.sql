@@ -188,6 +188,21 @@ create table public.catalogo_itens (
   unique (tipo, codigo)
 );
 
+create table public.catalogo_regras_desconto (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null,
+  tipo text check (tipo in ('produto', 'servico')),
+  grupo text,
+  subgrupo text,
+  marca text,
+  codigo text,
+  desconto_maximo numeric(8, 2) not null default 0,
+  requer_aprovacao_acima_de numeric(8, 2) not null default 0,
+  ativo boolean not null default true,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+
 create table public.orcamentos (
   id uuid primary key default gen_random_uuid(),
   cliente_id uuid not null references public.clientes(id),
@@ -1834,6 +1849,7 @@ alter table public.produtos enable row level security;
 alter table public.produto_aliases enable row level security;
 alter table public.listas_preco enable row level security;
 alter table public.catalogo_itens enable row level security;
+alter table public.catalogo_regras_desconto enable row level security;
 alter table public.catalogo_precos enable row level security;
 alter table public.produto_precos enable row level security;
 alter table public.campanhas enable row level security;
@@ -2105,6 +2121,10 @@ create policy catalogo_precos_read_authenticated
 on public.catalogo_precos for select
 using (auth.role() = 'authenticated');
 
+create policy catalogo_regras_desconto_read_authenticated
+on public.catalogo_regras_desconto for select
+using (auth.role() = 'authenticated');
+
 create policy produto_precos_read_authenticated
 on public.produto_precos for select
 using (auth.role() = 'authenticated');
@@ -2131,6 +2151,11 @@ with check (public.current_user_is_admin());
 
 create policy admin_manage_catalogo_precos
 on public.catalogo_precos for all
+using (public.current_user_is_admin())
+with check (public.current_user_is_admin());
+
+create policy admin_manage_catalogo_regras_desconto
+on public.catalogo_regras_desconto for all
 using (public.current_user_is_admin())
 with check (public.current_user_is_admin());
 

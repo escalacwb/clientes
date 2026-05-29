@@ -31,9 +31,9 @@ Entregue nesta rodada:
 - Proposta comercial full-page.
 - Condicoes comerciais persistidas.
 - Forecast ponderado por vendedor.
+- Tabela `catalogo_regras_desconto` criada e integrada ao calculo de aprovacao de orcamentos por tipo/grupo/subgrupo/marca/codigo.
 
 Proximos pontos:
-- Tabela de regras de desconto por grupo/produto/servico.
 - Aprovacao formal com usuario aprovador, motivo, data e historico separado.
 - Bundles sugeridos: pneu + montagem + balanceamento + alinhamento.
 - Proposta HTML imprimivel com layout final e termos padrao.
