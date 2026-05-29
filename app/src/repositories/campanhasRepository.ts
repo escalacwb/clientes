@@ -67,6 +67,7 @@ type CampanhaEnvioRow = {
   virou_venda: boolean
   orcamento_id: string | null
   receita_atribuida: number | null
+  campanhas?: { nome: string | null } | null
 }
 
 type CampanhaRow = {
@@ -249,6 +250,21 @@ export async function listCampanhasResumo(): Promise<CampanhaResumo[]> {
 
   if (error) return listCampanhasResumoFallback()
   return (data ?? []).map((row) => mapCampanhaResumoView(row as CampanhaResumoRow))
+}
+
+export async function listClienteCampanhaEnvios(clienteId: string, limit = 50): Promise<CampanhaEnvio[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('campanha_envios')
+    .select('*, campanhas(nome)')
+    .eq('cliente_id', clienteId)
+    .order('data_marcado_enviado', { ascending: false, nullsFirst: false })
+    .limit(limit)
+
+  if (error) throw error
+  return (data ?? []).map((row) => mapEnvio(row as CampanhaEnvioRow))
 }
 
 async function listCampanhasResumoFallback(): Promise<CampanhaResumo[]> {
@@ -458,6 +474,7 @@ function mapEnvio(row: CampanhaEnvioRow): CampanhaEnvio {
   return {
     id: row.id,
     campanhaId: row.campanha_id,
+    campanhaNome: row.campanhas?.nome ?? undefined,
     clienteId: row.cliente_id,
     vendedorId: row.vendedor_id ?? undefined,
     telefone: row.telefone ?? undefined,

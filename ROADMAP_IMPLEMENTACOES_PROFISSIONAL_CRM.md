@@ -873,6 +873,22 @@ Validacao:
 Proximo passo tecnico:
 - Adicionar abas de tarefas e campanhas dentro da Ficha 360, com acoes diretas para criar tarefa, campanha ou orcamento a partir do historico.
 
+### 2026-05-28 - Ficha 360 com tarefas e campanhas
+
+Status: concluido.
+
+Entregue:
+- A Ficha 360 passou a carregar tarefas e envios de campanha do cliente sob demanda.
+- Nova aba `Tarefas` mostra vencimento, origem, status, responsavel e permite criar nova tarefa a partir da ficha.
+- Nova aba `Campanhas` mostra campanha, status, telefone, orcamento gerado e receita atribuida.
+- Acoes rapidas no topo da ficha permitem criar orcamento e criar tarefa contextual.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Criar acoes avancadas por item de historico: repetir compra, gerar orcamento com item anterior e iniciar campanha a partir do cliente.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

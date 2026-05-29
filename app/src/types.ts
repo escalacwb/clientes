@@ -212,6 +212,7 @@ export type CampanhaEnvioStatus =
 export type CampanhaEnvio = {
   id: string
   campanhaId: string
+  campanhaNome?: string
   clienteId: string
   vendedorId?: string
   telefone?: string

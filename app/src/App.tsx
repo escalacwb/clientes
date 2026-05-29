@@ -54,6 +54,7 @@ import { listClienteAlteracoes } from './repositories/auditoriaRepository'
 import {
   campanhaSegmentos,
   createCampanhaSalva,
+  listClienteCampanhaEnvios,
   listCampanhaSegmento,
   listCampanhasResumo,
   listCampanhasSalvas,
@@ -97,6 +98,7 @@ import { updateOrcamentoStatus } from './repositories/orcamentosRepository'
 import {
   completeTarefa,
   createTarefa,
+  listClienteTarefas,
   listTarefas,
   listTarefasPage,
   type TarefaOriginFilter,
@@ -105,6 +107,7 @@ import {
 import { listUsuarios } from './repositories/usuariosRepository'
 import type {
   CampanhaEnvioStatus,
+  CampanhaEnvio,
   CarteiraFiltro,
   CatalogoItem,
   Cliente,
@@ -226,6 +229,8 @@ function App() {
   const [vendasItens, setVendasItens] = useState<VendaItem[]>(isSupabaseConfigured ? [] : seedVendasItens)
   const [servicosItens, setServicosItens] = useState<ServicoItem[]>(isSupabaseConfigured ? [] : seedServicosItens)
   const [clienteVeiculos, setClienteVeiculos] = useState<ClienteVeiculoResumo[]>([])
+  const [clienteTarefas, setClienteTarefas] = useState<Tarefa[]>([])
+  const [clienteCampanhas, setClienteCampanhas] = useState<CampanhaEnvio[]>([])
   const [possiveisDuplicados, setPossiveisDuplicados] = useState<PossivelDuplicado[]>(isSupabaseConfigured ? [] : seedPossiveisDuplicados)
   const [mesclagens, setMesclagens] = useState<ClienteMesclagem[]>(isSupabaseConfigured ? [] : seedMesclagens)
   const [catalogo, setCatalogo] = useState<CatalogoItem[]>([])
@@ -518,15 +523,19 @@ function App() {
 
       setIsLoadingHistory(true)
       try {
-        const [loadedVendas, loadedServicos, loadedVeiculos] = await Promise.all([
+        const [loadedVendas, loadedServicos, loadedVeiculos, loadedTarefas, loadedCampanhas] = await Promise.all([
           listClienteVendasItens(selectedClientId),
           listClienteServicosItens(selectedClientId),
           listClienteVeiculos(selectedClientId),
+          listClienteTarefas(selectedClientId),
+          listClienteCampanhaEnvios(selectedClientId),
         ])
         if (!isMounted) return
         setVendasItens(loadedVendas)
         setServicosItens(loadedServicos)
         setClienteVeiculos(loadedVeiculos)
+        setClienteTarefas(loadedTarefas)
+        setClienteCampanhas(loadedCampanhas)
       } catch (exception) {
         if (isMounted) setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar o historico do cliente.')
       } finally {
@@ -840,6 +849,27 @@ function App() {
             vendasItens={scopedVendasItens}
             servicosItens={scopedServicosItens}
             veiculos={clienteVeiculos}
+            tarefas={clienteTarefas}
+            campanhaEnvios={clienteCampanhas}
+            onCreateTask={async () => {
+              const created = await createTarefa({
+                clienteId: selectedClient.id,
+                vendedorId: selectedClient.vendedorId ?? session?.id,
+                titulo: bestNextAction(selectedClient),
+                descricao: `Tarefa criada pela Ficha 360. ${smartSummary(selectedClient, scopedInteracoes)}`,
+                dataVencimento: addDays(new Date().toISOString().slice(0, 10), 1),
+                prioridade: 80,
+                origem: 'cliente360',
+              })
+              setTarefas((current) => [created, ...current])
+              setClienteTarefas((current) => [created, ...current])
+              return created
+            }}
+            onCreateQuote={() => {
+              setQuoteSourceView('cliente360')
+              setQuoteOriginContext({ kind: 'cliente', label: 'Ficha 360' })
+              setView('orcamento-editor')
+            }}
             onBack={() => setView('clientes')}
           />
         )}
@@ -3218,6 +3248,20 @@ function origemLabel(origemBase?: Cliente['origemBase']) {
   return origemBase ? labels[origemBase] : labels.desconhecida
 }
 
+function campaignStatusLabel(status: CampanhaEnvioStatus) {
+  const labels: Record<CampanhaEnvioStatus, string> = {
+    pendente: 'Pendente',
+    enviado: 'Enviado',
+    respondeu: 'Respondeu',
+    nao_respondeu: 'Nao respondeu',
+    virou_orcamento: 'Virou orcamento',
+    ganhou: 'Ganhou',
+    perdido: 'Perdido',
+    nao_contatar: 'Nao contatar',
+  }
+  return labels[status] ?? status
+}
+
 function Cliente360({
   cliente,
   interacoes,
@@ -3225,6 +3269,10 @@ function Cliente360({
   vendasItens,
   servicosItens,
   veiculos,
+  tarefas,
+  campanhaEnvios,
+  onCreateTask,
+  onCreateQuote,
   onBack,
 }: {
   cliente: Cliente
@@ -3233,19 +3281,26 @@ function Cliente360({
   vendasItens: VendaItem[]
   servicosItens: ServicoItem[]
   veiculos: ClienteVeiculoResumo[]
+  tarefas: Tarefa[]
+  campanhaEnvios: CampanhaEnvio[]
+  onCreateTask: () => Promise<Tarefa>
+  onCreateQuote: () => void
   onBack: () => void
 }) {
   const [sellerFilter, setSellerFilter] = useState('todos')
   const [vehicleFilter, setVehicleFilter] = useState('todos')
   const [kindFilter, setKindFilter] = useState<'todos' | 'vendas' | 'servicos'>('todos')
-  const [activeTab, setActiveTab] = useState<'resumo' | 'veiculos' | 'vendas' | 'servicos' | 'orcamentos' | 'timeline'>('resumo')
+  const [activeTab, setActiveTab] = useState<'resumo' | 'veiculos' | 'vendas' | 'servicos' | 'orcamentos' | 'tarefas' | 'campanhas' | 'timeline'>('resumo')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [isCreatingTask, setIsCreatingTask] = useState(false)
 
   const clienteVendas = vendasItens.filter((venda) => venda.clienteId === cliente.id)
   const clienteServicos = servicosItens.filter((servico) => servico.clienteId === cliente.id)
   const clienteInteracoes = interacoes.filter((interacao) => interacao.clienteId === cliente.id)
   const clienteOrcamentos = orcamentos.filter((orcamento) => orcamento.clienteId === cliente.id)
+  const clienteTarefas = tarefas.filter((tarefa) => tarefa.clienteId === cliente.id)
+  const clienteCampanhas = campanhaEnvios.filter((envio) => envio.clienteId === cliente.id)
   const sellers = Array.from(new Set([
     ...clienteVendas.map((venda) => venda.vendedorNome).filter(Boolean),
     ...clienteServicos.map((servico) => servico.vendedorNome).filter(Boolean),
@@ -3282,6 +3337,17 @@ function Cliente360({
   const ultimaMovimentacao = allEvents.at(-1)?.data
   const proximaRecompra = frequenciaDias && ultimaMovimentacao ? addDays(ultimaMovimentacao, Math.max(30, Math.round(frequenciaDias))) : undefined
   const veiculosResumo = buildVehicleSummary(veiculos, clienteServicos, clienteVendas)
+  const tarefasAbertas = clienteTarefas.filter((tarefa) => tarefa.status === 'aberta')
+
+  async function handleCreateTask() {
+    setIsCreatingTask(true)
+    try {
+      await onCreateTask()
+      setActiveTab('tarefas')
+    } finally {
+      setIsCreatingTask(false)
+    }
+  }
 
   return (
     <section className="client360">
@@ -3291,6 +3357,12 @@ function Cliente360({
           <span className="status-pill">{origemLabel(cliente.origemBase)}</span>
           <h2>{cliente.nome}</h2>
           <p>{cliente.cidade}/{cliente.uf} · {cliente.tipoCliente} · {cliente.vendedorNome ?? 'Sem vendedor responsavel'}</p>
+        </div>
+        <div className="client360-actions">
+          <button className="button primary" type="button" onClick={onCreateQuote}>Criar orcamento</button>
+          <button className="button" type="button" onClick={handleCreateTask} disabled={isCreatingTask}>
+            {isCreatingTask ? 'Criando...' : 'Criar tarefa'}
+          </button>
         </div>
         <div className="info-grid">
           <Info label="CPF/CNPJ" value={cliente.cpfCnpj || 'Nao informado'} />
@@ -3366,6 +3438,8 @@ function Cliente360({
         <button className={activeTab === 'vendas' ? 'active' : ''} type="button" onClick={() => setActiveTab('vendas')}>Vendas</button>
         <button className={activeTab === 'servicos' ? 'active' : ''} type="button" onClick={() => setActiveTab('servicos')}>Servicos</button>
         <button className={activeTab === 'orcamentos' ? 'active' : ''} type="button" onClick={() => setActiveTab('orcamentos')}>Orcamentos</button>
+        <button className={activeTab === 'tarefas' ? 'active' : ''} type="button" onClick={() => setActiveTab('tarefas')}>Tarefas</button>
+        <button className={activeTab === 'campanhas' ? 'active' : ''} type="button" onClick={() => setActiveTab('campanhas')}>Campanhas</button>
         <button className={activeTab === 'timeline' ? 'active' : ''} type="button" onClick={() => setActiveTab('timeline')}>Timeline</button>
       </div>
 
@@ -3385,6 +3459,7 @@ function Cliente360({
               <div className="status-row"><span>Proxima recompra sugerida</span><strong>{dateLabel(proximaRecompra)}</strong></div>
               <div className="status-row"><span>Responsavel</span><strong>{cliente.responsavel || 'Nao informado'}</strong></div>
               <div className="status-row"><span>Origem</span><strong>{origemLabel(cliente.origemBase)}</strong></div>
+              <div className="status-row"><span>Tarefas abertas</span><strong>{tarefasAbertas.length}</strong></div>
             </div>
           </div>
           <div className="panel">
@@ -3518,6 +3593,69 @@ function Cliente360({
         </div>
       </section>
       )}
+      {activeTab === 'tarefas' && (
+        <section className="panel wide">
+          <div className="panel-header">
+            <div>
+              <h2>Tarefas e atividades</h2>
+              <p>{tarefasAbertas.length} abertas de {clienteTarefas.length} tarefas registradas.</p>
+            </div>
+            <button className="button" type="button" onClick={handleCreateTask} disabled={isCreatingTask}>
+              {isCreatingTask ? 'Criando...' : 'Nova tarefa'}
+            </button>
+          </div>
+          <div className="table">
+            <div className="table-head client360-task">
+              <span>Vencimento</span>
+              <span>Tarefa</span>
+              <span>Responsavel</span>
+              <span>Origem</span>
+              <span>Status</span>
+            </div>
+            {clienteTarefas.map((tarefa) => (
+              <div className="table-row client360-task" key={tarefa.id}>
+                <span>{dateLabel(tarefa.dataVencimento)}</span>
+                <span><strong>{tarefa.titulo}</strong><small>{tarefa.descricao || 'Sem descricao'}</small></span>
+                <span>{tarefa.vendedorNome || 'Sem responsavel'}</span>
+                <span>{tarefa.origem}</span>
+                <strong>{tarefa.status}</strong>
+              </div>
+            ))}
+            {clienteTarefas.length === 0 && <div className="empty-state">Nenhuma tarefa criada para este cliente.</div>}
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'campanhas' && (
+        <section className="panel wide">
+          <div className="panel-header">
+            <div>
+              <h2>Campanhas do cliente</h2>
+              <p>Historico de abordagens em campanhas e resultado comercial.</p>
+            </div>
+          </div>
+          <div className="table">
+            <div className="table-head client360-campaign">
+              <span>Campanha</span>
+              <span>Status</span>
+              <span>Telefone</span>
+              <span>Orcamento</span>
+              <span>Receita</span>
+            </div>
+            {clienteCampanhas.map((envio) => (
+              <div className="table-row client360-campaign" key={envio.id}>
+                <span><strong>{envio.campanhaNome || envio.campanhaId}</strong><small>{envio.mensagemFinal}</small></span>
+                <span>{campaignStatusLabel(envio.status)}</span>
+                <span>{envio.telefone || 'Sem telefone'}</span>
+                <span>{envio.virouOrcamento ? 'Sim' : 'Nao'}</span>
+                <strong>{money(envio.receitaAtribuida ?? 0)}</strong>
+              </div>
+            ))}
+            {clienteCampanhas.length === 0 && <div className="empty-state">Nenhum envio de campanha registrado para este cliente.</div>}
+          </div>
+        </section>
+      )}
+
       {activeTab === 'timeline' && (
         <section className="panel wide">
           <div className="panel-header">

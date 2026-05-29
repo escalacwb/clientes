@@ -141,11 +141,12 @@ Ja entregue:
 - Pagina dedicada com vendas, servicos, orcamentos e filtros basicos.
 - Aba de veiculos com placa, KM e historico vinculado ao cliente.
 - Resumo executivo com frequencia media, proxima recompra sugerida, produto principal e servico recorrente.
-
-Proximas entregas:
 - Aba de campanhas do cliente.
 - Aba de tarefas/atividades.
-- Acoes contextuais: repetir compra, criar orcamento de item anterior, criar tarefa, criar campanha.
+- Acoes contextuais iniciais: criar orcamento e criar tarefa pela ficha.
+
+Proximas entregas:
+- Acoes contextuais avancadas: repetir compra, criar orcamento de item anterior, criar campanha.
 
 Pronto quando:
 - Um vendedor abre um cliente e entende em 30 segundos o que vender e qual proxima acao.

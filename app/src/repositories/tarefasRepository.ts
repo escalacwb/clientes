@@ -94,6 +94,22 @@ export async function listTarefasPage(input: {
   }
 }
 
+export async function listClienteTarefas(clienteId: string, limit = 50): Promise<Tarefa[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return mockTarefas.filter((tarefa) => tarefa.clienteId === clienteId)
+
+  const { data, error } = await supabase
+    .from('tarefas')
+    .select('*, clientes(nome), users(nome)')
+    .eq('cliente_id', clienteId)
+    .order('status', { ascending: true })
+    .order('data_vencimento', { ascending: true })
+    .limit(limit)
+
+  if (error) throw error
+  return (data as TarefaRow[]).map(mapTarefa)
+}
+
 export async function createTarefa(input: TarefaInput): Promise<Tarefa> {
   const supabase = await getSupabase()
   if (!supabase) {
