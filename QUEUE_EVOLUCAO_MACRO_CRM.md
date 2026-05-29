@@ -32,7 +32,7 @@ Pronto quando:
 
 ### Q02 - Fila inteligente no Supabase
 
-Status: Pendente.
+Status: Em andamento.
 
 Objetivo:
 Tirar a fila inteligente do browser e gerar oportunidades/tarefas sugeridas pela base inteira.
@@ -113,11 +113,15 @@ Status: Pendente.
 Objetivo:
 Separar vendedor responsavel atual de vendedor historico e dar visao gerencial da carteira.
 
-Entregas:
-- Tela `Vendedores` ou melhoria em `Carteira`.
+Ja entregue:
+- Tela `Vendedores` separada de `Usuarios`.
 - Filtros por vendedor responsavel, vendedor historico, cidade, origem e status.
 - Clientes sem vendedor com sugestao de distribuicao.
-- Carteira por vendedor com risco, tarefas, orcamentos e cobertura de contato.
+- Carteira por vendedor com risco, tarefas, pipeline, contatos e cobertura.
+
+Proximas entregas:
+- Buscar clientes da tela `Vendedores` direto por query paginada, em vez da pagina atual carregada.
+- Relatorio de vendedor historico vindo do ERP/importacao com campo dedicado.
 
 Pronto quando:
 - Gerente consegue redistribuir carteira com contexto.

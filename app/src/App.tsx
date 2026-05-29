@@ -109,6 +109,7 @@ import type {
   Cliente,
   ClienteAlteracao,
   ClienteMesclagem,
+  ClienteStatus,
   Importacao,
   ImportacaoConflito,
   Interacao,
@@ -142,11 +143,12 @@ const nav = [
   { id: 'campanhas', label: 'Campanhas', icon: Send },
   { id: 'orcamentos', label: 'Orcamentos', icon: WalletCards },
   { id: 'relatorios', label: 'Relatorios', icon: BarChart3 },
+  { id: 'vendedores', label: 'Vendedores', icon: UserRound },
   { id: 'usuarios', label: 'Usuarios', icon: ShieldCheck },
   { id: 'auditoria', label: 'Auditoria', icon: CheckCircle2 },
 ]
 
-const adminOnlyViews = new Set(['importacoes', 'conflitos', 'mesclagem', 'relatorios', 'usuarios', 'auditoria'])
+const adminOnlyViews = new Set(['importacoes', 'conflitos', 'mesclagem', 'relatorios', 'vendedores', 'usuarios', 'auditoria'])
 
 const authUsuarios: Vendedor[] = [
   {
@@ -1139,6 +1141,27 @@ function App() {
             oportunidades={oportunidades}
             vendasItens={scopedVendasItens}
             servicosItens={scopedServicosItens}
+          />
+        )}
+        {session.role === 'admin' && view === 'vendedores' && (
+          <VendedoresCarteira
+            clientes={clientes}
+            usuarios={usuarios}
+            vendedoresResumo={vendedoresResumo}
+            tarefas={tarefas}
+            orcamentos={orcamentos}
+            onAssignClient={(clienteId, vendedorId) => {
+              assignClienteVendedor(clienteId, vendedorId).catch((exception) => {
+                setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel atribuir vendedor.')
+              })
+              setClientes((current) =>
+                current.map((cliente) => {
+                  if (cliente.id !== clienteId) return cliente
+                  const vendedor = usuarios.find((item) => item.id === vendedorId)
+                  return { ...cliente, vendedorId, vendedorNome: vendedor?.nome }
+                }),
+              )
+            }}
           />
         )}
         {session.role === 'admin' && view === 'usuarios' && (
@@ -5411,6 +5434,194 @@ function rankBy<T>(items: T[], getLabel: (item: T) => string) {
   return [...counts.entries()]
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count)
+}
+
+function VendedoresCarteira({
+  clientes,
+  usuarios,
+  vendedoresResumo,
+  tarefas,
+  orcamentos,
+  onAssignClient,
+}: {
+  clientes: Cliente[]
+  usuarios: Vendedor[]
+  vendedoresResumo: VendedorResumo[]
+  tarefas: Tarefa[]
+  orcamentos: Orcamento[]
+  onAssignClient: (clienteId: string, vendedorId: string) => void
+}) {
+  const vendedores = usuarios.filter((usuario) => usuario.role === 'vendedor')
+  const [responsavelFilter, setResponsavelFilter] = useState('todos')
+  const [historicoFilter, setHistoricoFilter] = useState('todos')
+  const [cidadeFilter, setCidadeFilter] = useState('todas')
+  const [origemFilter, setOrigemFilter] = useState<'todas' | NonNullable<Cliente['origemBase']>>('todas')
+  const [statusFilter, setStatusFilter] = useState<ClienteStatus | 'todos'>('todos')
+  const cidades = Array.from(new Set(clientes.map((cliente) => cliente.cidade).filter(Boolean))).sort()
+  const vendedoresHistoricos = Array.from(new Set(clientes.map((cliente) => cliente.vendedorNome).filter(Boolean))).sort()
+  const resumoRows = vendedoresResumo.length > 0
+    ? vendedoresResumo
+        .filter((row) => row.role === 'vendedor')
+        .map((row) => ({
+          id: row.vendedorId,
+          nome: row.vendedorNome,
+          clientes: row.clientes,
+          risco: row.clientesRisco,
+          tarefasVencidas: row.tarefasVencidas,
+          pipeline: row.pipeline,
+          contatos: row.contatos,
+          cobertura: row.clientes ? Math.round(((row.clientes - row.clientesRisco) / row.clientes) * 100) : 0,
+        }))
+    : vendedores.map((vendedor) => {
+        const carteira = clientes.filter((cliente) => cliente.vendedorId === vendedor.id)
+        return {
+          id: vendedor.id,
+          nome: vendedor.nome,
+          clientes: carteira.length,
+          risco: carteira.filter((cliente) => daysSince(cliente.ultimaCompraEm) > 180).length,
+          tarefasVencidas: tarefas.filter((tarefa) => tarefa.vendedorId === vendedor.id && tarefa.status === 'aberta' && daysSince(tarefa.dataVencimento) > 0).length,
+          pipeline: orcamentos.filter((orcamento) => orcamento.vendedorId === vendedor.id).reduce((total, orcamento) => total + orcamento.valorTotal, 0),
+          contatos: 0,
+          cobertura: carteira.length ? Math.round((carteira.filter((cliente) => daysSince(cliente.ultimoContatoEm) <= 60).length / carteira.length) * 100) : 0,
+        }
+      })
+  const clientesFiltrados = clientes.filter((cliente) => {
+    if (responsavelFilter === 'sem-vendedor' && cliente.vendedorId) return false
+    if (responsavelFilter !== 'todos' && responsavelFilter !== 'sem-vendedor' && cliente.vendedorId !== responsavelFilter) return false
+    if (historicoFilter !== 'todos' && cliente.vendedorNome !== historicoFilter) return false
+    if (cidadeFilter !== 'todas' && cliente.cidade !== cidadeFilter) return false
+    if (origemFilter !== 'todas' && cliente.origemBase !== origemFilter) return false
+    if (statusFilter !== 'todos' && cliente.status !== statusFilter) return false
+    return true
+  })
+  const clientesSemVendedor = clientes.filter((cliente) => !cliente.vendedorId)
+  const vendedorSugerido = [...resumoRows].sort((a, b) => a.clientes - b.clientes || a.risco - b.risco)[0]
+  const statusOptions = Array.from(new Set(clientes.map((cliente) => cliente.status))).sort()
+
+  return (
+    <section className="grid-layout">
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Gestao de vendedores</h2>
+            <p>Carteira atual, risco, tarefas, pipeline e cobertura por responsavel comercial.</p>
+          </div>
+          <UserRound size={18} />
+        </div>
+        <div className="table">
+          <div className="table-head report">
+            <span>Vendedor</span>
+            <span>Clientes</span>
+            <span>Risco</span>
+            <span>Atrasos</span>
+            <span>Pipeline</span>
+            <span>Contatos</span>
+            <span>Cobertura</span>
+          </div>
+          {resumoRows.map((row) => (
+            <div className="table-row report" key={row.id}>
+              <span><strong>{row.nome}</strong></span>
+              <span>{row.clientes}</span>
+              <span>{row.risco}</span>
+              <span>{row.tarefasVencidas}</span>
+              <span>{money(row.pipeline)}</span>
+              <span>{row.contatos}</span>
+              <span className="score">{row.cobertura}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Filtro de carteira</h2>
+            <p>Separe responsavel atual de vendedor historico e encontre carteiras para redistribuir.</p>
+          </div>
+          <Filter size={18} />
+        </div>
+        <div className="campaign-filter-grid">
+          <label>
+            Responsavel atual
+            <select value={responsavelFilter} onChange={(event) => setResponsavelFilter(event.target.value)}>
+              <option value="todos">Todos</option>
+              <option value="sem-vendedor">Sem vendedor</option>
+              {vendedores.map((vendedor) => <option key={vendedor.id} value={vendedor.id}>{vendedor.nome}</option>)}
+            </select>
+          </label>
+          <label>
+            Vendedor historico
+            <select value={historicoFilter} onChange={(event) => setHistoricoFilter(event.target.value)}>
+              <option value="todos">Todos</option>
+              {vendedoresHistoricos.map((nome) => <option key={nome} value={nome}>{nome}</option>)}
+            </select>
+          </label>
+          <label>
+            Cidade
+            <select value={cidadeFilter} onChange={(event) => setCidadeFilter(event.target.value)}>
+              <option value="todas">Todas</option>
+              {cidades.map((cidade) => <option key={cidade} value={cidade}>{cidade}</option>)}
+            </select>
+          </label>
+          <label>
+            Origem
+            <select value={origemFilter} onChange={(event) => setOrigemFilter(event.target.value as typeof origemFilter)}>
+              <option value="todas">Todas</option>
+              <option value="capital_truck">Capital Truck</option>
+              <option value="rodobens">Rodobens</option>
+              <option value="desconhecida">Desconhecida</option>
+            </select>
+          </label>
+          <label>
+            Status
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
+              <option value="todos">Todos</option>
+              {statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="info-grid campaign-summary">
+          <Info label="Filtrados" value={clientesFiltrados.length.toString()} />
+          <Info label="Sem vendedor" value={clientesSemVendedor.length.toString()} />
+          <Info label="Sugestao" value={vendedorSugerido?.nome ?? 'Sem vendedor'} />
+          <Info label="Menor carteira" value={vendedorSugerido ? `${vendedorSugerido.clientes} clientes` : '-'} />
+        </div>
+        <div className="table">
+          <div className="table-head client360-sale">
+            <span>Cliente</span>
+            <span>Cidade</span>
+            <span>Responsavel</span>
+            <span>Historico</span>
+            <span>Atribuir</span>
+          </div>
+          {clientesFiltrados.slice(0, 80).map((cliente) => (
+            <div className="table-row client360-sale" key={cliente.id}>
+              <span>
+                <strong>{cliente.nome}</strong>
+                <small>{origemLabel(cliente.origemBase)} - {cliente.status}</small>
+              </span>
+              <span>{cliente.cidade}/{cliente.uf}</span>
+              <span>{vendedores.find((vendedor) => vendedor.id === cliente.vendedorId)?.nome ?? 'Sem vendedor'}</span>
+              <span>{cliente.vendedorNome ?? 'Nao informado'}</span>
+              <span>
+                <select
+                  className="assign-select"
+                  defaultValue={cliente.vendedorId ?? ''}
+                  onChange={(event) => {
+                    if (event.target.value && event.target.value !== cliente.vendedorId) onAssignClient(cliente.id, event.target.value)
+                  }}
+                >
+                  <option value="">Selecionar</option>
+                  {vendedores.map((vendedor) => <option key={vendedor.id} value={vendedor.id}>{vendedor.nome}</option>)}
+                </select>
+              </span>
+            </div>
+          ))}
+          {clientesFiltrados.length === 0 && <div className="empty-state">Nenhum cliente encontrado nestes filtros.</div>}
+        </div>
+      </section>
+    </section>
+  )
 }
 
 function Usuarios({

@@ -647,6 +647,23 @@ Validacao:
 Proximo passo tecnico:
 - Avancar para Q05: gestao de carteira por vendedor.
 
+### 2026-05-28 - Tela gerencial de vendedores
+
+Status: concluido.
+
+Entregue:
+- Criada navegação `Vendedores`, separando gestão comercial de `Usuarios`.
+- Resumo por vendedor mostra clientes, clientes em risco, tarefas vencidas, pipeline, contatos e cobertura.
+- Filtros de carteira por responsavel atual, vendedor historico, cidade, origem e status.
+- Clientes sem vendedor aparecem no consolidado e a tela sugere o vendedor com menor carga.
+- Atribuicao de cliente para vendedor pode ser feita diretamente na lista filtrada.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Evoluir a tela para buscar clientes por query paginada propria e expor vendedor historico importado de forma dedicada.
+
 ### 2026-05-28 - Campanhas com construtor de publico
 
 Status: concluido.
