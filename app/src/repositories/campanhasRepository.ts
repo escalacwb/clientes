@@ -84,6 +84,22 @@ type CampanhaRow = {
   }>
 }
 
+type CampanhaResumoRow = {
+  campanha_id: string
+  nome: string
+  criada_em: string
+  total: number
+  pendentes: number
+  enviados: number
+  responderam: number
+  sem_resposta: number
+  viraram_orcamento: number
+  viraram_venda: number
+  perdidos: number
+  nao_contatar: number
+  receita_atribuida: number
+}
+
 export const campanhaSegmentos: CampanhaSegmento[] = [
   {
     id: 'inativos-90',
@@ -222,6 +238,20 @@ export async function createCampanhaSalva(input: {
 }
 
 export async function listCampanhasResumo(): Promise<CampanhaResumo[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('vw_campanhas_resumo')
+    .select('*')
+    .order('criada_em', { ascending: false })
+    .limit(50)
+
+  if (error) return listCampanhasResumoFallback()
+  return (data ?? []).map((row) => mapCampanhaResumoView(row as CampanhaResumoRow))
+}
+
+async function listCampanhasResumoFallback(): Promise<CampanhaResumo[]> {
   const supabase = await getSupabase()
   if (!supabase) return []
 
@@ -471,5 +501,23 @@ function mapCampanhaResumo(row: CampanhaRow): CampanhaResumo {
     perdidos: envios.filter((envio) => envio.status === 'perdido').length,
     naoContatar: envios.filter((envio) => envio.status === 'nao_contatar').length,
     receitaAtribuida: envios.reduce((total, envio) => total + Number(envio.receita_atribuida ?? 0), 0),
+  }
+}
+
+function mapCampanhaResumoView(row: CampanhaResumoRow): CampanhaResumo {
+  return {
+    campanhaId: row.campanha_id,
+    nome: row.nome,
+    criadaEm: row.criada_em,
+    total: Number(row.total ?? 0),
+    pendentes: Number(row.pendentes ?? 0),
+    enviados: Number(row.enviados ?? 0),
+    responderam: Number(row.responderam ?? 0),
+    semResposta: Number(row.sem_resposta ?? 0),
+    viraramOrcamento: Number(row.viraram_orcamento ?? 0),
+    viraramVenda: Number(row.viraram_venda ?? 0),
+    perdidos: Number(row.perdidos ?? 0),
+    naoContatar: Number(row.nao_contatar ?? 0),
+    receitaAtribuida: Number(row.receita_atribuida ?? 0),
   }
 }

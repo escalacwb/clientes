@@ -318,6 +318,28 @@ create table public.campanha_envios (
   unique (campanha_id, cliente_id)
 );
 
+create view public.vw_campanhas_resumo
+with (security_invoker = true) as
+select
+  c.id as campanha_id,
+  c.nome,
+  c.criada_em,
+  c.filtro_usado,
+  count(ce.id)::integer as total,
+  count(*) filter (where ce.status = 'pendente')::integer as pendentes,
+  count(*) filter (where ce.status = 'enviado')::integer as enviados,
+  count(*) filter (where ce.status = 'respondeu')::integer as responderam,
+  count(*) filter (where ce.status = 'nao_respondeu')::integer as sem_resposta,
+  count(*) filter (where ce.status = 'virou_orcamento' or ce.virou_orcamento)::integer as viraram_orcamento,
+  count(*) filter (where ce.virou_venda)::integer as viraram_venda,
+  count(*) filter (where ce.status = 'perdido')::integer as perdidos,
+  count(*) filter (where ce.status = 'nao_contatar')::integer as nao_contatar,
+  coalesce(sum(ce.receita_atribuida), 0)::numeric(14, 2) as receita_atribuida
+from public.campanhas c
+left join public.campanha_envios ce on ce.campanha_id = c.id
+where c.filtro_usado ? 'segmentoId'
+group by c.id, c.nome, c.criada_em, c.filtro_usado;
+
 create table public.importacao_conflitos (
   id uuid primary key default gen_random_uuid(),
   importacao_id uuid not null references public.importacoes(id),

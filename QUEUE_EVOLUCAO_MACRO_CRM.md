@@ -93,9 +93,9 @@ Ja entregue:
 - Carga inicial de orcamentos limitada a contexto recente, sem puxar historico completo.
 - Tarefas paginadas/filtradas no Supabase por status, origem e vendedor.
 - Carga inicial de tarefas limitada a contexto recente.
+- Campanhas com resumo por view agregada, sem nested payload de envios.
 
 Proximas entregas:
-- Campanhas com resumo por query/view, sem nested payload pesado.
 - Relatorios sempre por views agregadas.
 - Estados de loading vazios, sem fallback falso.
 

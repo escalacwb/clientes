@@ -598,6 +598,24 @@ Validacao:
 Proximo passo tecnico:
 - Otimizar campanhas com resumo por view/query, reduzindo nested payload em `campanha_envios`.
 
+### 2026-05-28 - Resumo de campanhas por view agregada
+
+Status: concluido.
+
+Entregue:
+- Criada `vw_campanhas_resumo` com totais de envios, respostas, orcamentos, ganhos, perdas e receita atribuida.
+- Repository de campanhas passou a consultar a view, evitando carregar `campanha_envios` aninhado.
+- Mantido fallback para o metodo antigo caso um ambiente ainda esteja sem a view.
+- Schema principal e incremental atualizados.
+
+Validacao:
+- Build passou com `npm run build`.
+- `reference_import_schema.sql` aplicado no Supabase.
+- View validada com consulta direta em `public.vw_campanhas_resumo`.
+
+Proximo passo tecnico:
+- Revisar relatorios para garantir que telas gerenciais usem views agregadas e nao arrays carregados no browser.
+
 ### 2026-05-28 - Campanhas com construtor de publico
 
 Status: concluido.
