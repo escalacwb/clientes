@@ -859,6 +859,10 @@ h3 {
   grid-template-columns: 48px minmax(190px, 0.8fr) minmax(260px, 1.4fr) 130px minmax(360px, 1fr);
 }
 
+.campaign-inbox-row {
+  grid-template-columns: minmax(190px, 0.8fr) minmax(190px, 0.8fr) 130px minmax(260px, 1.1fr) minmax(420px, 1.2fr);
+}
+
 .rodobens-row {
   grid-template-columns: minmax(190px, 0.9fr) minmax(180px, 0.8fr) 140px minmax(170px, 0.8fr) minmax(420px, 1.1fr);
 }

@@ -1530,6 +1530,23 @@ Validacao:
 Proximo passo tecnico:
 - Criar Inbox dedicado de respostas de campanha com classificacao de trabalho: pediu preco, pediu retorno, virar orcamento, ganho e perdido.
 
+### 2026-05-29 - Inbox dedicado de campanhas
+
+Status: concluido - primeira entrega do M09.
+
+Entregue:
+- Criada tela `Inbox Campanhas` no menu principal.
+- Fila carrega `campanha_envios` real com filtro por status e vendedor.
+- Cada item permite abrir Ficha 360, iniciar orcamento, criar tarefa, marcar ganho, perdido ou sem resposta.
+- Mudancas de status registram interacao vinculada a campanha.
+
+Validacao:
+- Build passou com `npm run build`.
+- Playwright local validou a abertura da tela pelo menu e carregamento da fila sem erro em `campanha_envios`.
+
+Proximo passo tecnico:
+- Criar relatorio de campanha por vendedor com enviados, respostas, tarefas, orcamentos, ganhos, receita e ROI.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

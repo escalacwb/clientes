@@ -53,9 +53,9 @@ Entregue nesta rodada:
 - Criada view `vw_clientes_campanha_elegibilidade` para centralizar bloqueios de campanha por nao contatar, falta de WhatsApp e contato recente.
 - Campanhas agora salvam janela minima entre acionamentos, permitindo ajustar o bloqueio de contato recente por campanha.
 - Opt-out de WhatsApp passou a registrar motivo, data e usuario no cliente.
+- Criado `Inbox Campanhas` como fila dedicada de respostas/status para abrir ficha, criar tarefa, iniciar orcamento e marcar ganho/perda.
 
 Proximos pontos:
-- Inbox dedicado de respostas com status de trabalho: respondeu, pediu preco, pediu retorno, virou orcamento, ganho, perdido.
 - Relatorio de campanha por vendedor com enviados, respostas, tarefas, orcamentos, ganhos, receita e ROI.
 
 ## Sprint C - Pipeline real e oportunidades persistidas

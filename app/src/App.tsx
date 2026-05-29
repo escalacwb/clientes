@@ -188,6 +188,7 @@ const nav = [
   { id: 'conflitos', label: 'Conflitos', icon: AlertTriangle },
   { id: 'mesclagem', label: 'Mesclagem', icon: UsersRound },
   { id: 'campanhas', label: 'Campanhas', icon: Send },
+  { id: 'campanhas-inbox', label: 'Inbox Campanhas', icon: MessageCircle },
   { id: 'orcamentos', label: 'Orcamentos', icon: WalletCards },
   { id: 'catalogo', label: 'Catalogo', icon: ClipboardList },
   { id: 'relatorios', label: 'Relatorios', icon: BarChart3 },
@@ -319,6 +320,10 @@ function App() {
   const [quoteSourceView, setQuoteSourceView] = useState('clientes')
   const [quoteOriginContext, setQuoteOriginContext] = useState<QuoteOriginContext>({ kind: 'cliente', label: 'Ficha do cliente' })
   const [campaignToOpenId, setCampaignToOpenId] = useState('')
+  const [campanhaInboxItems, setCampanhaInboxItems] = useState<CampanhaInboxItem[]>([])
+  const [campanhaInboxStatusFilter, setCampanhaInboxStatusFilter] = useState<CampanhaEnvioStatus | 'todos'>('respondeu')
+  const [campanhaInboxOwnerFilter, setCampanhaInboxOwnerFilter] = useState('')
+  const [isLoadingCampanhaInbox, setIsLoadingCampanhaInbox] = useState(false)
   const [isLoadingData, setIsLoadingData] = useState(isSupabaseConfigured)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [isLoadingClientes, setIsLoadingClientes] = useState(isSupabaseConfigured)
@@ -566,6 +571,39 @@ function App() {
       isMounted = false
     }
   }, [cockpitRefreshKey, isCheckingSession, session, view])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadInboxCampanhas() {
+      if (isCheckingSession) return
+      if (isSupabaseConfigured && !session) {
+        setCampanhaInboxItems([])
+        return
+      }
+      if (view !== 'campanhas-inbox') return
+
+      setIsLoadingCampanhaInbox(true)
+      clearModuleError('campanhas-inbox')
+      try {
+        const vendedorId = session?.role === 'vendedor' ? session.id : campanhaInboxOwnerFilter || undefined
+        const statuses = campanhaInboxStatusFilter === 'todos' ? undefined : [campanhaInboxStatusFilter]
+        const items = await listCampanhaInbox({ statuses, vendedorId, limit: 100 })
+        if (!isMounted) return
+        setCampanhaInboxItems(items)
+      } catch (exception) {
+        if (isMounted) setModuleError('campanhas-inbox', exception instanceof Error ? exception.message : 'Nao foi possivel carregar o inbox de campanhas.')
+      } finally {
+        if (isMounted) setIsLoadingCampanhaInbox(false)
+      }
+    }
+
+    loadInboxCampanhas()
+
+    return () => {
+      isMounted = false
+    }
+  }, [campanhaInboxOwnerFilter, campanhaInboxStatusFilter, isCheckingSession, session, view])
 
   useEffect(() => {
     let isMounted = true
@@ -1587,6 +1625,71 @@ function App() {
             }}
           />
         )}
+        {canUseScopedClientViews && view === 'campanhas-inbox' && (
+          <CampanhasInbox
+            items={campanhaInboxItems}
+            usuarios={usuarios}
+            currentUser={session}
+            statusFilter={campanhaInboxStatusFilter}
+            ownerFilter={session.role === 'vendedor' ? session.id : campanhaInboxOwnerFilter}
+            isLoading={isLoadingCampanhaInbox}
+            onStatusFilterChange={setCampanhaInboxStatusFilter}
+            onOwnerFilterChange={setCampanhaInboxOwnerFilter}
+            onOpenClient={async (clienteId) => {
+              setSelectedClientId(clienteId)
+              setView('cliente360')
+            }}
+            onOpenBudget={async (item) => {
+              const found = await listClientesPage({ page: 1, pageSize: 1, clienteIds: [item.clienteId] })
+              const cliente = found.clientes[0]
+              if (!cliente) return
+              setClientes((current) => current.some((row) => row.id === cliente.id) ? current : [cliente, ...current])
+              setSelectedClientId(cliente.id)
+              setQuoteSourceView('campanhas-inbox')
+              setQuoteOriginContext({
+                kind: 'campanha',
+                sourceId: item.campanhaId,
+                label: item.campanhaNome ?? 'Inbox Campanhas',
+              })
+              setView('orcamento-editor')
+            }}
+            onCreateTask={async (item) => {
+              const created = await createTarefa({
+                clienteId: item.clienteId,
+                vendedorId: item.vendedorId,
+                titulo: campaignTaskTitle(item.status),
+                descricao: `Tratar resposta da campanha ${item.campanhaNome ?? item.campanhaId}. Status: ${campaignStatusLabel(item.status)}.`,
+                dataVencimento: tomorrowDate(),
+                prioridade: campaignTaskPriority(item.status),
+                origem: `campanha:${item.campanhaId}:inbox:${item.status}`,
+              })
+              setTarefas((current) => [created, ...current])
+              return created
+            }}
+            onUpdateStatus={async (item, status) => {
+              const updated = await upsertCampanhaEnvio({
+                campanhaId: item.campanhaId,
+                campanhaNome: item.campanhaNome,
+                clienteId: item.clienteId,
+                vendedorId: item.vendedorId,
+                telefone: item.telefone,
+                mensagemFinal: item.mensagemFinal,
+                status,
+              })
+              const interacao = await createInteracao({
+                clienteId: item.clienteId,
+                vendedorId: item.vendedorId ?? session.id,
+                canal: 'Campanha',
+                tipo: 'campanha_inbox',
+                resumo: campaignSummary(status, item.mensagemFinal),
+                resultado: status,
+                campanhaId: item.campanhaId,
+              })
+              setInteracoes((current) => [interacao, ...current])
+              setCampanhaInboxItems((current) => current.map((row) => row.id === item.id ? { ...item, ...updated, clienteNome: item.clienteNome, clienteCidade: item.clienteCidade, clienteUf: item.clienteUf } : row))
+            }}
+          />
+        )}
         {canUseScopedClientViews && view === 'orcamentos' && (
           <Orcamentos
             clientes={scopedClientes}
@@ -1800,6 +1903,7 @@ function titleFor(view: string) {
     conflitos: 'Conflitos de importacao',
     mesclagem: 'Mesclagem de clientes',
     campanhas: 'Campanhas WhatsApp',
+    'campanhas-inbox': 'Inbox de campanhas',
     orcamentos: 'Orcamentos e conversao',
     catalogo: 'Catalogo e precos',
     relatorios: 'Relatorios gerenciais',
@@ -2260,6 +2364,143 @@ function Cockpit({
           </div>
           {rescheduleError && <div className="alert">{rescheduleError}</div>}
         </section>
+      )}
+    </section>
+  )
+}
+
+function CampanhasInbox({
+  items,
+  usuarios,
+  currentUser,
+  statusFilter,
+  ownerFilter,
+  isLoading,
+  onStatusFilterChange,
+  onOwnerFilterChange,
+  onOpenClient,
+  onOpenBudget,
+  onCreateTask,
+  onUpdateStatus,
+}: {
+  items: CampanhaInboxItem[]
+  usuarios: Vendedor[]
+  currentUser: SessaoUsuario
+  statusFilter: CampanhaEnvioStatus | 'todos'
+  ownerFilter: string
+  isLoading: boolean
+  onStatusFilterChange: (status: CampanhaEnvioStatus | 'todos') => void
+  onOwnerFilterChange: (ownerId: string) => void
+  onOpenClient: (clienteId: string) => Promise<void>
+  onOpenBudget: (item: CampanhaInboxItem) => Promise<void>
+  onCreateTask: (item: CampanhaInboxItem) => Promise<Tarefa>
+  onUpdateStatus: (item: CampanhaInboxItem, status: CampanhaEnvioStatus) => Promise<void>
+}) {
+  const [busyId, setBusyId] = useState('')
+  const actionable = items.filter((item) => ['respondeu', 'virou_orcamento', 'enviado', 'nao_respondeu'].includes(item.status))
+  const counts = items.reduce<Record<string, number>>((acc, item) => {
+    acc[item.status] = (acc[item.status] ?? 0) + 1
+    return acc
+  }, {})
+
+  async function run(id: string, action: () => Promise<void>) {
+    setBusyId(id)
+    try {
+      await action()
+    } finally {
+      setBusyId('')
+    }
+  }
+
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Inbox de campanhas</h2>
+          <p>Fila operacional para tratar respostas, retornos, orcamentos e perdas sem voltar para a montagem da campanha.</p>
+        </div>
+        <div className="toolbar-actions">
+          <label className="mini-select">
+            <Filter size={15} />
+            <select value={statusFilter} onChange={(event) => onStatusFilterChange(event.target.value as CampanhaEnvioStatus | 'todos')}>
+              <option value="todos">Todos os status</option>
+              <option value="respondeu">Responderam</option>
+              <option value="virou_orcamento">Virou orcamento</option>
+              <option value="enviado">Enviados</option>
+              <option value="nao_respondeu">Nao respondeu</option>
+              <option value="pendente">Pendentes</option>
+              <option value="ganhou">Ganhos</option>
+              <option value="perdido">Perdidos</option>
+              <option value="nao_contatar">Nao contatar</option>
+            </select>
+          </label>
+          {currentUser.role === 'admin' && (
+            <label className="mini-select">
+              <UserRound size={15} />
+              <select value={ownerFilter} onChange={(event) => onOwnerFilterChange(event.target.value)}>
+                <option value="">Todos vendedores</option>
+                {usuarios.map((usuario) => <option value={usuario.id} key={usuario.id}>{usuario.nome}</option>)}
+              </select>
+            </label>
+          )}
+        </div>
+      </div>
+
+      <div className="info-grid campaign-summary">
+        <Info label="Na fila" value={actionable.length.toString()} />
+        <Info label="Responderam" value={(counts.respondeu ?? 0).toString()} />
+        <Info label="Orcamentos" value={(counts.virou_orcamento ?? 0).toString()} />
+        <Info label="Sem resposta" value={(counts.nao_respondeu ?? 0).toString()} />
+        <Info label="Ganhos" value={(counts.ganhou ?? 0).toString()} />
+        <Info label="Perdidos" value={(counts.perdido ?? 0).toString()} />
+      </div>
+
+      {isLoading && <div className="empty-state">Carregando inbox de campanhas...</div>}
+      {!isLoading && (
+        <div className="table">
+          <div className="table-head campaign-inbox-row">
+            <span>Cliente</span>
+            <span>Campanha</span>
+            <span>Status</span>
+            <span>Mensagem</span>
+            <span>Acoes</span>
+          </div>
+          {items.map((item) => (
+            <div className="table-row campaign-inbox-row" key={item.id}>
+              <span>
+                <strong>{item.clienteNome}</strong>
+                <small>{[item.clienteCidade, item.clienteUf].filter(Boolean).join('/') || item.telefone || 'Sem localizacao'}</small>
+              </span>
+              <span>
+                <strong>{item.campanhaNome ?? 'Campanha'}</strong>
+                <small>{item.telefone ?? 'Sem telefone'}</small>
+              </span>
+              <span className="status-pill">{campaignStatusLabel(item.status)}</span>
+              <span>{item.respostaCliente || item.mensagemFinal}</span>
+              <span className="campaign-actions">
+                <button className="button" type="button" disabled={busyId === item.id} onClick={() => onOpenClient(item.clienteId)}>
+                  Ficha
+                </button>
+                <button className="button primary" type="button" disabled={busyId === item.id} onClick={() => run(item.id, () => onOpenBudget(item))}>
+                  Orcamento
+                </button>
+                <button className="button" type="button" disabled={busyId === item.id} onClick={() => run(item.id, async () => { await onCreateTask(item) })}>
+                  Criar tarefa
+                </button>
+                <button className="button" type="button" disabled={busyId === item.id} onClick={() => run(item.id, () => onUpdateStatus(item, 'ganhou'))}>
+                  Ganhou
+                </button>
+                <button className="button" type="button" disabled={busyId === item.id} onClick={() => run(item.id, () => onUpdateStatus(item, 'perdido'))}>
+                  Perdido
+                </button>
+                <button className="button" type="button" disabled={busyId === item.id} onClick={() => run(item.id, () => onUpdateStatus(item, 'nao_respondeu'))}>
+                  Sem resposta
+                </button>
+              </span>
+            </div>
+          ))}
+          {items.length === 0 && <div className="empty-state">Nenhuma resposta de campanha nesta fila.</div>}
+        </div>
       )}
     </section>
   )

@@ -231,7 +231,7 @@ Pronto quando:
 
 ### M09 - Inbox de respostas de campanha
 
-Status: Pendente.
+Status: Parcial.
 
 Objetivo:
 Criar fila especifica para respostas, separada da tela de montagem de campanha.
@@ -242,6 +242,12 @@ Entregas:
 - Criar tarefa de retorno.
 - Marcar ganho/perdido.
 - Relatorio de resposta por vendedor e campanha.
+
+Ja entregue:
+- Nova tela `Inbox Campanhas` no menu principal.
+- Filtro por status e por vendedor para admin.
+- Acoes por resposta: abrir Ficha 360, iniciar orcamento, criar tarefa, marcar ganho, perdido ou sem resposta.
+- A fila usa `campanha_envios` real e registra interacao ao mudar status.
 
 Pronto quando:
 - Toda resposta de campanha vira acao comercial rastreavel.
