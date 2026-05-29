@@ -244,6 +244,7 @@ h3 {
 }
 
 .search {
+  position: relative;
   width: min(420px, 100%);
   gap: 8px;
   background: #ffffff;
@@ -319,6 +320,64 @@ h3 {
 .quick-jump-bar button.primary span {
   background: rgba(255, 255, 255, 0.18);
   color: #ffffff;
+}
+
+.global-search-results {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: 0;
+  width: min(620px, calc(100vw - 40px));
+  display: grid;
+  gap: 6px;
+  border: 1px solid #dfe4de;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 40px rgba(31, 41, 55, 0.16);
+  padding: 8px;
+}
+
+.global-search-results button {
+  display: grid;
+  grid-template-columns: 88px minmax(160px, 1fr) minmax(180px, 1fr);
+  gap: 10px;
+  align-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #17211f;
+  cursor: pointer;
+  font: inherit;
+  padding: 9px;
+  text-align: left;
+}
+
+.global-search-results button:hover {
+  background: #f2f7f4;
+}
+
+.global-search-results span {
+  width: fit-content;
+  border-radius: 999px;
+  background: #eef2f0;
+  color: #52625d;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 3px 7px;
+  text-transform: uppercase;
+}
+
+.global-search-results strong,
+.global-search-results small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.global-search-results small {
+  color: #64736f;
+  font-size: 12px;
 }
 
 .compact-search {
@@ -514,6 +573,44 @@ h3 {
   color: #64736f;
 }
 
+.task-execution-panel {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(220px, auto);
+  gap: 14px;
+  border: 1px solid #b8d8ca;
+  border-radius: 8px;
+  background: #f4fbf7;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.task-execution-main {
+  display: grid;
+  gap: 10px;
+}
+
+.task-execution-main h2 {
+  font-size: 24px;
+}
+
+.task-execution-main p {
+  color: #52625d;
+}
+
+.task-execution-actions {
+  display: flex;
+  min-width: 220px;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.task-execution-actions > span {
+  color: #64736f;
+  font-size: 12px;
+  font-weight: 900;
+  text-align: right;
+}
+
 .routine-queue {
   border: 1px solid #e0e6df;
   border-radius: 8px;
@@ -646,6 +743,106 @@ h3 {
 
 .cockpit-list.two-col {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.cockpit-next-actions {
+  display: grid;
+  gap: 14px;
+}
+
+.next-action-list {
+  display: grid;
+  gap: 8px;
+}
+
+.next-action-card {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #dfe4de;
+  border-left: 4px solid #9fb5ae;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.next-action-card.campanha {
+  border-left-color: #2f7d75;
+}
+
+.next-action-card.tarefa {
+  border-left-color: #c2410c;
+}
+
+.next-action-card.orcamento {
+  border-left-color: #9a5b00;
+}
+
+.next-action-card.lead {
+  border-left-color: #315c9a;
+}
+
+.next-action-card.oportunidade {
+  border-left-color: #7c3aed;
+}
+
+.next-action-rank {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: #edf4ef;
+  color: #12312f;
+  font-weight: 900;
+}
+
+.next-action-content {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(220px, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.next-action-content strong,
+.next-action-content small {
+  display: block;
+}
+
+.next-action-content small,
+.next-action-content p {
+  color: #64736f;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.next-action-content p {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.next-action-label {
+  display: inline-flex;
+  width: fit-content;
+  margin-bottom: 3px;
+  border-radius: 999px;
+  background: #eef2f0;
+  color: #52625d;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 3px 7px;
+  text-transform: uppercase;
+}
+
+.next-action-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .cockpit-card {
@@ -1666,6 +1863,53 @@ h3 {
   resize: vertical;
 }
 
+.quote-catalog-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px;
+}
+
+.quote-catalog-picker > small {
+  color: #64736f;
+}
+
+.catalog-pick-item {
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #dfe4de;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #17211f;
+  cursor: pointer;
+  font: inherit;
+  padding: 10px;
+  text-align: left;
+}
+
+.catalog-pick-item:hover {
+  border-color: #12312f;
+  background: #f2f7f4;
+}
+
+.catalog-pick-item span,
+.catalog-pick-item strong,
+.catalog-pick-item small {
+  min-width: 0;
+  display: block;
+}
+
+.catalog-pick-item small {
+  color: #64736f;
+  font-size: 12px;
+}
+
+.catalog-pick-item b {
+  white-space: nowrap;
+}
+
 .quote-payment-scenarios {
   display: grid;
   gap: 10px;
@@ -1737,6 +1981,28 @@ h3 {
 
 .quote-item-row strong {
   color: #12312f;
+}
+
+.quote-item-source {
+  min-height: 38px;
+  display: grid;
+  align-content: center;
+  border: 1px solid #dfe4de;
+  border-radius: 8px;
+  background: #f8faf7;
+  padding: 5px 8px;
+}
+
+.quote-item-source strong,
+.quote-item-source small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quote-item-source small {
+  color: #64736f;
+  font-size: 11px;
 }
 
 .quote-actions {
@@ -2120,6 +2386,84 @@ h3 {
   line-height: 1.55;
   color: #33413d;
   margin-bottom: 14px;
+}
+
+.campaign-workflow-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.campaign-workflow-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  border: 1px solid #cfd8d3;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #33413d;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  padding: 0 12px;
+}
+
+.campaign-workflow-tabs button.active {
+  border-color: #12312f;
+  background: #12312f;
+  color: #ffffff;
+}
+
+.campaign-workflow-tabs span {
+  border-radius: 999px;
+  background: #eef2f0;
+  color: #12312f;
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+.campaign-workflow-tabs button.active span {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.campaign-view-publico > .message-template,
+.campaign-view-publico > .campaign-builder-stage:not(.campaign-audience-stage),
+.campaign-view-publico > .campaign-image-panel,
+.campaign-view-publico > .campaign-save-bar,
+.campaign-view-publico > .campaign-report,
+.campaign-view-publico > .campaign-inbox-embedded,
+.campaign-view-publico > .next-campaign-target,
+.campaign-view-publico > .campaign-history,
+.campaign-view-publico > .bulk-action-bar,
+.campaign-view-publico > .table,
+.campaign-view-publico > .pagination-bar,
+.campaign-view-mensagem > .campaign-audience-stage,
+.campaign-view-mensagem > .campaign-report,
+.campaign-view-mensagem > .campaign-inbox-embedded,
+.campaign-view-mensagem > .next-campaign-target,
+.campaign-view-mensagem > .campaign-history,
+.campaign-view-mensagem > .bulk-action-bar,
+.campaign-view-mensagem > .table,
+.campaign-view-mensagem > .pagination-bar,
+.campaign-view-execucao > .message-template,
+.campaign-view-execucao > .campaign-builder-stage,
+.campaign-view-execucao > .campaign-image-panel,
+.campaign-view-execucao > .campaign-save-bar,
+.campaign-view-execucao > .campaign-report,
+.campaign-view-execucao > .campaign-inbox-embedded,
+.campaign-view-execucao > .campaign-history,
+.campaign-view-resultado > .message-template,
+.campaign-view-resultado > .campaign-builder-stage,
+.campaign-view-resultado > .campaign-image-panel,
+.campaign-view-resultado > .campaign-save-bar,
+.campaign-view-resultado > .next-campaign-target,
+.campaign-view-resultado > .bulk-action-bar,
+.campaign-view-resultado > .table,
+.campaign-view-resultado > .pagination-bar {
+  display: none;
 }
 
 .message-template strong,
@@ -2860,9 +3204,12 @@ h3 {
   .cockpit-hero,
   .cockpit-kpis,
   .cockpit-list.two-col,
+  .next-action-card,
+  .next-action-content,
   .metric-grid,
   .agenda-board,
   .task-insight,
+  .task-execution-panel,
   .routine-card,
   .import-quality,
   .conflict-summary,
@@ -2971,6 +3318,16 @@ h3 {
 
   .quick-jump-bar {
     justify-content: flex-start;
+  }
+
+  .global-search-results {
+    left: 0;
+    right: auto;
+  }
+
+  .global-search-results button {
+    grid-template-columns: 1fr;
+    gap: 3px;
   }
 
   .nav {

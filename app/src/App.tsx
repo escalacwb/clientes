@@ -286,6 +286,7 @@ function App() {
   const [clientesPage, setClientesPage] = useState(1)
   const [selectedClientId, setSelectedClientId] = useState(isSupabaseConfigured ? '' : seedClientes[0].id)
   const [query, setQuery] = useState('')
+  const [isGlobalSearchFocused, setIsGlobalSearchFocused] = useState(false)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const [clienteFiltro, setClienteFiltro] = useState<CarteiraFiltro>(
     () => (localStorage.getItem('capital-crm:cliente-filter') as CarteiraFiltro | null) ?? 'todos',
@@ -982,6 +983,42 @@ function App() {
   const localOportunidades = useMemo(() => buildOportunidades(scopedClientes, scopedOrcamentos), [scopedClientes, scopedOrcamentos])
   const visibleOportunidades = isSupabaseConfigured ? oportunidades : localOportunidades
   const visibleOportunidadesTotal = isSupabaseConfigured ? oportunidadesTotal : localOportunidades.length
+  const quickSearchResults = useMemo(() => {
+    const term = query.trim().toLowerCase()
+    if (term.length < 2) return []
+    const clientResults = clientes
+      .filter((cliente) => `${cliente.nome} ${cliente.cidade} ${cliente.uf} ${cliente.whatsapp ?? ''} ${cliente.cpfCnpj ?? ''}`.toLowerCase().includes(term))
+      .slice(0, 5)
+      .map((cliente) => ({
+        id: `cliente-${cliente.id}`,
+        kind: 'cliente' as const,
+        title: cliente.nome,
+        detail: `${cliente.cidade}/${cliente.uf} - ${cliente.whatsapp ?? 'sem WhatsApp'}`,
+        clienteId: cliente.id,
+      }))
+    const quoteResults = scopedOrcamentos
+      .filter((orcamento) => `${orcamento.clienteNome ?? ''} ${orcamento.status} ${orcamento.id}`.toLowerCase().includes(term))
+      .slice(0, 4)
+      .map((orcamento) => ({
+        id: `orcamento-${orcamento.id}`,
+        kind: 'orcamento' as const,
+        title: orcamento.clienteNome ?? 'Cliente',
+        detail: `${money(orcamento.valorTotal)} - ${orcamento.status} - ${dateLabel(orcamento.validade)}`,
+        orcamentoId: orcamento.id,
+      }))
+    const catalogResults = [...catalogoLista, ...catalogo]
+      .filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index)
+      .filter((item) => `${item.codigo} ${item.descricao} ${item.marca ?? ''} ${item.grupo ?? ''}`.toLowerCase().includes(term))
+      .slice(0, 4)
+      .map((item) => ({
+        id: `catalogo-${item.id}`,
+        kind: 'catalogo' as const,
+        title: item.descricao,
+        detail: `${item.codigo} - ${money(item.preco)}`,
+        catalogTerm: item.codigo,
+      }))
+    return [...clientResults, ...quoteResults, ...catalogResults].slice(0, 10)
+  }, [catalogo, catalogoLista, clientes, query, scopedOrcamentos])
 
   async function ensureClientInMemory(clienteId: string) {
     if (!clienteId || clientes.some((cliente) => cliente.id === clienteId)) return
@@ -1162,6 +1199,8 @@ function App() {
               <input
                 ref={searchInputRef}
                 value={query}
+                onFocus={() => setIsGlobalSearchFocused(true)}
+                onBlur={() => window.setTimeout(() => setIsGlobalSearchFocused(false), 140)}
                 onChange={(event) => {
                   setQuery(event.target.value)
                   setClientesPage(1)
@@ -1184,6 +1223,40 @@ function App() {
                 </button>
               )}
               <span className="shortcut-hint">Ctrl K</span>
+              {isGlobalSearchFocused && query.trim().length >= 2 && (
+                <div className="global-search-results">
+                  {quickSearchResults.map((result) => (
+                    <button
+                      type="button"
+                      key={result.id}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={async () => {
+                        setIsGlobalSearchFocused(false)
+                        if (result.kind === 'cliente') {
+                          await ensureClientInMemory(result.clienteId)
+                          setSelectedClientId(result.clienteId)
+                          setView('cliente360')
+                          return
+                        }
+                        if (result.kind === 'orcamento') {
+                          setSelectedOrcamentoId(result.orcamentoId)
+                          setOrcamentosFilter('todos')
+                          setView('orcamentos')
+                          return
+                        }
+                        setCatalogoQuery(result.catalogTerm)
+                        setCatalogoPage(1)
+                        setView('catalogo')
+                      }}
+                    >
+                      <span>{result.kind === 'cliente' ? 'Cliente' : result.kind === 'orcamento' ? 'Orcamento' : 'Catalogo'}</span>
+                      <strong>{result.title}</strong>
+                      <small>{result.detail}</small>
+                    </button>
+                  ))}
+                  {quickSearchResults.length === 0 && <small>Nenhum atalho encontrado. Pressione Enter para buscar em Clientes.</small>}
+                </div>
+              )}
             </div>
             <div className="quick-jump-bar" aria-label="Atalhos operacionais">
               <button type="button" onClick={() => openQuickAction('tarefas-vencidas')}>
@@ -2277,6 +2350,67 @@ function Cockpit({
     }))
     .sort((a, b) => b.atrasadas - a.atrasadas || b.tarefas - a.tarefas)
   const slaAlerts = workload.filter((item) => item.atrasadas >= slaAlertLimit || item.criticas >= slaAlertLimit)
+  const nextActions = [
+    ...campanhas.map((envio) => ({
+      id: `campanha-${envio.id}`,
+      kind: 'campanha' as const,
+      priority: envio.status === 'respondeu' ? 120 : 108,
+      title: envio.clienteNome,
+      label: envio.status === 'respondeu' ? 'Responder campanha' : 'Tratar campanha',
+      subtitle: `${envio.campanhaNome ?? 'Campanha'} - ${campaignStatusLabel(envio.status)}`,
+      detail: envio.mensagemFinal,
+      clienteId: envio.clienteId,
+      envio,
+    })),
+    ...criticalTasks.map((tarefa) => {
+      const sla = taskSla(tarefa)
+      return {
+        id: `tarefa-${tarefa.id}`,
+        kind: 'tarefa' as const,
+        priority: tarefa.prioridade + (sla.tone === 'danger' ? 20 : sla.tone === 'warn' ? 10 : 0),
+        title: tarefa.titulo,
+        label: sla.tone === 'danger' ? 'Tarefa critica' : 'Tarefa',
+        subtitle: `${tarefa.clienteNome} - ${dateLabel(tarefa.dataVencimento)}`,
+        detail: tarefa.descricao ?? `Prioridade ${tarefa.prioridade}`,
+        clienteId: tarefa.clienteId,
+        tarefa,
+        sla,
+      }
+    }),
+    ...orcamentos.map((orcamento) => ({
+      id: `orcamento-${orcamento.id}`,
+      kind: 'orcamento' as const,
+      priority: 96 + Math.min(Math.max(daysSince(orcamento.validade), 0), 30),
+      title: orcamento.clienteNome ?? 'Cliente',
+      label: 'Retomar proposta',
+      subtitle: `${money(orcamento.valorTotal)} - venceu ${dateLabel(orcamento.validade)}`,
+      detail: orcamento.observacao ?? 'Proposta vencida ainda aberta.',
+      clienteId: orcamento.clienteId,
+      orcamento,
+    })),
+    ...rodobens.map((cliente) => ({
+      id: `externo-${cliente.id}`,
+      kind: 'lead' as const,
+      priority: 82,
+      title: cliente.nome,
+      label: 'Qualificar lista externa',
+      subtitle: `${cliente.cidade}/${cliente.uf} - ${cliente.whatsapp ?? 'sem WhatsApp'}`,
+      detail: origemDetalheLabel(cliente),
+      clienteId: cliente.id,
+      cliente,
+    })),
+    ...oportunidades.slice(0, 10).map((oportunidade) => ({
+      id: `oportunidade-${oportunidade.id}`,
+      kind: 'oportunidade' as const,
+      priority: oportunidade.prioridade,
+      title: oportunidade.clienteNome,
+      label: opportunityTypeLabel(oportunidade.tipo),
+      subtitle: `Prioridade ${oportunidade.prioridade}`,
+      detail: oportunidade.proximaAcao || oportunidade.motivo,
+      clienteId: oportunidade.clienteId,
+      oportunidade,
+    })),
+  ].sort((a, b) => b.priority - a.priority).slice(0, 14)
 
   async function complete(id: string) {
     setBusyTaskId(id)
@@ -2346,6 +2480,89 @@ function Cockpit({
       </section>
 
       {isLoading && <div className="empty-state compact">Carregando cockpit comercial...</div>}
+
+      <section className="panel wide cockpit-next-actions">
+        <div className="panel-header">
+          <div>
+            <h2>Proxima acao</h2>
+            <p>Fila unica para trabalhar sem alternar entre modulos.</p>
+          </div>
+          <div className="toolbar-actions">
+            <button className="button" type="button" onClick={() => onOpenModule('tarefas')}>Tarefas</button>
+            <button className="button" type="button" onClick={() => onOpenModule('orcamentos')}>Propostas</button>
+            <button className="button" type="button" onClick={() => onOpenModule('campanhas')}>Campanhas</button>
+          </div>
+        </div>
+        <div className="next-action-list">
+          {nextActions.map((item, index) => (
+            <article className={`next-action-card ${item.kind}`} key={item.id}>
+              <div className="next-action-rank">{index + 1}</div>
+              <div className="next-action-content">
+                <div>
+                  <span className="next-action-label">{item.label}</span>
+                  <strong>{item.title}</strong>
+                  <small>{item.subtitle}</small>
+                </div>
+                <p>{item.detail}</p>
+              </div>
+              <div className="next-action-actions">
+                <button className="button" type="button" onClick={() => onOpenClient(item.clienteId)}>Ficha</button>
+                {item.kind === 'campanha' && (
+                  <>
+                    {item.envio.telefone && (
+                      <a
+                        className="button"
+                        href={`https://wa.me/${item.envio.telefone}?text=${encodeURIComponent(item.envio.mensagemFinal)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        WhatsApp
+                      </a>
+                    )}
+                    <button
+                      className="button primary"
+                      type="button"
+                      onClick={() => onOpenBudget(item.clienteId, { kind: 'campanha', sourceId: item.envio.campanhaId, label: item.envio.campanhaNome ?? 'Campanha' })}
+                    >
+                      Orcar
+                    </button>
+                  </>
+                )}
+                {item.kind === 'tarefa' && (
+                  <>
+                    <button className="button" type="button" onClick={() => openReschedule(item.tarefa)}>Reagendar</button>
+                    <button className="button primary" type="button" disabled={busyTaskId === item.tarefa.id} onClick={() => complete(item.tarefa.id)}>
+                      {busyTaskId === item.tarefa.id ? 'Concluindo...' : 'Concluir'}
+                    </button>
+                  </>
+                )}
+                {item.kind === 'orcamento' && (
+                  <button
+                    className="button primary"
+                    type="button"
+                    onClick={() => onOpenBudget(item.clienteId, { kind: 'cliente', sourceId: item.orcamento.id, label: 'Retomada de proposta vencida' })}
+                  >
+                    Revisar
+                  </button>
+                )}
+                {item.kind === 'lead' && (
+                  <button className="button primary" type="button" onClick={() => onOpenClient(item.clienteId)}>Qualificar</button>
+                )}
+                {item.kind === 'oportunidade' && (
+                  <button
+                    className="button primary"
+                    type="button"
+                    onClick={() => onOpenBudget(item.clienteId, { kind: 'cliente', sourceId: item.oportunidade.id, label: item.oportunidade.proximaAcao || 'Oportunidade' })}
+                  >
+                    Orcar
+                  </button>
+                )}
+              </div>
+            </article>
+          ))}
+          {nextActions.length === 0 && <div className="empty-state compact">Nenhuma acao urgente agora.</div>}
+        </div>
+      </section>
 
       <section className="panel cockpit-section">
         <div className="panel-header">
@@ -3898,6 +4115,8 @@ function Tarefas({
   const [createdSuggestions, setCreatedSuggestions] = useState<string[]>([])
   const [reschedulingId, setReschedulingId] = useState('')
   const [rescheduleDrafts, setRescheduleDrafts] = useState<Record<string, { data: string; motivo: string }>>({})
+  const [executionMode, setExecutionMode] = useState(false)
+  const [executionIndex, setExecutionIndex] = useState(0)
   const [form, setForm] = useState({
     clienteId: clientes[0]?.id ?? '',
     vendedorId: '',
@@ -3974,6 +4193,10 @@ function Tarefas({
     tarefas: bucket.tarefas.sort((a, b) => b.prioridade - a.prioridade || a.dataVencimento.localeCompare(b.dataVencimento)),
   }))
   const filtered = tarefas
+  const executionQueue = filtered
+    .filter((tarefa) => tarefa.status === 'aberta')
+    .sort((a, b) => b.prioridade - a.prioridade || daysSince(b.dataVencimento) - daysSince(a.dataVencimento))
+  const activeExecutionTask = executionQueue[Math.min(executionIndex, Math.max(executionQueue.length - 1, 0))]
 
   async function saveTaskReschedule(tarefa: Tarefa) {
     const draft = rescheduleDrafts[tarefa.id]
@@ -4037,6 +4260,12 @@ function Tarefas({
           </div>
           <button className="button primary" type="button" onClick={() => setShowCreate((current) => !current)}>
             Nova tarefa
+          </button>
+          <button className={executionMode ? 'button primary' : 'button'} type="button" onClick={() => {
+            setExecutionMode((current) => !current)
+            setExecutionIndex(0)
+          }}>
+            {executionMode ? 'Fechar execucao' : 'Iniciar fila'}
           </button>
         </div>
       </div>
@@ -4116,6 +4345,64 @@ function Tarefas({
         </form>
       )}
       {error && <div className="alert">{error}</div>}
+      {executionMode && (
+        <section className="task-execution-panel">
+          {activeExecutionTask ? (
+            <>
+              <div className="task-execution-main">
+                <span className={`sla-pill ${taskSla(activeExecutionTask).tone}`}>{taskSla(activeExecutionTask).label}</span>
+                <h2>{activeExecutionTask.titulo}</h2>
+                <p>{activeExecutionTask.descricao ?? activeExecutionTask.origem}</p>
+                <div className="info-grid">
+                  <Info label="Cliente" value={activeExecutionTask.clienteNome} />
+                  <Info label="Vendedor" value={activeExecutionTask.vendedorNome ?? 'Sem vendedor'} />
+                  <Info label="Vencimento" value={dateLabel(activeExecutionTask.dataVencimento)} />
+                  <Info label="Prioridade" value={activeExecutionTask.prioridade.toString()} />
+                </div>
+              </div>
+              <div className="task-execution-actions">
+                <span>{Math.min(executionIndex + 1, executionQueue.length)} de {executionQueue.length}</span>
+                <button className="button" type="button" onClick={() => onOpenClient(activeExecutionTask.clienteId)}>Ficha</button>
+                <button
+                  className="button"
+                  type="button"
+                  onClick={() => onOpenBudgetEditor(activeExecutionTask.clienteId, {
+                    kind: 'tarefa',
+                    sourceId: activeExecutionTask.id,
+                    label: activeExecutionTask.titulo,
+                  })}
+                >
+                  Orcamento
+                </button>
+                <button
+                  className="button"
+                  type="button"
+                  disabled={executionIndex <= 0}
+                  onClick={() => setExecutionIndex((current) => Math.max(0, current - 1))}
+                >
+                  Anterior
+                </button>
+                <button
+                  className="button"
+                  type="button"
+                  disabled={executionIndex >= executionQueue.length - 1}
+                  onClick={() => setExecutionIndex((current) => Math.min(executionQueue.length - 1, current + 1))}
+                >
+                  Proxima
+                </button>
+                <button className="button primary" type="button" onClick={() => {
+                  onComplete(activeExecutionTask.id)
+                  setExecutionIndex((current) => Math.min(current, Math.max(executionQueue.length - 2, 0)))
+                }}>
+                  Concluir e avancar
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="empty-state compact">Nenhuma tarefa aberta nesta fila.</div>
+          )}
+        </section>
+      )}
       <div className="routine-queue">
         <div className="routine-queue-header">
           <div>
@@ -5036,14 +5323,14 @@ function OrcamentoEditor({
   const [catalogSuggestions, setCatalogSuggestions] = useState<CatalogoSugestao[]>([])
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
 
-  const filteredCatalog = catalogo
+  const catalogQuickResults = catalogo
     .filter((item) => {
       const term = catalogSearch.trim().toLowerCase()
       if (!item.ativo) return false
-      if (!term) return true
+      if (!term) return false
       return `${item.codigo} ${item.descricao} ${item.tipo} ${item.grupo ?? ''} ${item.marca ?? ''}`.toLowerCase().includes(term)
     })
-    .slice(0, 120)
+    .slice(0, 12)
   const validItems = items
     .filter((item) => item.descricao.trim() && item.quantidade > 0 && item.valorUnitario > 0)
     .map((item) => ({ ...item, valorTotal: quoteItemTotal(item) }))
@@ -5101,24 +5388,6 @@ function OrcamentoEditor({
         descontoPercentual: 0,
       },
     ])
-  }
-
-  function applyCatalogItem(index: number, catalogoItemId: string) {
-    const selected = catalogo.find((item) => item.id === catalogoItemId)
-    if (!selected) {
-      updateItem(index, { catalogoItemId: undefined, codigo: undefined })
-      setCatalogSuggestions([])
-      return
-    }
-    updateItem(index, {
-      catalogoItemId: selected.id,
-      codigo: selected.codigo,
-      tipo: selected.tipo,
-      descricao: selected.descricao,
-      valorUnitario: selected.preco,
-      descontoPercentual: 0,
-    })
-    void loadCatalogSuggestions(selected.id)
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -5226,12 +5495,29 @@ function OrcamentoEditor({
             )}
           </div>
           <label className="quote-search">
-            Buscar catalogo
+            Adicionar produto ou servico
             <input value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Codigo, medida, produto, servico ou marca" />
           </label>
+          <div className="quote-catalog-picker">
+            {catalogSearch.trim() && catalogQuickResults.length === 0 && <small>Nenhum item encontrado no catalogo.</small>}
+            {!catalogSearch.trim() && <small>Digite para localizar no catalogo e adicionar direto na proposta.</small>}
+            {catalogQuickResults.map((catalogItem) => (
+              <button className="catalog-pick-item" type="button" key={catalogItem.id} onClick={() => {
+                addCatalogItem(catalogItem)
+                setCatalogSearch('')
+                void loadCatalogSuggestions(catalogItem.id)
+              }}>
+                <span>
+                  <strong>{catalogItem.descricao}</strong>
+                  <small>{catalogItem.codigo} - {catalogItem.tipo} {catalogItem.marca ? `- ${catalogItem.marca}` : ''}</small>
+                </span>
+                <b>{money(catalogItem.preco)}</b>
+              </button>
+            ))}
+          </div>
           <div className="quote-items">
             <div className="quote-item-head">
-              <span>Catalogo</span>
+              <span>Origem</span>
               <span>Descricao</span>
               <span>Qtd.</span>
               <span>Unitario</span>
@@ -5241,14 +5527,10 @@ function OrcamentoEditor({
             </div>
             {items.map((item, index) => (
               <div className="quote-item-row" key={index}>
-                <select value={item.catalogoItemId ?? ''} onChange={(event) => applyCatalogItem(index, event.target.value)}>
-                  <option value="">Selecionar</option>
-                  {filteredCatalog.map((catalogItem) => (
-                    <option key={catalogItem.id} value={catalogItem.id}>
-                      {catalogItem.tipo} | {catalogItem.codigo} | {catalogItem.descricao} | {money(catalogItem.preco)}
-                    </option>
-                  ))}
-                </select>
+                <span className="quote-item-source">
+                  <strong>{item.codigo ?? 'Manual'}</strong>
+                  <small>{item.catalogoItemId ? 'Catalogo' : item.tipo}</small>
+                </span>
                 <input value={item.descricao} onChange={(event) => updateItem(index, { descricao: event.target.value })} placeholder="Descricao" />
                 <input type="number" min="0" step="0.01" value={item.quantidade} onChange={(event) => updateItem(index, { quantidade: Number(event.target.value) })} />
                 <input type="number" min="0" step="0.01" value={item.valorUnitario} onChange={(event) => updateItem(index, { valorUnitario: Number(event.target.value) })} />
@@ -7025,6 +7307,7 @@ function Campanhas({
   const [statuses, setStatuses] = useState<Record<string, CampanhaEnvioStatus>>({})
   const [elegibilidade, setElegibilidade] = useState<Record<string, CampanhaElegibilidade>>({})
   const [statusFilter, setStatusFilter] = useState<CampanhaEnvioStatus | 'todos'>('todos')
+  const [campaignTab, setCampaignTab] = useState<'publico' | 'mensagem' | 'execucao' | 'resultado'>('publico')
   const [campaignError, setCampaignError] = useState('')
   const [selectedCampaignClientIds, setSelectedCampaignClientIds] = useState<string[]>([])
   const [isBulkCampaignUpdating, setIsBulkCampaignUpdating] = useState(false)
@@ -7416,7 +7699,7 @@ function Campanhas({
   }
 
   return (
-    <section className="panel wide">
+    <section className={`panel wide campaign-workspace campaign-view-${campaignTab}`}>
       <div className="panel-header">
         <div>
           <h2>Campanhas</h2>
@@ -7442,6 +7725,20 @@ function Campanhas({
           </label>
           <Send size={18} />
         </div>
+      </div>
+      <div className="campaign-workflow-tabs">
+        <button className={campaignTab === 'publico' ? 'active' : ''} type="button" onClick={() => setCampaignTab('publico')}>
+          Publico <span>{total}</span>
+        </button>
+        <button className={campaignTab === 'mensagem' ? 'active' : ''} type="button" onClick={() => setCampaignTab('mensagem')}>
+          Mensagem
+        </button>
+        <button className={campaignTab === 'execucao' ? 'active' : ''} type="button" onClick={() => setCampaignTab('execucao')}>
+          Execucao <span>{filteredClientes.length}</span>
+        </button>
+        <button className={campaignTab === 'resultado' ? 'active' : ''} type="button" onClick={() => setCampaignTab('resultado')}>
+          Resultado
+        </button>
       </div>
       <div className="message-template">
         <strong>{segmento.nome}</strong>
