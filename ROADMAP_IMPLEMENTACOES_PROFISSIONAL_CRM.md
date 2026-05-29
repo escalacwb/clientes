@@ -1078,6 +1078,22 @@ Validacao:
 Proximo passo tecnico:
 - Usar as sugestoes complementares diretamente no editor de orcamento e nas campanhas por produto.
 
+### 2026-05-28 - Sugestoes de catalogo no orcamento
+
+Status: concluido.
+
+Entregue:
+- Editor de orcamento passou a filtrar apenas itens ativos do catalogo.
+- Ao selecionar um item de catalogo, o editor consulta `catalogo_sugestoes_complementares`.
+- Sugestoes complementares aparecem dentro da proposta e podem ser adicionadas como novo item em um clique.
+- Essa logica usa historico real de vendas/servicos para sugerir cross-sell, como alinhamento e balanceamento para pneus.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Levar a mesma inteligencia para criacao de campanhas por produto e para repeticao de compra na Ficha 360.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

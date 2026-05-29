@@ -252,6 +252,7 @@ Entregas:
 - Validade e condicoes por prazo.
 - Versoes.
 - PDF mais controlado que print do navegador.
+- Sugestoes complementares do catalogo dentro do editor de proposta.
 
 Pronto quando:
 - A proposta pode ser enviada ao cliente sem retrabalho manual.

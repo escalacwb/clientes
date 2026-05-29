@@ -3393,10 +3393,13 @@ function OrcamentoEditor({
   const [feedback, setFeedback] = useState('')
   const [error, setError] = useState('')
   const [copyFeedback, setCopyFeedback] = useState('')
+  const [catalogSuggestions, setCatalogSuggestions] = useState<CatalogoSugestao[]>([])
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
 
   const filteredCatalog = catalogo
     .filter((item) => {
       const term = catalogSearch.trim().toLowerCase()
+      if (!item.ativo) return false
       if (!term) return true
       return `${item.codigo} ${item.descricao} ${item.tipo} ${item.grupo ?? ''} ${item.marca ?? ''}`.toLowerCase().includes(term)
     })
@@ -3418,10 +3421,41 @@ function OrcamentoEditor({
     setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item))
   }
 
+  async function loadCatalogSuggestions(catalogoItemId: string) {
+    if (!catalogoItemId) {
+      setCatalogSuggestions([])
+      return
+    }
+    setIsLoadingSuggestions(true)
+    try {
+      setCatalogSuggestions(await listCatalogoSugestoes(catalogoItemId))
+    } catch {
+      setCatalogSuggestions([])
+    } finally {
+      setIsLoadingSuggestions(false)
+    }
+  }
+
+  function addCatalogItem(catalogoItem: CatalogoItem) {
+    setItems((current) => [
+      ...current,
+      {
+        catalogoItemId: catalogoItem.id,
+        codigo: catalogoItem.codigo,
+        tipo: catalogoItem.tipo,
+        descricao: catalogoItem.descricao,
+        quantidade: 1,
+        valorUnitario: catalogoItem.preco,
+        descontoPercentual: 0,
+      },
+    ])
+  }
+
   function applyCatalogItem(index: number, catalogoItemId: string) {
     const selected = catalogo.find((item) => item.id === catalogoItemId)
     if (!selected) {
       updateItem(index, { catalogoItemId: undefined, codigo: undefined })
+      setCatalogSuggestions([])
       return
     }
     updateItem(index, {
@@ -3432,6 +3466,7 @@ function OrcamentoEditor({
       valorUnitario: selected.preco,
       descontoPercentual: 0,
     })
+    void loadCatalogSuggestions(selected.id)
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -3567,6 +3602,28 @@ function OrcamentoEditor({
                 <strong>{money(quoteItemTotal(item))}</strong>
               </div>
             ))}
+          </div>
+          <div className="quote-suggestions">
+            <strong>Complementares sugeridos</strong>
+            {isLoadingSuggestions && <small>Buscando no historico de vendas...</small>}
+            {!isLoadingSuggestions && catalogSuggestions.length === 0 && <small>Selecione um item do catalogo para ver cross-sell baseado no historico.</small>}
+            <div>
+              {catalogSuggestions.map((suggestion) => {
+                const catalogItem = catalogo.find((item) => item.id === suggestion.catalogoItemId)
+                return (
+                  <button
+                    className="button"
+                    type="button"
+                    key={suggestion.catalogoItemId}
+                    disabled={!catalogItem}
+                    onClick={() => catalogItem && addCatalogItem(catalogItem)}
+                  >
+                    {suggestion.descricao}
+                    <small>{suggestion.clientes} clientes</small>
+                  </button>
+                )
+              })}
+            </div>
           </div>
           <div className="quote-actions">
             <button className="button" type="button" onClick={() => setItems((current) => [...current, { descricao: '', tipo: 'produto', quantidade: 1, valorUnitario: 0, descontoPercentual: 0 }])}>
