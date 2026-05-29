@@ -971,6 +971,23 @@ Validacao:
 Proximo passo tecnico:
 - Criar painel de qualidade de importacao com alertas de arquivos obrigatorios, conflitos e mudancas de preco.
 
+### 2026-05-28 - Painel de saude da base
+
+Status: concluido.
+
+Entregue:
+- Tela de importacoes ganhou painel `Saude da base`.
+- Resumo mostra ultima importacao, arquivos obrigatorios reconhecidos, conflitos pendentes e clientes sem vendedor.
+- Detalhes mostram clientes sem WhatsApp, origem desconhecida e status da ultima importacao.
+- Dados sao calculados diretamente no Supabase, sem depender de clientes carregados na tela.
+
+Validacao:
+- Build passou com `npm run build`.
+- Consulta direta no Supabase validou: ultima importacao processada, 1077 clientes sem WhatsApp, 20921 sem vendedor, 0 origem desconhecida e 0 conflitos pendentes.
+
+Proximo passo tecnico:
+- Evoluir para historico de qualidade por importacao: linhas novas/ignoradas/atualizadas e mudancas de preco por arquivo.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

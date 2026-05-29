@@ -1446,6 +1446,10 @@ h3 {
   gap: 10px;
 }
 
+.quality-list {
+  margin-top: 12px;
+}
+
 .status-row {
   justify-content: space-between;
   gap: 12px;

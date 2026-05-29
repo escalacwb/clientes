@@ -85,8 +85,9 @@ import { listClienteServicosItens, listClienteVeiculos, listClienteVendasItens }
 import { createInteracao } from './repositories/interacoesRepository'
 import { listInteracoes } from './repositories/interacoesRepository'
 import { createImportacaoPreview } from './repositories/importacoesRepository'
+import { getImportacaoQualidadeResumo } from './repositories/importacoesRepository'
 import { importReferenceFiles } from './repositories/importacoesRepository'
-import { listImportacaoArquivos, type ImportacaoArquivoResumo } from './repositories/importacoesRepository'
+import { listImportacaoArquivos, type ImportacaoArquivoResumo, type ImportacaoQualidadeResumo } from './repositories/importacoesRepository'
 import { listImportacoes } from './repositories/importacoesRepository'
 import { createMesclagem, listMesclagens, listPossiveisDuplicados } from './repositories/mesclagensRepository'
 import { createOrcamento } from './repositories/orcamentosRepository'
@@ -4122,6 +4123,7 @@ function Importacoes({
   onAddImportacao: (importacao: Importacao) => void
 }) {
   const [arquivosResumo, setArquivosResumo] = useState<ImportacaoArquivoResumo[]>([])
+  const [qualidadeResumo, setQualidadeResumo] = useState<ImportacaoQualidadeResumo | undefined>()
   const [previews, setPreviews] = useState<XmlImportPreview[]>([])
   const [workbookPreviews, setWorkbookPreviews] = useState<WorkbookImportPreview[]>([])
   const [referencePreview, setReferencePreview] = useState<ReferenceImportPreview | null>(null)
@@ -4142,6 +4144,7 @@ function Importacoes({
 
   useEffect(() => {
     listImportacaoArquivos().then(setArquivosResumo).catch(() => setArquivosResumo([]))
+    getImportacaoQualidadeResumo().then(setQualidadeResumo).catch(() => setQualidadeResumo(undefined))
   }, [importacoes.length])
 
   async function handleFiles(files: FileList | null) {
@@ -4261,6 +4264,7 @@ function Importacoes({
       const created = updated.find((item) => item.id === result.importacaoId)
       if (created) onAddImportacao(created)
       setArquivosResumo(await listImportacaoArquivos())
+      setQualidadeResumo(await getImportacaoQualidadeResumo())
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Nao foi possivel concluir a importacao diaria.')
     } finally {
@@ -4282,6 +4286,36 @@ function Importacoes({
           {['Selecionar arquivos', 'Extrair itens', 'Deduplicar', 'Previa', 'Confirmar', 'Auditar'].map((step) => (
             <div key={step}>{step}</div>
           ))}
+        </div>
+      </section>
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Saude da base</h2>
+            <p>Alertas operacionais calculados direto no Supabase.</p>
+          </div>
+          <ShieldCheck size={18} />
+        </div>
+        <div className="metrics-grid">
+          <Metric
+            icon={FileUp}
+            label="Ultima importacao"
+            value={dateLabel(qualidadeResumo?.ultimaImportacaoEm)}
+            tone={qualidadeResumo?.ultimaImportacaoStatus === 'erro' ? 'red' : 'green'}
+          />
+          <Metric
+            icon={CheckCircle2}
+            label="Arquivos obrigatorios"
+            value={`${qualidadeResumo?.arquivosObrigatoriosOk ?? 0}/${qualidadeResumo?.arquivosObrigatoriosTotal ?? 4}`}
+            tone={(qualidadeResumo?.arquivosObrigatoriosOk ?? 0) >= (qualidadeResumo?.arquivosObrigatoriosTotal ?? 4) ? 'green' : 'amber'}
+          />
+          <Metric icon={AlertTriangle} label="Conflitos pendentes" value={(qualidadeResumo?.conflitosPendentes ?? 0).toString()} tone="amber" />
+          <Metric icon={UsersRound} label="Sem vendedor" value={(qualidadeResumo?.clientesSemVendedor ?? 0).toString()} tone="amber" />
+        </div>
+        <div className="status-list quality-list">
+          <div className="status-row"><span>Clientes sem WhatsApp</span><strong>{qualidadeResumo?.clientesSemWhatsapp ?? 0}</strong></div>
+          <div className="status-row"><span>Origem desconhecida</span><strong>{qualidadeResumo?.clientesOrigemDesconhecida ?? 0}</strong></div>
+          <div className="status-row"><span>Status da ultima importacao</span><strong>{qualidadeResumo?.ultimaImportacaoStatus ?? 'Sem registro'}</strong></div>
         </div>
       </section>
       <section className="panel wide">

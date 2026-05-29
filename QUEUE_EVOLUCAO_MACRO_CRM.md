@@ -277,17 +277,21 @@ Pronto quando:
 
 ### Q13 - Dashboard de importacao e qualidade de dados
 
-Status: Pendente.
+Status: Parcial.
 
 Objetivo:
 Controlar saude da base e importacoes.
 
-Entregas:
+Ja entregue:
 - Ultima importacao por tipo.
-- Linhas novas/atualizadas/ignoradas.
 - Conflitos pendentes.
 - Clientes sem WhatsApp, sem vendedor, sem origem, possiveis duplicados.
 - Alertas de arquivos obrigatorios ausentes.
+
+Proximas entregas:
+- Linhas novas/atualizadas/ignoradas por arquivo.
+- Possiveis duplicados no painel de saude.
+- Tendencia de mudancas de preco por importacao.
 
 Pronto quando:
 - Qualquer problema de arquivo/base fica visivel sem abrir SQL.

@@ -53,6 +53,17 @@ export type ImportacaoArquivoResumo = {
   processadoEm?: string
 }
 
+export type ImportacaoQualidadeResumo = {
+  ultimaImportacaoEm?: string
+  ultimaImportacaoStatus?: Importacao['status']
+  clientesSemWhatsapp: number
+  clientesSemVendedor: number
+  clientesOrigemDesconhecida: number
+  conflitosPendentes: number
+  arquivosObrigatoriosOk: number
+  arquivosObrigatoriosTotal: number
+}
+
 export async function listImportacoes(limit = 100): Promise<Importacao[]> {
   const supabase = await getSupabase()
   if (!supabase) return mockImportacoes
@@ -140,6 +151,90 @@ export async function listImportacaoArquivos(): Promise<ImportacaoArquivoResumo[
     totalLinhas: row.total_linhas,
     processadoEm: row.processado_em ?? undefined,
   }))
+}
+
+export async function getImportacaoQualidadeResumo(): Promise<ImportacaoQualidadeResumo> {
+  const supabase = await getSupabase()
+  if (!supabase) {
+    return {
+      clientesSemWhatsapp: 0,
+      clientesSemVendedor: 0,
+      clientesOrigemDesconhecida: 0,
+      conflitosPendentes: 0,
+      arquivosObrigatoriosOk: 0,
+      arquivosObrigatoriosTotal: 4,
+    }
+  }
+
+  const [
+    ultimaImportacao,
+    semWhatsapp,
+    semVendedor,
+    origemDesconhecida,
+    conflitosPendentes,
+    arquivosObrigatorios,
+  ] = await Promise.all([
+    supabase
+      .from('importacoes')
+      .select('data_importacao,status')
+      .order('data_importacao', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('clientes')
+      .select('id', { count: 'exact', head: true })
+      .is('excluido_em', null)
+      .or('whatsapp_principal.is.null,whatsapp_principal.eq.'),
+    supabase
+      .from('clientes')
+      .select('id', { count: 'exact', head: true })
+      .is('excluido_em', null)
+      .is('vendedor_id', null),
+    supabase
+      .from('clientes')
+      .select('id', { count: 'exact', head: true })
+      .is('excluido_em', null)
+      .eq('origem_base', 'desconhecida'),
+    supabase
+      .from('importacao_conflitos')
+      .select('id', { count: 'exact', head: true })
+      .eq('resolvido', false),
+    supabase
+      .from('importacao_arquivos')
+      .select('tipo,obrigatorio,processado_em')
+      .eq('obrigatorio', true)
+      .order('processado_em', { ascending: false })
+      .limit(20),
+  ])
+
+  const errors = [
+    ultimaImportacao.error,
+    semWhatsapp.error,
+    semVendedor.error,
+    origemDesconhecida.error,
+    conflitosPendentes.error,
+    arquivosObrigatorios.error,
+  ].filter(Boolean)
+  if (errors.length > 0) throw errors[0]
+
+  const requiredTypes = ['carrosatendidos', 'listaclientessistema', 'vendasprodutos', 'vendasservicos']
+  const latestRequired = new Set(
+    ((arquivosObrigatorios.data ?? []) as Array<{ tipo: string; processado_em: string | null }>)
+      .filter((arquivo) => requiredTypes.includes(arquivo.tipo) && arquivo.processado_em)
+      .map((arquivo) => arquivo.tipo),
+  )
+  const latest = ultimaImportacao.data as { data_importacao?: string; status?: string } | null
+
+  return {
+    ultimaImportacaoEm: latest?.data_importacao,
+    ultimaImportacaoStatus: latest?.status === 'com_conflitos' ? 'com-conflitos' : latest?.status as Importacao['status'] | undefined,
+    clientesSemWhatsapp: semWhatsapp.count ?? 0,
+    clientesSemVendedor: semVendedor.count ?? 0,
+    clientesOrigemDesconhecida: origemDesconhecida.count ?? 0,
+    conflitosPendentes: conflitosPendentes.count ?? 0,
+    arquivosObrigatoriosOk: latestRequired.size,
+    arquivosObrigatoriosTotal: requiredTypes.length,
+  }
 }
 
 function mapImportacao(row: ImportacaoRow): Importacao {
