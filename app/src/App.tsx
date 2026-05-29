@@ -6004,25 +6004,41 @@ function quoteConditionLabel(label: string) {
 }
 
 function quotePdfFileName(clienteNome: string, date?: string) {
-  const parsedDate = date ? new Date(date) : new Date()
-  const datePart = Number.isNaN(parsedDate.getTime())
-    ? new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')
-    : parsedDate.toLocaleDateString('pt-BR').replace(/\//g, '-')
+  const datePart = quotePdfDatePart(date)
   const safeCliente = clienteNome
     .replace(/[\\/:*?"<>|]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-  return `Orçamento - ${safeCliente || 'Cliente'} - ${datePart}`
+  return `Orcamento - ${safeCliente || 'Cliente'} - ${datePart}`
+}
+
+function quotePdfDatePart(date?: string) {
+  if (date && /^\d{4}-\d{2}-\d{2}/.test(date)) {
+    const [year, month, day] = date.slice(0, 10).split('-')
+    return `${day}-${month}-${year}`
+  }
+  return new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')
 }
 
 function printQuotePdf(clienteNome: string, date?: string) {
   const previousTitle = document.title
-  document.title = quotePdfFileName(clienteNome, date)
+  const printTitle = quotePdfFileName(clienteNome, date)
+  document.title = printTitle
+  document.querySelector('title')?.replaceChildren(document.createTextNode(printTitle))
+  let restored = false
   const restoreTitle = () => {
-    document.title = previousTitle
+    if (restored) return
+    restored = true
+    window.setTimeout(() => {
+      document.title = previousTitle
+      document.querySelector('title')?.replaceChildren(document.createTextNode(previousTitle))
+    }, 8000)
   }
   window.addEventListener('afterprint', restoreTitle, { once: true })
-  window.print()
+  window.setTimeout(() => {
+    window.print()
+    window.setTimeout(restoreTitle, 15000)
+  }, 150)
 }
 
 function groupQuoteItemsForMessage(itens: OrcamentoItemInput[]) {
