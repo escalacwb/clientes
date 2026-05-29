@@ -286,6 +286,7 @@ function App() {
   const [clientesPage, setClientesPage] = useState(1)
   const [selectedClientId, setSelectedClientId] = useState(isSupabaseConfigured ? '' : seedClientes[0].id)
   const [query, setQuery] = useState('')
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
   const [clienteFiltro, setClienteFiltro] = useState<CarteiraFiltro>(
     () => (localStorage.getItem('capital-crm:cliente-filter') as CarteiraFiltro | null) ?? 'todos',
   )
@@ -1006,6 +1007,56 @@ function App() {
     setView('orcamento-editor')
   }
 
+  function openQuickAction(action: 'tarefas-vencidas' | 'orcamentos-vencidos' | 'clientes-sem-cadastro' | 'campanhas' | 'orcamentos') {
+    if (action === 'tarefas-vencidas') {
+      setTarefasStatusFilter('vencidas')
+      setTarefasOriginFilter('todas')
+      setTarefasPage(1)
+      setView('tarefas')
+      return
+    }
+    if (action === 'orcamentos-vencidos') {
+      setOrcamentosFilter('vencidos')
+      setOrcamentosPage(1)
+      setView('orcamentos')
+      return
+    }
+    if (action === 'clientes-sem-cadastro') {
+      setRodobensStatusFilter('novo')
+      setRodobensPage(1)
+      setView('rodobens')
+      return
+    }
+    if (action === 'campanhas') {
+      setView('campanhas')
+      return
+    }
+    setOrcamentosFilter('todos')
+    setOrcamentosPage(1)
+    setView('orcamentos')
+  }
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null
+      const isTyping = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.tagName === 'SELECT'
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        searchInputRef.current?.focus()
+        searchInputRef.current?.select()
+        return
+      }
+      if (isTyping) return
+      if (event.altKey && event.key === '1') openQuickAction('tarefas-vencidas')
+      if (event.altKey && event.key === '2') openQuickAction('orcamentos-vencidos')
+      if (event.altKey && event.key === '3') openQuickAction('clientes-sem-cadastro')
+      if (event.altKey && event.key === '4') openQuickAction('campanhas')
+    }
+
+    window.addEventListener('keydown', handleShortcut)
+    return () => window.removeEventListener('keydown', handleShortcut)
+  }, [])
+
   if (isCheckingSession) {
     return (
       <div className="login-screen">
@@ -1105,24 +1156,56 @@ function App() {
               <h1>{titleFor(view)}</h1>
             </div>
           </div>
-          <div className="search">
-            <Search size={18} />
-            <input
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value)
-                setClientesPage(1)
-              }}
-              placeholder="Buscar cliente, cidade, vendedor, origem"
-            />
-            {query && (
-              <button className="icon-button" type="button" onClick={() => {
-                setQuery('')
-                setClientesPage(1)
-              }} title="Limpar busca">
-                x
+          <div className="topbar-actions">
+            <div className="search">
+              <Search size={18} />
+              <input
+                ref={searchInputRef}
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value)
+                  setClientesPage(1)
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && query.trim()) {
+                    setClienteFiltro('todos')
+                    setClientesPage(1)
+                    setView('clientes')
+                  }
+                }}
+                placeholder="Buscar cliente, cidade, vendedor, origem"
+              />
+              {query && (
+                <button className="icon-button" type="button" onClick={() => {
+                  setQuery('')
+                  setClientesPage(1)
+                }} title="Limpar busca">
+                  x
+                </button>
+              )}
+              <span className="shortcut-hint">Ctrl K</span>
+            </div>
+            <div className="quick-jump-bar" aria-label="Atalhos operacionais">
+              <button type="button" onClick={() => openQuickAction('tarefas-vencidas')}>
+                <span>{cockpitTarefasVencidas.length}</span>
+                Tarefas
               </button>
-            )}
+              <button type="button" onClick={() => openQuickAction('orcamentos-vencidos')}>
+                <span>{cockpitOrcamentos.length}</span>
+                Propostas
+              </button>
+              <button type="button" onClick={() => openQuickAction('clientes-sem-cadastro')}>
+                <span>{cockpitRodobens.length}</span>
+                Sem cadastro
+              </button>
+              <button type="button" onClick={() => openQuickAction('campanhas')}>
+                <span>{cockpitCampanhas.length}</span>
+                Campanhas
+              </button>
+              <button className="primary" type="button" onClick={() => openQuickAction('orcamentos')}>
+                Orcar
+              </button>
+            </div>
           </div>
         </header>
 

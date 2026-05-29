@@ -205,6 +205,13 @@
   width: 118px;
 }
 
+.topbar-actions {
+  width: min(620px, 100%);
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
 .eyebrow {
   margin: 0 0 4px;
   color: #64736f;
@@ -246,12 +253,72 @@ h3 {
   height: 42px;
 }
 
+.topbar-actions .search {
+  width: 100%;
+}
+
 .search input {
   min-width: 0;
   width: 100%;
   border: 0;
   outline: 0;
   font: inherit;
+}
+
+.shortcut-hint {
+  border: 1px solid #dfe4de;
+  border-radius: 6px;
+  color: #64736f;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+
+.quick-jump-bar {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.quick-jump-bar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  border: 1px solid #d7e5dc;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #33413d;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 9px;
+}
+
+.quick-jump-bar button:hover,
+.quick-jump-bar button.primary {
+  border-color: #12312f;
+  background: #12312f;
+  color: #ffffff;
+}
+
+.quick-jump-bar span {
+  min-width: 20px;
+  border-radius: 999px;
+  background: #edf4ef;
+  color: #12312f;
+  padding: 2px 6px;
+  text-align: center;
+}
+
+.quick-jump-bar button:hover span,
+.quick-jump-bar button.primary span {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
 }
 
 .compact-search {
@@ -2895,6 +2962,15 @@ h3 {
 
   .topbar {
     flex-direction: column;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    justify-items: stretch;
+  }
+
+  .quick-jump-bar {
+    justify-content: flex-start;
   }
 
   .nav {
