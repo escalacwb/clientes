@@ -80,6 +80,25 @@ export type CampanhaResumo = {
   roiPercent: number
 }
 
+export type CampanhaVendedorResumo = {
+  vendedorId?: string
+  vendedorNome: string
+  campanhas: number
+  total: number
+  pendentes: number
+  enviados: number
+  responderam: number
+  semResposta: number
+  viraramOrcamento: number
+  viraramVenda: number
+  perdidos: number
+  naoContatar: number
+  tarefasAbertas: number
+  receitaAtribuida: number
+  custoEstimado: number
+  roiPercent: number
+}
+
 export type CampanhaInboxItem = CampanhaEnvio & {
   clienteNome: string
   clienteCidade?: string
@@ -153,6 +172,25 @@ type CampanhaResumoRow = {
   receita_atribuida: number
   custo_estimado: number
   meta_receita: number
+  roi_percent: number
+}
+
+type CampanhaVendedorResumoRow = {
+  vendedor_id: string | null
+  vendedor_nome: string | null
+  campanhas: number
+  total: number
+  pendentes: number
+  enviados: number
+  responderam: number
+  sem_resposta: number
+  viraram_orcamento: number
+  viraram_venda: number
+  perdidos: number
+  nao_contatar: number
+  tarefas_abertas: number
+  receita_atribuida: number
+  custo_estimado: number
   roi_percent: number
 }
 
@@ -395,6 +433,19 @@ export async function listCampanhasResumo(): Promise<CampanhaResumo[]> {
 
   if (error) return listCampanhasResumoFallback()
   return (data ?? []).map((row) => mapCampanhaResumoView(row as CampanhaResumoRow))
+}
+
+export async function listCampanhasVendedorResumo(): Promise<CampanhaVendedorResumo[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('vw_campanhas_vendedor_resumo')
+    .select('*')
+    .order('receita_atribuida', { ascending: false })
+
+  if (error) return []
+  return (data ?? []).map((row) => mapCampanhaVendedorResumo(row as CampanhaVendedorResumoRow))
 }
 
 export async function listClienteCampanhaEnvios(clienteId: string, limit = 50): Promise<CampanhaEnvio[]> {
@@ -809,6 +860,27 @@ function mapCampanhaResumoView(row: CampanhaResumoRow): CampanhaResumo {
     receitaAtribuida: Number(row.receita_atribuida ?? 0),
     custoEstimado: Number(row.custo_estimado ?? 0),
     metaReceita: Number(row.meta_receita ?? 0),
+    roiPercent: Number(row.roi_percent ?? 0),
+  }
+}
+
+function mapCampanhaVendedorResumo(row: CampanhaVendedorResumoRow): CampanhaVendedorResumo {
+  return {
+    vendedorId: row.vendedor_id ?? undefined,
+    vendedorNome: row.vendedor_nome ?? 'Sem vendedor',
+    campanhas: Number(row.campanhas ?? 0),
+    total: Number(row.total ?? 0),
+    pendentes: Number(row.pendentes ?? 0),
+    enviados: Number(row.enviados ?? 0),
+    responderam: Number(row.responderam ?? 0),
+    semResposta: Number(row.sem_resposta ?? 0),
+    viraramOrcamento: Number(row.viraram_orcamento ?? 0),
+    viraramVenda: Number(row.viraram_venda ?? 0),
+    perdidos: Number(row.perdidos ?? 0),
+    naoContatar: Number(row.nao_contatar ?? 0),
+    tarefasAbertas: Number(row.tarefas_abertas ?? 0),
+    receitaAtribuida: Number(row.receita_atribuida ?? 0),
+    custoEstimado: Number(row.custo_estimado ?? 0),
     roiPercent: Number(row.roi_percent ?? 0),
   }
 }

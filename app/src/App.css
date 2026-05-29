@@ -845,6 +845,10 @@ h3 {
   grid-template-columns: minmax(140px, 1fr) 58px 58px 64px 70px;
 }
 
+.campaign-seller-report {
+  grid-template-columns: minmax(170px, 1fr) 90px 90px 70px 70px 78px 110px 80px;
+}
+
 .loss-report small {
   display: block;
   color: #66736f;

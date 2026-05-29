@@ -61,6 +61,7 @@ import {
   listCampanhaInbox,
   listCampanhasResumo,
   listCampanhasSalvas,
+  listCampanhasVendedorResumo,
   upsertCampanhaEnvio,
   type CampanhaElegibilidade,
   type CampanhaImagemPadrao,
@@ -69,6 +70,7 @@ import {
   type CampanhaResumo,
   type CampanhaSalva,
   type CampanhaSegmentoId,
+  type CampanhaVendedorResumo,
   attributeCampanhaRevenueByOrcamento,
 } from './repositories/campanhasRepository'
 import {
@@ -324,6 +326,7 @@ function App() {
   const [campanhaInboxStatusFilter, setCampanhaInboxStatusFilter] = useState<CampanhaEnvioStatus | 'todos'>('respondeu')
   const [campanhaInboxOwnerFilter, setCampanhaInboxOwnerFilter] = useState('')
   const [isLoadingCampanhaInbox, setIsLoadingCampanhaInbox] = useState(false)
+  const [campanhasVendedorResumo, setCampanhasVendedorResumo] = useState<CampanhaVendedorResumo[]>([])
   const [isLoadingData, setIsLoadingData] = useState(isSupabaseConfigured)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [isLoadingClientes, setIsLoadingClientes] = useState(isSupabaseConfigured)
@@ -604,6 +607,26 @@ function App() {
       isMounted = false
     }
   }, [campanhaInboxOwnerFilter, campanhaInboxStatusFilter, isCheckingSession, session, view])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadCampanhasVendedorResumo() {
+      if (isCheckingSession || !session || view !== 'relatorios') return
+      try {
+        const rows = await listCampanhasVendedorResumo()
+        if (isMounted) setCampanhasVendedorResumo(rows)
+      } catch {
+        if (isMounted) setCampanhasVendedorResumo([])
+      }
+    }
+
+    loadCampanhasVendedorResumo()
+
+    return () => {
+      isMounted = false
+    }
+  }, [isCheckingSession, session, view])
 
   useEffect(() => {
     let isMounted = true
@@ -1829,6 +1852,7 @@ function App() {
             usuarios={usuarios}
             tarefas={tarefas}
             oportunidades={oportunidades}
+            campanhasVendedorResumo={campanhasVendedorResumo}
             vendasItens={scopedVendasItens}
             servicosItens={scopedServicosItens}
           />
@@ -8479,6 +8503,7 @@ function Relatorios({
   usuarios,
   tarefas,
   oportunidades,
+  campanhasVendedorResumo,
   vendasItens,
   servicosItens,
 }: {
@@ -8498,6 +8523,7 @@ function Relatorios({
   usuarios: Vendedor[]
   tarefas: Tarefa[]
   oportunidades: Oportunidade[]
+  campanhasVendedorResumo: CampanhaVendedorResumo[]
   vendasItens: VendaItem[]
   servicosItens: ServicoItem[]
 }) {
@@ -8625,6 +8651,43 @@ function Relatorios({
             </div>
           ))}
           {forecastVendedor.length === 0 && <div className="empty-state">Sem dados de forecast ainda.</div>}
+        </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Campanhas por vendedor</h2>
+            <p>Execucao e resultado das campanhas por responsavel comercial.</p>
+          </div>
+          <Send size={18} />
+        </div>
+        <div className="table">
+          <div className="table-head campaign-seller-report">
+            <span>Vendedor</span>
+            <span>Envios</span>
+            <span>Respostas</span>
+            <span>Orc.</span>
+            <span>Ganhos</span>
+            <span>Tarefas</span>
+            <span>Receita</span>
+            <span>ROI</span>
+          </div>
+          {campanhasVendedorResumo.map((row) => (
+            <div className="table-row campaign-seller-report" key={row.vendedorId ?? row.vendedorNome}>
+              <span><strong>{row.vendedorNome}</strong><small>{row.campanhas} campanhas</small></span>
+              <span>{row.enviados}<small>{row.total} total</small></span>
+              <span>{row.responderam}<small>{conversionRate(row.responderam, row.total)}%</small></span>
+              <span>{row.viraramOrcamento}</span>
+              <span>{row.viraramVenda}</span>
+              <span className={row.tarefasAbertas > 0 ? 'score danger' : 'score'}>{row.tarefasAbertas}</span>
+              <span>{money(row.receitaAtribuida)}</span>
+              <span className={row.roiPercent > 0 ? 'status-pill ok' : row.custoEstimado > 0 ? 'status-pill warn' : 'status-pill'}>
+                {row.roiPercent}%
+              </span>
+            </div>
+          ))}
+          {campanhasVendedorResumo.length === 0 && <div className="empty-state">Sem resumo de campanhas por vendedor.</div>}
         </div>
       </section>
 

@@ -1547,6 +1547,23 @@ Validacao:
 Proximo passo tecnico:
 - Criar relatorio de campanha por vendedor com enviados, respostas, tarefas, orcamentos, ganhos, receita e ROI.
 
+### 2026-05-29 - Relatorio de campanha por vendedor
+
+Status: concluido - primeira entrega do M14.
+
+Entregue:
+- Criada view `vw_campanhas_vendedor_resumo`.
+- Relatorios ganhou painel `Campanhas por vendedor`.
+- O painel mostra campanhas, envios, respostas, orcamentos, ganhos, tarefas abertas, receita atribuida e ROI por responsavel.
+
+Validacao:
+- SQL aplicado no Supabase com `node scripts/run-sql-file.mjs supabase/queries/campanhas_vendedor_resumo.sql`.
+- Build passou com `npm run build`.
+- Playwright local validou Relatorios e a chamada da view sem erro.
+
+Proximo passo tecnico:
+- Avancar para CPQ profissional: regras de desconto por grupo/produto/servico, aprovacao formal e documento final.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

@@ -54,9 +54,10 @@ Entregue nesta rodada:
 - Campanhas agora salvam janela minima entre acionamentos, permitindo ajustar o bloqueio de contato recente por campanha.
 - Opt-out de WhatsApp passou a registrar motivo, data e usuario no cliente.
 - Criado `Inbox Campanhas` como fila dedicada de respostas/status para abrir ficha, criar tarefa, iniciar orcamento e marcar ganho/perda.
+- Criado relatorio de campanha por vendedor com enviados, respostas, orcamentos, ganhos, tarefas abertas, receita e ROI.
 
 Proximos pontos:
-- Relatorio de campanha por vendedor com enviados, respostas, tarefas, orcamentos, ganhos, receita e ROI.
+- Avancar CPQ: regras de desconto, aprovacao formal, bundles e documento final.
 
 ## Sprint C - Pipeline real e oportunidades persistidas
 

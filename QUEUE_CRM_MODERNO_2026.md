@@ -328,7 +328,7 @@ Pronto quando:
 
 ### M14 - Relatorio de campanha por vendedor
 
-Status: Pendente.
+Status: Parcial.
 
 Objetivo:
 Medir execucao e resultado de campanhas por responsavel.
@@ -338,6 +338,10 @@ Entregas:
 - Comparativo por segmento.
 - Filtro por periodo.
 - Exportacao CSV.
+
+Ja entregue:
+- Criada view `vw_campanhas_vendedor_resumo`.
+- Tela de Relatorios ganhou painel `Campanhas por vendedor` com enviados, respostas, orcamentos, ganhos, tarefas abertas, receita e ROI.
 
 Pronto quando:
 - Fica claro qual campanha e qual vendedor geram receita.
