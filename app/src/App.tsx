@@ -134,6 +134,7 @@ import { createMesclagem, listMesclagens, listPossiveisDuplicados } from './repo
 import { createOrcamento } from './repositories/orcamentosRepository'
 import { listOrcamentos } from './repositories/orcamentosRepository'
 import { listOrcamentosPage, type OrcamentoListFilter } from './repositories/orcamentosRepository'
+import { listOrcamentoAprovacoes } from './repositories/orcamentosRepository'
 import { listOrcamentoVersoes } from './repositories/orcamentosRepository'
 import { reviseOrcamento } from './repositories/orcamentosRepository'
 import { updateOrcamentoStatus } from './repositories/orcamentosRepository'
@@ -168,6 +169,7 @@ import type {
   InteracaoInput,
   LeadQualificacaoStatus,
   Orcamento,
+  OrcamentoAprovacao,
   OrcamentoCondicaoInput,
   OrcamentoInput,
   OrcamentoItemInput,
@@ -5638,6 +5640,8 @@ function OrcamentoEditor({
 }) {
   const [validade, setValidade] = useState(() => new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10))
   const [previsaoFechamento, setPrevisaoFechamento] = useState('')
+  const [prazoEntrega, setPrazoEntrega] = useState('')
+  const [prazoExecucao, setPrazoExecucao] = useState('')
   const [paymentAdjustments, setPaymentAdjustments] = useState<Record<string, number>>({
     'A vista': -3,
     '30 dias': 3,
@@ -5758,7 +5762,11 @@ function OrcamentoEditor({
     const needsApproval = approvalWarnings.length > 0
     const shouldSend = submitter?.value === 'send' && !needsApproval
     const originNote = `Origem: ${originContext.label}${originContext.sourceId ? ` (${originContext.sourceId})` : ''}.`
-    const finalObservation = [observacao.trim(), originNote].filter(Boolean).join('\n\n')
+    const operationalTerms = [
+      prazoEntrega.trim() ? `Prazo de entrega: ${prazoEntrega.trim()}.` : '',
+      prazoExecucao.trim() ? `Prazo de execucao: ${prazoExecucao.trim()}.` : '',
+    ].filter(Boolean).join('\n')
+    const finalObservation = [observacao.trim(), operationalTerms, originNote].filter(Boolean).join('\n\n')
     try {
       const created = await onCreate({
         clienteId: cliente.id,
@@ -5769,6 +5777,11 @@ function OrcamentoEditor({
         previsaoFechamento: previsaoFechamento || undefined,
         formaPagamento,
         aprovacaoMotivo: needsApproval ? approvalWarnings.join(' ') : undefined,
+        enviadoPor: shouldSend ? currentUser.id : undefined,
+        enviadoEm: shouldSend ? new Date().toISOString() : undefined,
+        proximoFollowupEm: shouldSend ? new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10) : previsaoFechamento || undefined,
+        prazoEntrega: prazoEntrega.trim() || undefined,
+        prazoExecucao: prazoExecucao.trim() || undefined,
         observacao: finalObservation,
         itens: validItems,
         condicoes: quoteConditionInputs(paymentScenarios),
@@ -5835,6 +5848,14 @@ function OrcamentoEditor({
             <label>
               Prev. fechamento
               <input type="date" value={previsaoFechamento} onChange={(event) => setPrevisaoFechamento(event.target.value)} />
+            </label>
+            <label>
+              Prazo entrega
+              <input value={prazoEntrega} onChange={(event) => setPrazoEntrega(event.target.value)} placeholder="Ex.: 2 dias apos confirmacao" />
+            </label>
+            <label>
+              Prazo execucao
+              <input value={prazoExecucao} onChange={(event) => setPrazoExecucao(event.target.value)} placeholder="Ex.: montagem sob agendamento" />
             </label>
           </div>
           <label className="quote-search">
@@ -9849,6 +9870,16 @@ function lossReasonLabel(reason: string) {
   return labels[reason] ?? reason
 }
 
+function approvalActionLabel(action: OrcamentoAprovacao['acao']) {
+  const labels: Record<OrcamentoAprovacao['acao'], string> = {
+    solicitada: 'Aprovacao solicitada',
+    aprovada: 'Aprovada',
+    rejeitada: 'Rejeitada',
+    enviada: 'Enviada',
+  }
+  return labels[action]
+}
+
 function Orcamentos({
   clientes,
   orcamentos,
@@ -10270,9 +10301,11 @@ function OrcamentoWorkspace({
   onRevise: (id: string, orcamento: OrcamentoInput) => Promise<Orcamento>
   onStatusChange: (status: Orcamento['status'], motivoPerda?: string) => Promise<void>
 }) {
-  const [activeTab, setActiveTab] = useState<'resumo' | 'itens' | 'mensagem' | 'versoes'>('resumo')
+  const [activeTab, setActiveTab] = useState<'resumo' | 'itens' | 'mensagem' | 'aprovacao' | 'versoes'>('resumo')
   const [versions, setVersions] = useState<OrcamentoVersao[]>([])
+  const [approvals, setApprovals] = useState<OrcamentoAprovacao[]>([])
   const [versionsLoading, setVersionsLoading] = useState(false)
+  const [approvalsLoading, setApprovalsLoading] = useState(false)
   const [revisionTarget, setRevisionTarget] = useState<Orcamento | null>(null)
   const [lossReason, setLossReason] = useState('')
   const [approvalRejectReason, setApprovalRejectReason] = useState('')
@@ -10292,24 +10325,66 @@ function OrcamentoWorkspace({
   useEffect(() => {
     let isMounted = true
 
-    async function loadVersions() {
-      if (activeTab !== 'versoes') return
-      setVersionsLoading(true)
-      try {
-        const data = await listOrcamentoVersoes(orcamento.id)
-        if (isMounted) setVersions(data)
-      } catch {
-        if (isMounted) setVersions([])
-      } finally {
-        if (isMounted) setVersionsLoading(false)
+    async function loadTabData() {
+      if (activeTab === 'versoes') {
+        setVersionsLoading(true)
+        try {
+          const data = await listOrcamentoVersoes(orcamento.id)
+          if (isMounted) setVersions(data)
+        } catch {
+          if (isMounted) setVersions([])
+        } finally {
+          if (isMounted) setVersionsLoading(false)
+        }
+      }
+      if (activeTab === 'aprovacao') {
+        setApprovalsLoading(true)
+        try {
+          const data = await listOrcamentoAprovacoes(orcamento.id)
+          if (isMounted) setApprovals(data)
+        } catch {
+          if (isMounted) setApprovals([])
+        } finally {
+          if (isMounted) setApprovalsLoading(false)
+        }
       }
     }
 
-    void loadVersions()
+    void loadTabData()
     return () => {
       isMounted = false
     }
   }, [activeTab, orcamento.id])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadApprovalsPreview() {
+      if (activeTab === 'aprovacao') return
+      try {
+        const data = await listOrcamentoAprovacoes(orcamento.id)
+        if (isMounted) setApprovals(data.slice(0, 3))
+      } catch {
+        if (isMounted) setApprovals([])
+      }
+    }
+
+    void loadApprovalsPreview()
+    return () => {
+      isMounted = false
+    }
+  }, [activeTab, orcamento.id])
+
+  async function refreshApprovals() {
+    setApprovalsLoading(true)
+    try {
+      setApprovals(await listOrcamentoAprovacoes(orcamento.id))
+    } catch {
+      setApprovals([])
+    } finally {
+      setApprovalsLoading(false)
+    }
+  }
 
   async function updateStatus(status: Orcamento['status'], motivo?: string) {
     setIsUpdatingStatus(true)
@@ -10318,6 +10393,7 @@ function OrcamentoWorkspace({
     try {
       await onStatusChange(status, motivo)
       setFeedback(`Status atualizado para ${status}.`)
+      await refreshApprovals()
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o status.')
     } finally {
@@ -10367,7 +10443,8 @@ function OrcamentoWorkspace({
           <Info label="Total" value={money(orcamento.valorTotal)} />
           <Info label="Validade" value={dateLabel(orcamento.validade)} />
           <Info label="Previsao" value={dateLabel(orcamento.previsaoFechamento)} />
-          <Info label="Condicao" value={orcamento.formaPagamento ?? 'Nao informada'} />
+          <Info label="Follow-up" value={dateLabel(orcamento.proximoFollowupEm)} />
+          <Info label="Enviado em" value={dateLabel(orcamento.enviadoEm)} />
         </div>
         <div className="quote-workspace-actions">
           {orcamento.status === 'aguardando_aprovacao' && canApprove && (
@@ -10413,6 +10490,7 @@ function OrcamentoWorkspace({
             ['resumo', 'Resumo'],
             ['itens', 'Itens'],
             ['mensagem', 'Mensagem'],
+            ['aprovacao', 'Aprovacao'],
             ['versoes', 'Versoes'],
           ].map(([tab, label]) => (
             <button key={tab} className={activeTab === tab ? 'active' : ''} type="button" onClick={() => setActiveTab(tab as typeof activeTab)}>
@@ -10439,6 +10517,20 @@ function OrcamentoWorkspace({
               <p>{orcamento.observacao ?? 'Sem observacoes comerciais registradas.'}</p>
               {orcamento.aprovacaoMotivo && <p>Aprovacao: {orcamento.aprovacaoMotivo}</p>}
               {orcamento.motivoPerda && <p>Motivo perda: {lossReasonLabel(orcamento.motivoPerda)}</p>}
+              <div className="quote-control-list">
+                <div><span>Condicoes</span><strong>{orcamento.formaPagamento ?? 'Nao informada'}</strong></div>
+                <div><span>Prazo entrega</span><strong>{orcamento.prazoEntrega ?? 'Confirmar disponibilidade'}</strong></div>
+                <div><span>Prazo execucao</span><strong>{orcamento.prazoExecucao ?? 'Sob agendamento'}</strong></div>
+                <div><span>Proximo follow-up</span><strong>{dateLabel(orcamento.proximoFollowupEm)}</strong></div>
+              </div>
+              {approvals.length > 0 && (
+                <div className="approval-mini-feed">
+                  <strong>Ultimos controles</strong>
+                  {approvals.slice(0, 3).map((approval) => (
+                    <span key={approval.id}>{approvalActionLabel(approval.acao)} - {dateLabel(approval.criadoEm)}</span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -10482,6 +10574,37 @@ function OrcamentoWorkspace({
               <a className={!waUrl ? 'button disabled' : 'button primary'} href={waUrl} target="_blank" rel="noreferrer">
                 <MessageCircle size={16} /> Abrir WhatsApp
               </a>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'aprovacao' && (
+          <div className="approval-grid">
+            <div className="summary-box">
+              <strong>Regra atual</strong>
+              <p>{orcamento.aprovacaoMotivo ?? 'Proposta dentro dos limites comerciais cadastrados.'}</p>
+              <div className="quote-control-list">
+                <div><span>Status</span><strong>{orcamento.status}</strong></div>
+                <div><span>Aprovado em</span><strong>{dateLabel(orcamento.aprovadoEm)}</strong></div>
+                <div><span>Enviado em</span><strong>{dateLabel(orcamento.enviadoEm)}</strong></div>
+                <div><span>Follow-up</span><strong>{dateLabel(orcamento.proximoFollowupEm)}</strong></div>
+              </div>
+            </div>
+            <div className="summary-box">
+              <strong>Historico de decisao</strong>
+              {approvalsLoading && <p>Carregando historico...</p>}
+              {!approvalsLoading && approvals.length === 0 && <p>Nenhuma aprovacao registrada ainda.</p>}
+              {!approvalsLoading && approvals.length > 0 && (
+                <div className="approval-timeline">
+                  {approvals.map((approval) => (
+                    <div key={approval.id}>
+                      <strong>{approvalActionLabel(approval.acao)}</strong>
+                      <span>{dateLabel(approval.criadoEm)}{approval.usuarioNome ? ` - ${approval.usuarioNome}` : ''}</span>
+                      {approval.motivo && <small>{approval.motivo}</small>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -10552,6 +10675,8 @@ function OrcamentoRevisionEditor({
 }) {
   const [validade, setValidade] = useState(() => orcamento.validade || new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10))
   const [previsaoFechamento, setPrevisaoFechamento] = useState(orcamento.previsaoFechamento ?? '')
+  const [prazoEntrega, setPrazoEntrega] = useState(orcamento.prazoEntrega ?? '')
+  const [prazoExecucao, setPrazoExecucao] = useState(orcamento.prazoExecucao ?? '')
   const [paymentAdjustments, setPaymentAdjustments] = useState<Record<string, number>>(() => {
     if (orcamento.condicoes?.length) {
       return Object.fromEntries(orcamento.condicoes.map((condicao) => [condicao.label, condicao.ajustePercentual]))
@@ -10641,7 +10766,14 @@ function OrcamentoRevisionEditor({
         motivoPerda: undefined,
         aprovadoPor: undefined,
         aprovadoEm: undefined,
-        observacao: [observacao.trim(), revisionNote].filter(Boolean).join('\n\n'),
+        prazoEntrega: prazoEntrega.trim() || undefined,
+        prazoExecucao: prazoExecucao.trim() || undefined,
+        observacao: [
+          observacao.trim(),
+          prazoEntrega.trim() ? `Prazo de entrega: ${prazoEntrega.trim()}.` : '',
+          prazoExecucao.trim() ? `Prazo de execucao: ${prazoExecucao.trim()}.` : '',
+          revisionNote,
+        ].filter(Boolean).join('\n\n'),
         itens: validItems,
         condicoes: quoteConditionInputs(paymentScenarios),
         versaoMensagem: quoteMessage,
@@ -10680,6 +10812,14 @@ function OrcamentoRevisionEditor({
             <label>
               Prev. fechamento
               <input type="date" value={previsaoFechamento} onChange={(event) => setPrevisaoFechamento(event.target.value)} />
+            </label>
+            <label>
+              Prazo entrega
+              <input value={prazoEntrega} onChange={(event) => setPrazoEntrega(event.target.value)} placeholder="Ex.: 2 dias apos confirmacao" />
+            </label>
+            <label>
+              Prazo execucao
+              <input value={prazoExecucao} onChange={(event) => setPrazoExecucao(event.target.value)} placeholder="Ex.: montagem sob agendamento" />
             </label>
           </div>
           <label className="quote-search">

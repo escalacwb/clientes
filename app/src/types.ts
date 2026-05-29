@@ -99,6 +99,11 @@ export type Orcamento = {
   aprovacaoMotivo?: string
   aprovadoPor?: string
   aprovadoEm?: string
+  enviadoPor?: string
+  enviadoEm?: string
+  proximoFollowupEm?: string
+  prazoEntrega?: string
+  prazoExecucao?: string
   observacao?: string
   itens?: OrcamentoItem[]
   condicoes?: OrcamentoCondicao[]
@@ -158,6 +163,17 @@ export type OrcamentoVersao = {
   origem?: string
   itens: OrcamentoItemInput[]
   criadoEm: string
+}
+
+export type OrcamentoAprovacao = {
+  id: string
+  orcamentoId: string
+  acao: 'solicitada' | 'aprovada' | 'rejeitada' | 'enviada'
+  motivo?: string
+  usuarioId?: string
+  usuarioNome?: string
+  criadoEm: string
+  rawData?: Record<string, unknown>
 }
 
 export type CatalogoItem = {

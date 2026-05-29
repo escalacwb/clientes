@@ -1923,7 +1923,8 @@ h3 {
 }
 
 .quote-workspace-grid,
-.quote-message-grid {
+.quote-message-grid,
+.approval-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 0.42fr);
   gap: 14px;
@@ -2742,6 +2743,51 @@ h3 {
   margin-top: 8px;
   color: #4e5f5a;
   line-height: 1.5;
+}
+
+.quote-control-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.quote-control-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #e2e8e3;
+  border-radius: 8px;
+  padding: 9px 10px;
+}
+
+.quote-control-list span,
+.approval-mini-feed span,
+.approval-timeline span,
+.approval-timeline small {
+  color: #5c6d68;
+  font-size: 12px;
+}
+
+.approval-mini-feed {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  border-top: 1px solid #e2e8e3;
+  padding-top: 12px;
+}
+
+.approval-timeline {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.approval-timeline div {
+  display: grid;
+  gap: 4px;
+  border-left: 3px solid #12312f;
+  background: #f7faf8;
+  padding: 9px 10px;
 }
 
 .info-grid {

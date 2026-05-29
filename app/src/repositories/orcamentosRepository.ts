@@ -2,7 +2,7 @@ import { orcamentoItens as mockOrcamentoItens, orcamentos as mockOrcamentos } fr
 import { getSupabase } from '../lib/supabase'
 import { syncPipelineFromOrcamento } from './pipelineRepository'
 import { pauseActiveSequencesForClient } from './sequenciasRepository'
-import type { Orcamento, OrcamentoCondicao, OrcamentoCondicaoInput, OrcamentoInput, OrcamentoItem, OrcamentoItemInput, OrcamentoVersao } from '../types'
+import type { Orcamento, OrcamentoAprovacao, OrcamentoCondicao, OrcamentoCondicaoInput, OrcamentoInput, OrcamentoItem, OrcamentoItemInput, OrcamentoVersao } from '../types'
 
 type OrcamentoRow = {
   id: string
@@ -20,6 +20,11 @@ type OrcamentoRow = {
   aprovacao_motivo: string | null
   aprovado_por: string | null
   aprovado_em: string | null
+  enviado_por: string | null
+  enviado_em: string | null
+  proximo_followup_em: string | null
+  prazo_entrega: string | null
+  prazo_execucao: string | null
   observacao: string | null
 }
 
@@ -62,6 +67,17 @@ type OrcamentoVersaoRow = {
   origem: string | null
   itens: OrcamentoItemInput[]
   criado_em: string
+}
+
+type OrcamentoAprovacaoRow = {
+  id: string
+  orcamento_id: string
+  acao: OrcamentoAprovacao['acao']
+  motivo: string | null
+  usuario_id: string | null
+  users?: { nome: string | null } | null
+  criado_em: string
+  raw_data: Record<string, unknown> | null
 }
 
 export type OrcamentoListFilter = Orcamento['status'] | 'todos' | 'vencidos'
@@ -160,6 +176,24 @@ export async function listOrcamentoVersoes(orcamentoId: string): Promise<Orcamen
   return (data as OrcamentoVersaoRow[]).map(mapOrcamentoVersao)
 }
 
+export async function listOrcamentoAprovacoes(orcamentoId: string): Promise<OrcamentoAprovacao[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('orcamento_aprovacoes')
+    .select('*,users!orcamento_aprovacoes_usuario_id_fkey(nome)')
+    .eq('orcamento_id', orcamentoId)
+    .order('criado_em', { ascending: false })
+
+  if (error) {
+    console.warn('Nao foi possivel carregar aprovacoes do orcamento.', error.message)
+    return []
+  }
+
+  return (data as OrcamentoAprovacaoRow[]).map(mapOrcamentoAprovacao)
+}
+
 export async function createOrcamento(input: OrcamentoInput, itens: OrcamentoItemInput[] = []): Promise<Orcamento> {
   const supabase = await getSupabase()
   if (!supabase) {
@@ -205,6 +239,11 @@ export async function createOrcamento(input: OrcamentoInput, itens: OrcamentoIte
       aprovacao_motivo: input.aprovacaoMotivo ?? null,
       aprovado_por: input.aprovadoPor ?? null,
       aprovado_em: input.aprovadoEm ?? null,
+      enviado_por: input.enviadoPor ?? null,
+      enviado_em: input.enviadoEm ?? null,
+      proximo_followup_em: input.proximoFollowupEm ?? null,
+      prazo_entrega: input.prazoEntrega ?? null,
+      prazo_execucao: input.prazoExecucao ?? null,
       observacao: input.observacao ?? null,
     })
     .select('*')
@@ -222,6 +261,16 @@ export async function createOrcamento(input: OrcamentoInput, itens: OrcamentoIte
     mensagem: input.versaoMensagem,
     origem: input.versaoOrigem,
   })
+  if (created.status === 'aguardando_aprovacao') {
+    await createOrcamentoAprovacao(created.id, 'solicitada', created.aprovacaoMotivo, input.vendedorId, {
+      valorTotal: created.valorTotal,
+    })
+  }
+  if (created.status === 'enviado') {
+    await createOrcamentoAprovacao(created.id, 'enviada', 'Proposta criada e marcada como enviada.', input.enviadoPor ?? input.vendedorId, {
+      valorTotal: created.valorTotal,
+    })
+  }
   await syncPipelineFromOrcamento(created)
   await pauseActiveSequencesForClient(created.clienteId, 'Orcamento criado para o cliente.')
 
@@ -273,6 +322,11 @@ export async function reviseOrcamento(
       aprovacao_motivo: input.aprovacaoMotivo ?? null,
       aprovado_por: input.aprovadoPor ?? null,
       aprovado_em: input.aprovadoEm ?? null,
+      enviado_por: input.enviadoPor ?? null,
+      enviado_em: input.enviadoEm ?? null,
+      proximo_followup_em: input.proximoFollowupEm ?? null,
+      prazo_entrega: input.prazoEntrega ?? null,
+      prazo_execucao: input.prazoExecucao ?? null,
       observacao: input.observacao ?? null,
     })
     .eq('id', id)
@@ -304,6 +358,12 @@ export async function reviseOrcamento(
     mensagem: input.versaoMensagem,
     origem: input.versaoOrigem,
   })
+  if (revised.status === 'aguardando_aprovacao') {
+    await createOrcamentoAprovacao(revised.id, 'solicitada', revised.aprovacaoMotivo, input.vendedorId, {
+      valorTotal: revised.valorTotal,
+      origem: 'revisao',
+    })
+  }
   await syncPipelineFromOrcamento(revised)
   await pauseActiveSequencesForClient(revised.clienteId, 'Orcamento revisado para o cliente.')
 
@@ -327,6 +387,11 @@ export async function updateOrcamentoStatus(
     patch.aprovado_por = aprovadoPor
     patch.aprovado_em = new Date().toISOString()
   }
+  if (status === 'enviado') {
+    patch.enviado_por = aprovadoPor ?? undefined
+    patch.enviado_em = new Date().toISOString()
+    patch.proximo_followup_em = nextBusinessDate(2)
+  }
 
   const { error } = await supabase
     .from('orcamentos')
@@ -343,10 +408,58 @@ export async function updateOrcamentoStatus(
 
   if (fetchError) throw fetchError
   const changed = mapOrcamento(updated as OrcamentoRow)
+  if (status === 'enviado') {
+    await createOrcamentoAprovacao(
+      id,
+      aprovadoPor ? 'aprovada' : 'enviada',
+      aprovadoPor ? 'Aprovado e liberado para envio.' : 'Marcado como enviado.',
+      aprovadoPor,
+      { status },
+    )
+  }
+  if (status === 'perdido' && motivoPerda?.startsWith('aprovacao_rejeitada:')) {
+    await createOrcamentoAprovacao(id, 'rejeitada', motivoPerda.replace('aprovacao_rejeitada:', ''), aprovadoPor, { status })
+  }
   await syncPipelineFromOrcamento(changed)
   if (status === 'ganho' || status === 'perdido') {
     await pauseActiveSequencesForClient(changed.clienteId, `Orcamento marcado como ${status}.`)
   }
+}
+
+async function createOrcamentoAprovacao(
+  orcamentoId: string,
+  acao: OrcamentoAprovacao['acao'],
+  motivo?: string,
+  usuarioId?: string,
+  rawData: Record<string, unknown> = {},
+): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase) return
+
+  const { error } = await supabase
+    .from('orcamento_aprovacoes')
+    .insert({
+      orcamento_id: orcamentoId,
+      acao,
+      motivo: motivo ?? null,
+      usuario_id: usuarioId ?? null,
+      raw_data: rawData,
+    })
+
+  if (error) {
+    console.warn('Nao foi possivel registrar historico de aprovacao.', error.message)
+  }
+}
+
+function nextBusinessDate(days: number) {
+  const date = new Date()
+  let remaining = days
+  while (remaining > 0) {
+    date.setDate(date.getDate() + 1)
+    const weekday = date.getDay()
+    if (weekday !== 0 && weekday !== 6) remaining -= 1
+  }
+  return date.toISOString().slice(0, 10)
 }
 
 async function listOrcamentoItens(orcamentoIds: string[]): Promise<OrcamentoItem[]> {
@@ -498,6 +611,11 @@ function mapOrcamento(row: OrcamentoRow): Orcamento {
     aprovacaoMotivo: row.aprovacao_motivo ?? undefined,
     aprovadoPor: row.aprovado_por ?? undefined,
     aprovadoEm: row.aprovado_em ?? undefined,
+    enviadoPor: row.enviado_por ?? undefined,
+    enviadoEm: row.enviado_em ?? undefined,
+    proximoFollowupEm: row.proximo_followup_em ?? undefined,
+    prazoEntrega: row.prazo_entrega ?? undefined,
+    prazoExecucao: row.prazo_execucao ?? undefined,
     observacao: row.observacao ?? undefined,
   }
 }
@@ -546,6 +664,19 @@ function mapOrcamentoVersao(row: OrcamentoVersaoRow): OrcamentoVersao {
     origem: row.origem ?? undefined,
     itens: Array.isArray(row.itens) ? row.itens : [],
     criadoEm: row.criado_em,
+  }
+}
+
+function mapOrcamentoAprovacao(row: OrcamentoAprovacaoRow): OrcamentoAprovacao {
+  return {
+    id: row.id,
+    orcamentoId: row.orcamento_id,
+    acao: row.acao,
+    motivo: row.motivo ?? undefined,
+    usuarioId: row.usuario_id ?? undefined,
+    usuarioNome: row.users?.nome ?? undefined,
+    criadoEm: row.criado_em,
+    rawData: row.raw_data ?? undefined,
   }
 }
 

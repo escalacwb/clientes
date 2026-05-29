@@ -217,6 +217,11 @@ create table public.orcamentos (
   aprovacao_motivo text,
   aprovado_por uuid references public.users(id),
   aprovado_em timestamptz,
+  enviado_por uuid references public.users(id),
+  enviado_em timestamptz,
+  proximo_followup_em date,
+  prazo_entrega text,
+  prazo_execucao text,
   observacao text,
   criado_em timestamptz not null default now(),
   atualizado_em timestamptz not null default now()
@@ -263,6 +268,16 @@ create table public.orcamento_condicoes (
   parcelas integer,
   observacao text,
   ordem integer not null default 0,
+  criado_em timestamptz not null default now()
+);
+
+create table public.orcamento_aprovacoes (
+  id uuid primary key default gen_random_uuid(),
+  orcamento_id uuid not null references public.orcamentos(id) on delete cascade,
+  acao text not null check (acao in ('solicitada', 'aprovada', 'rejeitada', 'enviada')),
+  motivo text,
+  usuario_id uuid references public.users(id),
+  raw_data jsonb not null default '{}'::jsonb,
   criado_em timestamptz not null default now()
 );
 
@@ -618,6 +633,7 @@ create unique index if not exists tarefas_abertas_cliente_origem_idx
 on public.tarefas (cliente_id, origem)
 where status = 'aberta' and origem is not null;
 create index orcamento_versoes_orcamento_idx on public.orcamento_versoes(orcamento_id, numero desc);
+create index orcamento_aprovacoes_orcamento_idx on public.orcamento_aprovacoes(orcamento_id, criado_em desc);
 create index orcamento_condicoes_orcamento_idx on public.orcamento_condicoes(orcamento_id, ordem);
 
 create or replace function public.set_atualizado_em()
@@ -1930,6 +1946,7 @@ alter table public.orcamentos enable row level security;
 alter table public.orcamento_itens enable row level security;
 alter table public.orcamento_versoes enable row level security;
 alter table public.orcamento_condicoes enable row level security;
+alter table public.orcamento_aprovacoes enable row level security;
 alter table public.produtos enable row level security;
 alter table public.produto_aliases enable row level security;
 alter table public.listas_preco enable row level security;
@@ -2215,6 +2232,36 @@ with check (
   or exists (
     select 1 from public.orcamentos o
     where o.id = orcamento_condicoes.orcamento_id
+      and o.vendedor_id = public.current_app_user_id()
+  )
+);
+
+create policy orcamento_aprovacoes_read_own_or_admin
+on public.orcamento_aprovacoes for select
+using (
+  public.current_user_is_admin()
+  or exists (
+    select 1 from public.orcamentos o
+    where o.id = orcamento_aprovacoes.orcamento_id
+      and o.vendedor_id = public.current_app_user_id()
+  )
+);
+
+create policy orcamento_aprovacoes_write_own_or_admin
+on public.orcamento_aprovacoes for all
+using (
+  public.current_user_is_admin()
+  or exists (
+    select 1 from public.orcamentos o
+    where o.id = orcamento_aprovacoes.orcamento_id
+      and o.vendedor_id = public.current_app_user_id()
+  )
+)
+with check (
+  public.current_user_is_admin()
+  or exists (
+    select 1 from public.orcamentos o
+    where o.id = orcamento_aprovacoes.orcamento_id
       and o.vendedor_id = public.current_app_user_id()
   )
 );
