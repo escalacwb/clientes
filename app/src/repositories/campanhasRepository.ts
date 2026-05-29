@@ -216,9 +216,9 @@ export const campanhaSegmentos: CampanhaSegmento[] = [
   },
   {
     id: 'rodobens-pendentes',
-    nome: 'Primeiro contato Rodobens',
-    descricao: 'Leads vindos da Rodobens para qualificacao antes de entrar na carteira Capital.',
-    campanhaNome: 'Rodobens - primeiro contato',
+    nome: 'Clientes sem cadastro',
+    descricao: 'Leads de listas externas para qualificacao antes de entrar na carteira Capital.',
+    campanhaNome: 'Clientes sem cadastro - primeiro contato',
     campanhaId: 'campanha-rodobens-primeiro-contato',
     template:
       'Bom dia, {primeiro_nome}. Aqui e {nome_vendedor}, da Capital Truck Center. Estou entrando em contato para entender sua frota e ver como podemos ajudar com pneus e servicos.',
@@ -246,7 +246,7 @@ export const campanhaSegmentos: CampanhaSegmento[] = [
   {
     id: 'selecionados',
     nome: 'Selecao manual',
-    descricao: 'Lista salva a partir de oportunidades, Inbox Rodobens ou selecao operacional.',
+    descricao: 'Lista salva a partir de oportunidades, clientes sem cadastro ou selecao operacional.',
     campanhaNome: 'Campanha por selecao manual',
     campanhaId: 'campanha-selecao-manual',
     template:

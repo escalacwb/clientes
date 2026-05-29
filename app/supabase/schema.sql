@@ -1449,6 +1449,7 @@ begin
   clientes_atualizados := public.refresh_clientes_comercial_stats();
   oportunidades_geradas := public.refresh_oportunidades_cache();
   tarefas_followup := public.criar_tarefas_followup_automaticas();
+  refresh materialized view public.vw_ranking_servicos_recorrentes;
 
   return jsonb_build_object(
     'clientes_atualizados', clientes_atualizados,
@@ -1823,7 +1824,10 @@ from public.vendas_itens
 group by coalesce(nullif(medida, ''), produto_nome)
 order by valor_total desc nulls last;
 
-create or replace view public.vw_ranking_servicos_recorrentes as
+drop view if exists public.vw_ranking_servicos_recorrentes;
+drop materialized view if exists public.vw_ranking_servicos_recorrentes;
+
+create materialized view public.vw_ranking_servicos_recorrentes as
 select
   servico_nome as label,
   count(*) as itens,
@@ -1832,6 +1836,11 @@ select
 from public.servicos_itens
 group by servico_nome
 order by valor_total desc nulls last;
+
+create unique index if not exists vw_ranking_servicos_recorrentes_label_idx
+  on public.vw_ranking_servicos_recorrentes(label);
+
+grant select on public.vw_ranking_servicos_recorrentes to anon, authenticated, service_role;
 
 alter table public.users enable row level security;
 alter table public.clientes enable row level security;

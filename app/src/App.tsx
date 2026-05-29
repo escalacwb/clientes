@@ -181,28 +181,50 @@ import type {
 
 const SalesChart = lazy(() => import('./components/SalesChart'))
 
-const nav = [
-  { id: 'cockpit', label: 'Cockpit', icon: Gauge },
-  { id: 'dashboard', label: 'Dashboard', icon: Gauge },
-  { id: 'clientes', label: 'Clientes', icon: UsersRound },
-  { id: 'rodobens', label: 'Inbox Rodobens', icon: UserCheck },
-  { id: 'carteira', label: 'Minha carteira', icon: ClipboardList },
-  { id: 'oportunidades', label: 'Oportunidades', icon: AlertTriangle },
-  { id: 'tarefas', label: 'Tarefas', icon: CalendarClock },
-  { id: 'importacoes', label: 'Importacoes', icon: FileUp },
-  { id: 'conflitos', label: 'Conflitos', icon: AlertTriangle },
-  { id: 'mesclagem', label: 'Mesclagem', icon: UsersRound },
-  { id: 'campanhas', label: 'Campanhas', icon: Send },
-  { id: 'campanhas-inbox', label: 'Inbox Campanhas', icon: MessageCircle },
-  { id: 'orcamentos', label: 'Orcamentos', icon: WalletCards },
-  { id: 'catalogo', label: 'Catalogo', icon: ClipboardList },
-  { id: 'relatorios', label: 'Relatorios', icon: BarChart3 },
-  { id: 'vendedores', label: 'Vendedores', icon: UserRound },
-  { id: 'usuarios', label: 'Usuarios', icon: ShieldCheck },
-  { id: 'auditoria', label: 'Auditoria', icon: CheckCircle2 },
+const navSections = [
+  {
+    title: 'Operacao',
+    items: [
+      { id: 'cockpit', label: 'Cockpit', icon: Gauge },
+      { id: 'clientes', label: 'Clientes', icon: UsersRound },
+      { id: 'rodobens', label: 'Clientes sem cadastro', icon: UserCheck },
+      { id: 'tarefas', label: 'Tarefas', icon: CalendarClock },
+      { id: 'oportunidades', label: 'Oportunidades', icon: AlertTriangle },
+    ],
+  },
+  {
+    title: 'Comercial',
+    items: [
+      { id: 'campanhas', label: 'Campanhas', icon: Send },
+      { id: 'orcamentos', label: 'Orcamentos', icon: WalletCards },
+      { id: 'catalogo', label: 'Catalogo', icon: ClipboardList },
+    ],
+  },
+  {
+    title: 'Gestao',
+    items: [
+      { id: 'importacoes', label: 'Importacoes', icon: FileUp },
+      { id: 'relatorios', label: 'Relatorios', icon: BarChart3 },
+      { id: 'vendedores', label: 'Vendedores', icon: UserRound },
+      { id: 'usuarios', label: 'Usuarios', icon: ShieldCheck },
+      { id: 'auditoria', label: 'Auditoria', icon: CheckCircle2 },
+    ],
+  },
 ]
 
+const hiddenViewRedirects: Record<string, string> = {
+  dashboard: 'cockpit',
+  carteira: 'clientes',
+  conflitos: 'importacoes',
+  mesclagem: 'importacoes',
+  'campanhas-inbox': 'campanhas',
+}
+
 const adminOnlyViews = new Set(['importacoes', 'conflitos', 'mesclagem', 'relatorios', 'vendedores', 'usuarios', 'auditoria'])
+
+function normalizeView(view: string) {
+  return hiddenViewRedirects[view] ?? view
+}
 
 const authUsuarios: Vendedor[] = [
   {
@@ -258,7 +280,7 @@ function App() {
   const clientePageSize = 50
   const [session, setSession] = useState<SessaoUsuario | null>(null)
   const [isCheckingSession, setIsCheckingSession] = useState(true)
-  const [view, setView] = useState(() => localStorage.getItem('capital-crm:last-view') ?? 'cockpit')
+  const [view, setView] = useState(() => normalizeView(localStorage.getItem('capital-crm:last-view') ?? 'cockpit'))
   const [clientes, setClientes] = useState<Cliente[]>(isSupabaseConfigured ? [] : seedClientes)
   const [clientesTotal, setClientesTotal] = useState(isSupabaseConfigured ? 0 : seedClientes.length)
   const [clientesPage, setClientesPage] = useState(1)
@@ -381,7 +403,12 @@ function App() {
   }, [])
 
   useEffect(() => {
-    localStorage.setItem('capital-crm:last-view', view)
+    const nextView = normalizeView(view)
+    if (nextView !== view) {
+      setView(nextView)
+      return
+    }
+    localStorage.setItem('capital-crm:last-view', nextView)
   }, [view])
 
   useEffect(() => {
@@ -601,10 +628,10 @@ function App() {
         setCampanhaInboxItems([])
         return
       }
-      if (view !== 'campanhas-inbox') return
+      if (!['campanhas', 'campanhas-inbox'].includes(view)) return
 
       setIsLoadingCampanhaInbox(true)
-      clearModuleError('campanhas-inbox')
+      clearModuleError('campanhas')
       try {
         const vendedorId = session?.role === 'vendedor' ? session.id : campanhaInboxOwnerFilter || undefined
         const statuses = campanhaInboxStatusFilter === 'todos' ? undefined : [campanhaInboxStatusFilter]
@@ -612,7 +639,7 @@ function App() {
         if (!isMounted) return
         setCampanhaInboxItems(items)
       } catch (exception) {
-        if (isMounted) setModuleError('campanhas-inbox', exception instanceof Error ? exception.message : 'Nao foi possivel carregar o inbox de campanhas.')
+        if (isMounted) setModuleError('campanhas', exception instanceof Error ? exception.message : 'Nao foi possivel carregar respostas de campanhas.')
       } finally {
         if (isMounted) setIsLoadingCampanhaInbox(false)
       }
@@ -845,7 +872,7 @@ function App() {
         setRodobensFunil(funil)
         clearModuleError('rodobens')
       } catch (exception) {
-        if (isMounted) setModuleError('rodobens', exception instanceof Error ? exception.message : 'Nao foi possivel carregar Inbox Rodobens.')
+        if (isMounted) setModuleError('rodobens', exception instanceof Error ? exception.message : 'Nao foi possivel carregar clientes sem cadastro.')
       } finally {
         if (isMounted) setIsLoadingRodobens(false)
       }
@@ -1012,7 +1039,12 @@ function App() {
     )
   }
 
-  const visibleNav = nav.filter((item) => session.role === 'admin' || !adminOnlyViews.has(item.id))
+  const visibleNavSections = navSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => session.role === 'admin' || !adminOnlyViews.has(item.id)),
+    }))
+    .filter((section) => section.items.length > 0)
   const canUseScopedClientViews = session.role === 'admin' || isSupabaseConfigured || scopedClientes.length > 0
 
   return (
@@ -1027,21 +1059,26 @@ function App() {
         </div>
 
         <nav className="nav">
-          {visibleNav.map((item) => {
-            const Icon = item.icon
-            return (
-              <button
-                className={view === item.id ? 'nav-item active' : 'nav-item'}
-                key={item.id}
-                onClick={() => setView(item.id)}
-                type="button"
-                title={item.label}
-              >
-                <Icon size={18} />
-                <span>{item.label}</span>
-              </button>
-            )
-          })}
+          {visibleNavSections.map((section) => (
+            <div className="nav-section" key={section.title}>
+              <span className="nav-section-title">{section.title}</span>
+              {section.items.map((item) => {
+                const Icon = item.icon
+                return (
+                  <button
+                    className={view === item.id ? 'nav-item active' : 'nav-item'}
+                    key={item.id}
+                    onClick={() => setView(item.id)}
+                    type="button"
+                    title={item.label}
+                  >
+                    <Icon size={18} />
+                    <span>{item.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          ))}
         </nav>
 
         <div className="sidebar-footer">
@@ -1416,9 +1453,9 @@ function App() {
             }}
             onCreateCampaignFromSelection={async (clienteIds) => {
               const { campanha, enviosCriados } = await createCampanhaFromClienteIds({
-                nome: `Rodobens selecionados - ${new Date().toISOString().slice(0, 10)}`,
-                descricao: 'Campanha criada a partir da selecao manual no Inbox Rodobens.',
-                objetivo: 'Primeiro contato e qualificacao de leads Rodobens.',
+                nome: `Clientes sem cadastro - ${new Date().toISOString().slice(0, 10)}`,
+                descricao: 'Campanha criada a partir da selecao manual na fila de clientes sem cadastro.',
+                objetivo: 'Primeiro contato e qualificacao de clientes vindos de listas externas.',
                 mensagemModelo: campanhaSegmentos.find((item) => item.id === 'rodobens-pendentes')?.template ?? campanhaSegmentos[0].template,
                 clienteIds,
                 origemLista: 'inbox_rodobens',
@@ -1644,6 +1681,64 @@ function App() {
             usuarios={usuarios}
             currentUser={session}
             initialCampanhaId={campaignToOpenId}
+            inboxItems={campanhaInboxItems}
+            inboxStatusFilter={campanhaInboxStatusFilter}
+            inboxOwnerFilter={session.role === 'vendedor' ? session.id : campanhaInboxOwnerFilter}
+            isLoadingInbox={isLoadingCampanhaInbox}
+            onInboxStatusFilterChange={setCampanhaInboxStatusFilter}
+            onInboxOwnerFilterChange={setCampanhaInboxOwnerFilter}
+            onOpenInboxClient={async (clienteId) => {
+              setSelectedClientId(clienteId)
+              setView('cliente360')
+            }}
+            onOpenInboxBudget={async (item) => {
+              const found = await listClientesPage({ page: 1, pageSize: 1, clienteIds: [item.clienteId] })
+              const cliente = found.clientes[0]
+              if (!cliente) return
+              setClientes((current) => current.some((row) => row.id === cliente.id) ? current : [cliente, ...current])
+              setSelectedClientId(cliente.id)
+              setQuoteSourceView('campanhas')
+              setQuoteOriginContext({
+                kind: 'campanha',
+                sourceId: item.campanhaId,
+                label: item.campanhaNome ?? 'Campanha',
+              })
+              setView('orcamento-editor')
+            }}
+            onCreateInboxTask={async (item) => {
+              const created = await createTarefa({
+                clienteId: item.clienteId,
+                vendedorId: item.vendedorId,
+                titulo: campaignTaskTitle(item.status),
+                descricao: `Tratar resposta da campanha ${item.campanhaNome ?? item.campanhaId}. Status: ${campaignStatusLabel(item.status)}.`,
+                dataVencimento: new Date().toISOString().slice(0, 10),
+                prioridade: campaignTaskPriority(item.status),
+                origem: `campanha:${item.campanhaId}:inbox:${item.status}`,
+              })
+              setTarefas((current) => [created, ...current])
+              return created
+            }}
+            onUpdateInboxStatus={async (item, status) => {
+              const updated = await upsertCampanhaEnvio({
+                campanhaId: item.campanhaId,
+                campanhaNome: item.campanhaNome,
+                clienteId: item.clienteId,
+                vendedorId: item.vendedorId,
+                telefone: item.telefone,
+                mensagemFinal: item.mensagemFinal,
+                status,
+              })
+              await createInteracao({
+                clienteId: item.clienteId,
+                vendedorId: item.vendedorId ?? session.id,
+                canal: 'Campanha',
+                tipo: 'campanha_inbox',
+                resumo: campaignSummary(status, item.mensagemFinal),
+                resultado: status,
+                campanhaId: item.campanhaId,
+              })
+              setCampanhaInboxItems((current) => current.map((row) => row.id === item.id ? { ...item, ...updated, clienteNome: item.clienteNome, clienteCidade: item.clienteCidade, clienteUf: item.clienteUf } : row))
+            }}
             onOpenBudgetEditor={(cliente, originContext) => {
               setClientes((current) =>
                 current.some((item) => item.id === cliente.id) ? current : [cliente, ...current],
@@ -1689,7 +1784,7 @@ function App() {
               setQuoteOriginContext({
                 kind: 'campanha',
                 sourceId: item.campanhaId,
-                label: item.campanhaNome ?? 'Inbox Campanhas',
+                label: item.campanhaNome ?? 'Campanha',
               })
               setView('orcamento-editor')
             }}
@@ -1932,19 +2027,19 @@ function App() {
 function titleFor(view: string) {
   const titles: Record<string, string> = {
     cockpit: 'Cockpit diario',
-    dashboard: 'Painel comercial',
+    dashboard: 'Cockpit diario',
     clientes: 'Base unica de clientes',
-    rodobens: 'Inbox Rodobens',
+    rodobens: 'Clientes sem cadastro',
     'orcamento-editor': 'Editor de proposta',
     'orcamento-detalhe': 'Proposta comercial',
-    carteira: 'Fila diaria do vendedor',
+    carteira: 'Base unica de clientes',
     oportunidades: 'Oportunidades automaticas',
     tarefas: 'Tarefas e proximas acoes',
     importacoes: 'Controle de importacoes',
-    conflitos: 'Conflitos de importacao',
-    mesclagem: 'Mesclagem de clientes',
-    campanhas: 'Campanhas WhatsApp',
-    'campanhas-inbox': 'Inbox de campanhas',
+    conflitos: 'Controle de importacoes',
+    mesclagem: 'Controle de importacoes',
+    campanhas: 'Campanhas e respostas',
+    'campanhas-inbox': 'Campanhas e respostas',
     orcamentos: 'Orcamentos e conversao',
     catalogo: 'Catalogo e precos',
     relatorios: 'Relatorios gerenciais',
@@ -2154,7 +2249,7 @@ function Cockpit({
           <Info label="Hoje/prioridade" value={todayTasks.length.toString()} />
           <Info label="Respostas campanha" value={campanhas.length.toString()} />
           <Info label="Orc. vencidos" value={orcamentos.length.toString()} />
-          <Info label="Rodobens novos" value={rodobens.length.toString()} />
+          <Info label="Sem cadastro" value={rodobens.length.toString()} />
         </div>
       </section>
 
@@ -2267,10 +2362,10 @@ function Cockpit({
         <div className="panel-header">
           <div>
             <h2>Leads e oportunidades</h2>
-            <p>Rodobens novos e oportunidades cacheadas.</p>
+            <p>Listas externas sem cadastro e oportunidades cacheadas.</p>
           </div>
           <div className="toolbar-actions">
-            <button className="button" type="button" onClick={() => onOpenModule('rodobens')}>Rodobens</button>
+            <button className="button" type="button" onClick={() => onOpenModule('rodobens')}>Sem cadastro</button>
             <button className="button" type="button" onClick={() => onOpenModule('oportunidades')}>Oportunidades</button>
           </div>
         </div>
@@ -2415,6 +2510,7 @@ function CampanhasInbox({
   statusFilter,
   ownerFilter,
   isLoading,
+  embedded = false,
   onStatusFilterChange,
   onOwnerFilterChange,
   onOpenClient,
@@ -2428,6 +2524,7 @@ function CampanhasInbox({
   statusFilter: CampanhaEnvioStatus | 'todos'
   ownerFilter: string
   isLoading: boolean
+  embedded?: boolean
   onStatusFilterChange: (status: CampanhaEnvioStatus | 'todos') => void
   onOwnerFilterChange: (ownerId: string) => void
   onOpenClient: (clienteId: string) => Promise<void>
@@ -2452,7 +2549,7 @@ function CampanhasInbox({
   }
 
   return (
-    <section className="panel wide">
+    <section className={embedded ? 'campaign-inbox-embedded' : 'panel wide'}>
       <div className="panel-header">
         <div>
           <h2>Inbox de campanhas</h2>
@@ -2598,7 +2695,7 @@ function Dashboard({
     },
     {
       id: 'rodobens' as const,
-      title: 'Qualificar Rodobens',
+      title: 'Qualificar sem cadastro',
       count: resumo?.oportunidadesRodobens ?? resumo?.clientesRodobens ?? 0,
       detail: 'Leads para primeiro contato e triagem.',
       action: 'Abrir inbox',
@@ -2944,20 +3041,20 @@ function RodobensInbox({
       clienteId: cliente.id,
       vendedorId: cliente.vendedorId ?? 'u-1',
       canal: 'WhatsApp',
-      tipo: 'primeiro contato rodobens',
-      resumo: 'Primeiro contato iniciado pela Inbox Rodobens.',
+      tipo: 'primeiro contato lista externa',
+      resumo: 'Primeiro contato iniciado pela fila de clientes sem cadastro.',
       resultado: 'WhatsApp aberto',
     })
     await onCreateTask({
       clienteId: cliente.id,
       vendedorId: cliente.vendedorId,
-      titulo: 'Follow-up Rodobens',
-      descricao: 'Retornar cliente abordado pela Inbox Rodobens.',
+      titulo: 'Follow-up de cliente sem cadastro',
+      descricao: 'Retornar cliente abordado pela fila de listas externas.',
       dataVencimento: new Date().toISOString().slice(0, 10),
       prioridade: 80,
       origem: 'rodobens',
     })
-    await onUpdateQualificacao(cliente, 'contatado', 'Primeiro contato iniciado pela Inbox Rodobens.')
+    await onUpdateQualificacao(cliente, 'contatado', 'Primeiro contato iniciado pela fila de clientes sem cadastro.')
     setStatusMessage(`Contato registrado para ${cliente.nome}.`)
   }
 
@@ -2978,8 +3075,8 @@ function RodobensInbox({
         await onCreateTask({
           clienteId: cliente.id,
           vendedorId: cliente.vendedorId,
-          titulo: 'Primeiro contato Rodobens',
-          descricao: 'Abordar lead Rodobens, qualificar frota e registrar resultado do contato.',
+          titulo: 'Primeiro contato de cliente sem cadastro',
+          descricao: 'Abordar lead de lista externa, qualificar frota e registrar resultado do contato.',
           dataVencimento: new Date().toISOString().slice(0, 10),
           prioridade: 85,
           origem: 'rodobens:primeiro_contato',
@@ -3014,8 +3111,8 @@ function RodobensInbox({
     <section className="panel wide">
       <div className="panel-header">
         <div>
-          <h2>Inbox Rodobens</h2>
-          <p>Fila de primeiro contato para clientes identificados com origem Rodobens.</p>
+          <h2>Clientes sem cadastro</h2>
+          <p>Fila de primeiro contato para clientes vindos de listas externas antes de entrarem na carteira Capital.</p>
         </div>
         <div className="toolbar-actions">
           <label className="search compact-search">
@@ -3023,7 +3120,7 @@ function RodobensInbox({
             <input
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
-              placeholder="Buscar lead Rodobens"
+              placeholder="Buscar cliente sem cadastro"
             />
           </label>
           <select
@@ -3036,7 +3133,7 @@ function RodobensInbox({
               <option value={status} key={status}>{rodobensQualificacaoLabel(status)}</option>
             ))}
           </select>
-          <span className="status-pill">{total} leads</span>
+          <span className="status-pill">{total} registros</span>
         </div>
       </div>
       <div className="lead-funnel-strip">
@@ -3085,10 +3182,10 @@ function RodobensInbox({
         </div>
       )}
       {statusMessage && <div className="readiness ok">{statusMessage}</div>}
-      {isLoading && <div className="empty-state compact">Carregando leads Rodobens...</div>}
+      {isLoading && <div className="empty-state compact">Carregando clientes sem cadastro...</div>}
       {!isLoading && leads.length === 0 && (
         <div className="empty-state">
-          Nenhum lead Rodobens encontrado na classificacao atual.
+          Nenhum cliente sem cadastro encontrado na classificacao atual.
         </div>
       )}
       {leads.length > 0 && (
@@ -3102,7 +3199,7 @@ function RodobensInbox({
             <span>Acoes</span>
           </div>
           {leads.map((cliente) => {
-            const message = `Bom dia, ${cliente.responsavel ?? cliente.nome}. Aqui e da Capital Truck Center. Identifiquei seu cadastro na nossa base Rodobens e gostaria de entender se podemos ajudar com pneus ou servicos.`
+            const message = `Bom dia, ${cliente.responsavel ?? cliente.nome}. Aqui e da Capital Truck Center. Identifiquei seu cadastro em uma lista externa e gostaria de entender se podemos ajudar com pneus ou servicos.`
             const waUrl = cliente.whatsapp ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(message)}` : undefined
 
             return (
@@ -3203,7 +3300,7 @@ function FilterControl({
 function opportunityTypeLabel(type: string) {
   const labels: Record<string, string> = {
     sem_vendedor: 'Sem vendedor',
-    rodobens_primeiro_contato: 'Rodobens',
+    rodobens_primeiro_contato: 'Clientes sem cadastro',
     cliente_risco_180: 'Risco 180d',
     recompra_90: 'Recompra 90d',
     alto_valor_sem_contato: 'Alto valor',
@@ -3747,7 +3844,7 @@ function Tarefas({
     },
     {
       id: 'rodobens',
-      label: 'Rodobens',
+      label: 'Sem cadastro',
       hint: 'primeiro contato',
       tarefas: suggestionQueue.filter((item) => item.tipo === 'rodobens'),
       onClick: () => onOriginFilterChange('rodobens'),
@@ -3825,7 +3922,7 @@ function Tarefas({
               <option value="importacao">Importacao</option>
               <option value="campanha">Campanha</option>
               <option value="oportunidade">Oportunidade</option>
-              <option value="rodobens">Rodobens</option>
+              <option value="rodobens">Clientes sem cadastro</option>
             </select>
           </label>
           <label className="mini-select">
@@ -3931,7 +4028,7 @@ function Tarefas({
         <div className="routine-queue-header">
           <div>
             <h2>Fila inteligente</h2>
-            <p>Acionamentos sugeridos a partir de orcamentos, Rodobens e clientes em risco.</p>
+            <p>Acionamentos sugeridos a partir de orcamentos, listas externas e clientes em risco.</p>
           </div>
           <strong>{suggestionQueue.length} acoes</strong>
         </div>
@@ -4176,7 +4273,7 @@ function buildRoutineSuggestions(clientes: Cliente[], orcamentos: Orcamento[], t
         clienteId: cliente.id,
         clienteNome: cliente.nome,
         vendedorId: cliente.vendedorId,
-        titulo: 'Primeiro contato Rodobens',
+        titulo: 'Primeiro contato de cliente sem cadastro',
         motivo: `${cliente.cidade || 'Cidade nao informada'} - lead ainda precisa qualificacao.`,
         dataVencimento: today,
         prioridade: 82,
@@ -5283,7 +5380,7 @@ function quoteItemFromServico(servico: ServicoItem): OrcamentoItemInput {
 function origemLabel(origemBase?: Cliente['origemBase']) {
   const labels: Record<NonNullable<Cliente['origemBase']>, string> = {
     capital_truck: 'Capital Truck',
-    rodobens: 'Rodobens',
+    rodobens: 'Clientes sem cadastro',
     desconhecida: 'Origem pendente',
   }
   return origemBase ? labels[origemBase] : labels.desconhecida
@@ -6619,6 +6716,16 @@ function Campanhas({
   usuarios,
   currentUser,
   initialCampanhaId,
+  inboxItems,
+  inboxStatusFilter,
+  inboxOwnerFilter,
+  isLoadingInbox,
+  onInboxStatusFilterChange,
+  onInboxOwnerFilterChange,
+  onOpenInboxClient,
+  onOpenInboxBudget,
+  onCreateInboxTask,
+  onUpdateInboxStatus,
   onOpenBudgetEditor,
   onAddInteraction,
   onAddTask,
@@ -6626,6 +6733,16 @@ function Campanhas({
   usuarios: Vendedor[]
   currentUser: SessaoUsuario
   initialCampanhaId?: string
+  inboxItems: CampanhaInboxItem[]
+  inboxStatusFilter: CampanhaEnvioStatus | 'todos'
+  inboxOwnerFilter: string
+  isLoadingInbox: boolean
+  onInboxStatusFilterChange: (status: CampanhaEnvioStatus | 'todos') => void
+  onInboxOwnerFilterChange: (ownerId: string) => void
+  onOpenInboxClient: (clienteId: string) => Promise<void>
+  onOpenInboxBudget: (item: CampanhaInboxItem) => Promise<void>
+  onCreateInboxTask: (item: CampanhaInboxItem) => Promise<Tarefa>
+  onUpdateInboxStatus: (item: CampanhaInboxItem, status: CampanhaEnvioStatus) => Promise<void>
   onOpenBudgetEditor: (cliente: Cliente, originContext: QuoteOriginContext) => void
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
   onAddTask: (task: TarefaInput) => Promise<Tarefa>
@@ -6686,6 +6803,10 @@ function Campanhas({
   const filteredClientes = campanhaClientes.filter((cliente) => statusFilter === 'todos' || (statuses[cliente.id] ?? 'pendente') === statusFilter)
   const selectableCampaignIds = filteredClientes.filter((cliente) => !campaignContactReadiness(cliente, elegibilidade[cliente.id], numberFromInput(campaignWindowDays) || 7).blocked).map((cliente) => cliente.id)
   const allCampaignRowsSelected = selectableCampaignIds.length > 0 && selectableCampaignIds.every((id) => selectedCampaignClientIds.includes(id))
+  const activePublicoFilterCount = Object.entries(publicoFiltros).filter(([, value]) => {
+    if (value === undefined || value === '' || value === 'todos' || value === false) return false
+    return true
+  }).length
 
   useEffect(() => {
     let cancelled = false
@@ -6770,6 +6891,37 @@ function Campanhas({
 
   function updatePublicoFiltro<K extends keyof CampanhaPublicoFiltros>(key: K, value: CampanhaPublicoFiltros[K]) {
     setPublicoFiltros((current) => ({ ...current, [key]: value || undefined }))
+    setActiveCampanhaId('')
+    setPage(1)
+    setStatusFilter('todos')
+  }
+
+  function applyCampaignPreset(preset: 'sem-cadastro' | 'compradores-produto' | 'regiao' | 'alto-valor') {
+    setActiveCampanhaId('')
+    setStatusFilter('todos')
+    setPage(1)
+    if (preset === 'sem-cadastro') {
+      setSegmentoId('rodobens-pendentes')
+      setPublicoFiltros({ origemBase: 'rodobens', leadQualificacaoStatus: 'novo', somenteComWhatsapp: true })
+      setMensagemModelo(campanhaSegmentos.find((item) => item.id === 'rodobens-pendentes')?.template ?? mensagemModelo)
+      return
+    }
+    if (preset === 'compradores-produto') {
+      setSegmentoId('selecionados')
+      setPublicoFiltros({ somenteComWhatsapp: true })
+      return
+    }
+    if (preset === 'regiao') {
+      setPublicoFiltros((current) => ({ ...current, somenteComWhatsapp: true }))
+      return
+    }
+    setSegmentoId('inativos-90')
+    setPublicoFiltros({ valorMin: 5000, diasSemCompraMin: 90, somenteComWhatsapp: true })
+  }
+
+  function resetCampaignAudience() {
+    setPublicoFiltros({})
+    setQuery('')
     setActiveCampanhaId('')
     setPage(1)
     setStatusFilter('todos')
@@ -7012,8 +7164,8 @@ function Campanhas({
     <section className="panel wide">
       <div className="panel-header">
         <div>
-          <h2>Campanhas WhatsApp</h2>
-          <p>{total} clientes no segmento. Exibindo ate {pageSize} por pagina para nao carregar a base inteira.</p>
+          <h2>Campanhas</h2>
+          <p>Construa o publico, escreva a mensagem e acompanhe respostas no mesmo lugar. {total} clientes no publico atual.</p>
         </div>
         <div className="toolbar-actions">
           <label className="mini-select">
@@ -7062,6 +7214,50 @@ function Campanhas({
         <strong>{segmento.nome}</strong>
         <span>{segmento.descricao}</span>
       </div>
+      <section className="campaign-builder-stage">
+        <div className="campaign-stage-header">
+          <span>1. Mensagem</span>
+          <small>Edite livremente. Variaveis disponiveis: {'{primeiro_nome}'} e {'{nome_vendedor}'}.</small>
+        </div>
+        <label className="campaign-message-editor">
+          Texto que sera enviado no WhatsApp
+          <textarea
+            value={mensagemModelo}
+            onChange={(event) => {
+              setMensagemModelo(event.target.value)
+              setActiveCampanhaId('')
+            }}
+            rows={4}
+          />
+        </label>
+      </section>
+      <section className="campaign-builder-stage">
+        <div className="campaign-stage-header">
+          <span>2. Publico</span>
+          <small>{activePublicoFilterCount} filtros ativos. Use atalhos ou refine pelos campos abaixo.</small>
+        </div>
+        <div className="campaign-preset-grid">
+          <button className="campaign-preset" type="button" onClick={() => applyCampaignPreset('sem-cadastro')}>
+            <strong>Clientes sem cadastro</strong>
+            <small>Listas externas novas, com WhatsApp e ainda nao qualificadas.</small>
+          </button>
+          <button className="campaign-preset" type="button" onClick={() => applyCampaignPreset('compradores-produto')}>
+            <strong>Comprou produto/servico</strong>
+            <small>Use produto, medida, marca ou servico para montar a audiencia.</small>
+          </button>
+          <button className="campaign-preset" type="button" onClick={() => applyCampaignPreset('regiao')}>
+            <strong>Cidade ou regiao</strong>
+            <small>Comece por localidade e refine por vendedor ou historico.</small>
+          </button>
+          <button className="campaign-preset" type="button" onClick={() => applyCampaignPreset('alto-valor')}>
+            <strong>Reativar alto valor</strong>
+            <small>Clientes com historico relevante e mais de 90 dias sem compra.</small>
+          </button>
+        </div>
+        <div className="campaign-audience-toolbar">
+          <span>{total} clientes no publico · pagina {page} de {totalPages}</span>
+          <button className="button" type="button" onClick={resetCampaignAudience}>Limpar publico</button>
+        </div>
       <div className="campaign-filter-grid">
         <label>
           Nome da campanha
@@ -7207,7 +7403,7 @@ function Campanhas({
           >
             <option value="todos">Todas</option>
             <option value="capital_truck">Capital Truck</option>
-            <option value="rodobens">Rodobens</option>
+            <option value="rodobens">Clientes sem cadastro</option>
             <option value="desconhecida">Origem pendente</option>
           </select>
         </label>
@@ -7262,17 +7458,7 @@ function Campanhas({
           Somente com WhatsApp
         </label>
       </div>
-      <label className="campaign-message-editor">
-        Mensagem da campanha
-        <textarea
-          value={mensagemModelo}
-          onChange={(event) => {
-            setMensagemModelo(event.target.value)
-            setActiveCampanhaId('')
-          }}
-          rows={3}
-        />
-      </label>
+      </section>
       <div className="campaign-image-panel">
         <label className="button">
           <FileUp size={16} /> Imagem padrao
@@ -7328,6 +7514,21 @@ function Campanhas({
           <Info label="Opt-out" value={campaignQuality.optOut.toString()} />
         </div>
       </div>
+      <CampanhasInbox
+        embedded
+        items={inboxItems}
+        usuarios={usuarios}
+        currentUser={currentUser}
+        statusFilter={inboxStatusFilter}
+        ownerFilter={inboxOwnerFilter}
+        isLoading={isLoadingInbox}
+        onStatusFilterChange={onInboxStatusFilterChange}
+        onOwnerFilterChange={onInboxOwnerFilterChange}
+        onOpenClient={onOpenInboxClient}
+        onOpenBudget={onOpenInboxBudget}
+        onCreateTask={onCreateInboxTask}
+        onUpdateStatus={onUpdateInboxStatus}
+      />
       {nextClient && (
         <div className="next-campaign-target">
           <span>
@@ -7595,7 +7796,7 @@ function taskSlaExpected(origin: string) {
 function taskOriginSlaLabel(origin: string) {
   if (origin.startsWith('campanha')) return 'Campanha'
   if (origin.startsWith('orcamento')) return 'Orcamento'
-  if (origin.startsWith('rodobens')) return 'Rodobens'
+  if (origin.startsWith('rodobens')) return 'Clientes sem cadastro'
   if (origin.startsWith('oportunidade')) return 'Oportunidade'
   if (origin.startsWith('interacao')) return 'Interacao'
   return 'SLA'
@@ -7606,7 +7807,7 @@ function sellerCriticalOrigin(row?: TarefaSlaVendedorResumo) {
   const origins = [
     { label: 'Campanhas', value: row.campanhasAtrasadas },
     { label: 'Orcamentos', value: row.orcamentosAtrasados },
-    { label: 'Rodobens', value: row.rodobensAtrasados },
+    { label: 'Sem cadastro', value: row.rodobensAtrasados },
     { label: 'Oportunidades', value: row.oportunidadesAtrasadas },
   ].sort((a, b) => b.value - a.value)
   return origins[0]?.value > 0 ? `${origins[0].label}: ${origins[0].value}` : 'Sem origem critica'
@@ -8781,7 +8982,7 @@ function Relatorios({
           </div>
           {funilGerencial.map((row) => (
             <div className="table-row funnel-report" key={row.vendedorId}>
-              <span><strong>{row.vendedorNome}</strong><small>{row.leadsRodobens} Rodobens</small></span>
+              <span><strong>{row.vendedorNome}</strong><small>{row.leadsRodobens} sem cadastro</small></span>
               <span>{row.clientes}</span>
               <span>{row.contatos30d}</span>
               <span>{row.orcamentos30d}</span>
@@ -9152,7 +9353,7 @@ function VendedoresCarteira({
             <span>Clientes</span>
             <span>Sem resp.</span>
             <span>Capital</span>
-            <span>Rodobens</span>
+            <span>Sem cadastro</span>
             <span>Risco</span>
             <span>Comprado</span>
           </div>
@@ -9210,7 +9411,7 @@ function VendedoresCarteira({
             }}>
               <option value="todas">Todas</option>
               <option value="capital_truck">Capital Truck</option>
-              <option value="rodobens">Rodobens</option>
+              <option value="rodobens">Clientes sem cadastro</option>
               <option value="desconhecida">Desconhecida</option>
             </select>
           </label>

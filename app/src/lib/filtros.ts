@@ -4,7 +4,7 @@ import type { CarteiraFiltro, Cliente, Orcamento } from '../types'
 export const carteiraFiltros: Array<{ id: CarteiraFiltro; label: string }> = [
   { id: 'todos', label: 'Todos' },
   { id: 'origem-capital', label: 'Capital Truck' },
-  { id: 'origem-rodobens', label: 'Rodobens' },
+  { id: 'origem-rodobens', label: 'Clientes sem cadastro' },
   { id: 'origem-desconhecida', label: 'Origem pendente' },
   { id: 'acao-hoje', label: 'Acao hoje' },
   { id: 'sem-compra-90', label: '+90 dias sem compra' },

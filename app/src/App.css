@@ -74,7 +74,21 @@
 
 .nav {
   display: grid;
+  gap: 16px;
+}
+
+.nav-section {
+  display: grid;
   gap: 6px;
+}
+
+.nav-section-title {
+  color: #8eb1aa;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  padding: 0 12px;
 }
 
 .nav-item {
@@ -1979,15 +1993,72 @@ h3 {
   display: block;
 }
 
+.campaign-builder-stage {
+  border: 1px solid #e0e6df;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+
+.campaign-stage-header,
+.campaign-audience-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.campaign-stage-header span {
+  color: #17211f;
+  font-weight: 900;
+}
+
+.campaign-stage-header small,
+.campaign-audience-toolbar {
+  color: #64736f;
+  font-size: 12px;
+}
+
+.campaign-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.campaign-preset {
+  display: grid;
+  gap: 5px;
+  min-height: 82px;
+  border: 1px solid #d7e5dc;
+  border-radius: 8px;
+  background: #f8faf7;
+  color: #17211f;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.campaign-preset:hover {
+  background: #eef4f0;
+}
+
+.campaign-preset small {
+  color: #64736f;
+  line-height: 1.35;
+}
+
 .campaign-filter-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
-  border: 1px solid #e0e6df;
+  border: 1px solid #eef1ee;
   border-radius: 8px;
   background: #f8faf7;
   padding: 12px;
-  margin-bottom: 14px;
 }
 
 .campaign-filter-grid label {
@@ -2029,12 +2100,11 @@ h3 {
   color: #52625d;
   font-size: 12px;
   font-weight: 700;
-  margin-bottom: 12px;
 }
 
 .campaign-message-editor textarea {
   width: 100%;
-  min-height: 82px;
+  min-height: 112px;
   resize: vertical;
   border: 1px solid #cfd8d3;
   border-radius: 8px;
@@ -2042,6 +2112,14 @@ h3 {
   color: #17211f;
   line-height: 1.5;
   padding: 10px;
+}
+
+.campaign-inbox-embedded {
+  border: 1px solid #e0e6df;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+  margin-bottom: 14px;
 }
 
 .campaign-image-panel {
@@ -2634,6 +2712,10 @@ h3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .nav-section {
+    align-content: start;
+  }
+
   .client-layout,
   .grid-layout,
   .cockpit-layout,
@@ -2648,6 +2730,7 @@ h3 {
   .conflict-summary,
   .merge-summary,
   .campaign-filter-grid,
+  .campaign-preset-grid,
   .campaign-summary,
   .budget-summary,
   .forecast-summary,
