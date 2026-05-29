@@ -1,6 +1,8 @@
 # Queue macro de evolucao - Capital Truck CRM
 
-Atualizado em: 2026-05-28
+Atualizado em: 2026-05-29
+
+Queue de produto moderna baseada na nova rodada de pesquisa: `QUEUE_CRM_MODERNO_2026.md`.
 
 ## Como usar
 
