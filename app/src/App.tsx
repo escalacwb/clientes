@@ -6647,6 +6647,9 @@ function Campanhas({
 
   async function openCampaignWhatsapp(cliente: Cliente, finalMessage: string) {
     const waUrl = `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(finalMessage)}`
+    const whatsappWindow = window.open('about:blank', '_blank')
+    if (whatsappWindow) whatsappWindow.opener = null
+
     let copiedImage = false
     if (campaignImage) {
       copiedImage = await copyCampaignImageToClipboard(campaignImage)
@@ -6656,7 +6659,40 @@ function Campanhas({
           : 'Nao foi possivel copiar a imagem automaticamente neste navegador. Abra o WhatsApp e copie a imagem manualmente pela previa.',
       )
     }
-    window.open(waUrl, '_blank', 'noopener,noreferrer')
+
+    const currentStatus = statuses[cliente.id] ?? 'pendente'
+    if (currentStatus === 'pendente') {
+      try {
+        const envio = await upsertCampanhaEnvio({
+          campanhaId: activeCampanhaId || segmento.campanhaId,
+          campanhaNome: activeCampanhaId ? saveName || segmento.campanhaNome : segmento.campanhaNome,
+          clienteId: cliente.id,
+          vendedorId: cliente.vendedorId,
+          telefone: cliente.whatsapp,
+          mensagemFinal: finalMessage,
+          status: 'pendente',
+        })
+        await onAddInteraction({
+          clienteId: cliente.id,
+          vendedorId: cliente.vendedorId ?? 'u-1',
+          canal: 'Campanha',
+          tipo: 'campanha',
+          resumo: campaignSummary('pendente', finalMessage),
+          resultado: 'pendente',
+          campanhaId: envio.campanhaId,
+        })
+        setStatuses((current) => ({ ...current, [cliente.id]: 'pendente' }))
+        refreshCampaignResumo().catch(() => undefined)
+      } catch (exception) {
+        setCampaignError(exception instanceof Error ? exception.message : 'WhatsApp aberto, mas nao foi possivel registrar a abertura da campanha.')
+      }
+    }
+
+    if (whatsappWindow) {
+      whatsappWindow.location.href = waUrl
+    } else {
+      window.open(waUrl, '_blank', 'noopener,noreferrer')
+    }
   }
 
   return (
