@@ -717,6 +717,11 @@ function App() {
             cliente={selectedClient}
             catalogo={catalogo}
             onBack={() => setView(quoteSourceView)}
+            onCreateTask={async (task) => {
+              const created = await createTarefa(task)
+              setTarefas((current) => [created, ...current])
+              return created
+            }}
             onCreate={async (orcamento) => {
               const created = await createOrcamento(orcamento, orcamento.itens)
               setOrcamentos((current) => [created, ...current])
@@ -2602,17 +2607,26 @@ function OrcamentoEditor({
   cliente,
   catalogo,
   onBack,
+  onCreateTask,
   onCreate,
 }: {
   cliente: Cliente
   catalogo: CatalogoItem[]
   onBack: () => void
+  onCreateTask: (task: TarefaInput) => Promise<Tarefa>
   onCreate: (orcamento: OrcamentoInput) => Promise<Orcamento>
 }) {
   const [validade, setValidade] = useState(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10))
   const [previsaoFechamento, setPrevisaoFechamento] = useState('')
   const [paymentMode, setPaymentMode] = useState('A vista')
   const [customPayment, setCustomPayment] = useState('')
+  const [paymentAdjustments, setPaymentAdjustments] = useState<Record<string, number>>({
+    'A vista': -3,
+    '30 dias': 0,
+    '30/60 dias': 2,
+    '30/60/90 dias': 4,
+    Cartao: 5,
+  })
   const [observacao, setObservacao] = useState('')
   const [catalogSearch, setCatalogSearch] = useState('')
   const [items, setItems] = useState<OrcamentoItemInput[]>([
@@ -2635,8 +2649,9 @@ function OrcamentoEditor({
     .map((item) => ({ ...item, valorTotal: quoteItemTotal(item) }))
   const total = validItems.reduce((sum, item) => sum + (item.valorTotal ?? 0), 0)
   const formaPagamento = paymentMode === 'Personalizado' ? customPayment : paymentMode
+  const paymentScenarios = quotePaymentScenarios(total, paymentAdjustments)
   const approvalWarnings = quoteApprovalWarnings(validItems, catalogo)
-  const quoteMessage = buildQuoteMessage(cliente, validItems, validade, formaPagamento, observacao)
+  const quoteMessage = buildQuoteMessage(cliente, validItems, validade, formaPagamento, observacao, paymentScenarios)
   const waUrl = cliente.whatsapp && validItems.length > 0
     ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(quoteMessage)}`
     : undefined
@@ -2684,6 +2699,15 @@ function OrcamentoEditor({
         aprovacaoMotivo: needsApproval ? approvalWarnings.join(' ') : undefined,
         observacao,
         itens: validItems,
+      })
+      await onCreateTask({
+        clienteId: cliente.id,
+        vendedorId: cliente.vendedorId,
+        titulo: 'Follow-up do orcamento',
+        descricao: `Retornar proposta ${created.id.slice(0, 8)} de ${money(created.valorTotal)}.`,
+        dataVencimento: previsaoFechamento || new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10),
+        prioridade: needsApproval ? 90 : 80,
+        origem: 'orcamento:followup',
       })
       setFeedback(`Orcamento ${created.id.slice(0, 8)} criado com total de ${money(created.valorTotal)}.`)
     } catch (exception) {
@@ -2792,6 +2816,27 @@ function OrcamentoEditor({
             Observacoes e termos
             <textarea value={observacao} onChange={(event) => setObservacao(event.target.value)} placeholder="Prazos, disponibilidade, condicoes comerciais e observacoes para o cliente." />
           </label>
+          <div className="quote-payment-scenarios">
+            <div>
+              <strong>Condicoes comparativas</strong>
+              <small>Percentual positivo acresce no total; negativo aplica desconto.</small>
+            </div>
+            {paymentScenarios.map((scenario) => (
+              <label key={scenario.label}>
+                <span>{scenario.label}</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={paymentAdjustments[scenario.label] ?? 0}
+                  onChange={(event) => setPaymentAdjustments((current) => ({
+                    ...current,
+                    [scenario.label]: Number(event.target.value),
+                  }))}
+                />
+                <strong>{money(scenario.total)}</strong>
+              </label>
+            ))}
+          </div>
         </section>
         <aside className="quote-summary-panel">
           <div className="info-grid quote-kpis">
@@ -2824,6 +2869,11 @@ function OrcamentoEditor({
               <strong>{money(total)}</strong>
             </div>
             <small>Condicao: {formaPagamento || 'Nao informada'} - Validade: {dateLabel(validade)}</small>
+            <div className="proposal-conditions">
+              {paymentScenarios.map((scenario) => (
+                <span key={scenario.label}>{scenario.label}: {money(scenario.total)}</span>
+              ))}
+            </div>
           </div>
           <label>
             Mensagem WhatsApp
@@ -2857,12 +2907,21 @@ function quoteApprovalWarnings(items: OrcamentoItemInput[], catalogo: CatalogoIt
   })
 }
 
+function quotePaymentScenarios(total: number, adjustments: Record<string, number>) {
+  return Object.entries(adjustments).map(([label, adjustment]) => ({
+    label,
+    adjustment,
+    total: total * (1 + adjustment / 100),
+  }))
+}
+
 function buildQuoteMessage(
   cliente: Cliente,
   itens: OrcamentoItemInput[],
   validade?: string,
   formaPagamento?: string,
   observacao?: string,
+  paymentScenarios: Array<{ label: string; adjustment: number; total: number }> = [],
 ) {
   const lines = [
     `Ola, ${cliente.responsavel ?? cliente.nome}. Segue orcamento Capital Truck Center:`,
@@ -2876,6 +2935,13 @@ function buildQuoteMessage(
   ]
 
   if (formaPagamento?.trim()) lines.push(`Condicao: ${formaPagamento.trim()}`)
+  if (paymentScenarios.length > 0) {
+    lines.push('', 'Condicoes opcionais:')
+    paymentScenarios.forEach((scenario) => {
+      const suffix = scenario.adjustment === 0 ? '' : ` (${scenario.adjustment > 0 ? '+' : ''}${scenario.adjustment}%)`
+      lines.push(`- ${scenario.label}: ${money(scenario.total)}${suffix}`)
+    })
+  }
   if (validade) lines.push(`Validade: ${dateLabel(validade)}`)
   if (observacao?.trim()) lines.push('', observacao.trim())
   lines.push('', 'Posso confirmar disponibilidade e prazo para voce?')

@@ -1004,6 +1004,44 @@ h3 {
   resize: vertical;
 }
 
+.quote-payment-scenarios {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #e0e6df;
+  border-radius: 8px;
+  background: #f8faf7;
+  padding: 12px;
+}
+
+.quote-payment-scenarios > div {
+  display: grid;
+  gap: 3px;
+}
+
+.quote-payment-scenarios small {
+  color: #64736f;
+}
+
+.quote-payment-scenarios label {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 90px minmax(110px, auto);
+  gap: 10px;
+  align-items: center;
+  color: #52625d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.quote-payment-scenarios input {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid #cfd8d3;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #17211f;
+  padding: 0 8px;
+}
+
 .quote-items {
   display: grid;
   gap: 8px;
@@ -1081,6 +1119,16 @@ h3 {
 .proposal-total strong {
   color: #12312f;
   font-size: 18px;
+}
+
+.proposal-conditions {
+  display: grid;
+  gap: 3px;
+  border-top: 1px solid #edf1ee;
+  color: #33413d;
+  font-size: 12px;
+  margin-top: 8px;
+  padding-top: 8px;
 }
 
 .button.primary {
@@ -1889,6 +1937,7 @@ h3 {
   .quote-controls,
   .quote-item-head,
   .quote-item-row,
+  .quote-payment-scenarios label,
   .quote-kpis {
     grid-template-columns: 1fr;
   }

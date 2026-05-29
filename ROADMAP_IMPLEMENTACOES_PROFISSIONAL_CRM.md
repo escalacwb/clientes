@@ -582,6 +582,24 @@ Proximo passo tecnico:
 - Mover a fila inteligente para queries/views no Supabase, para enxergar toda a base sem depender da pagina atual de clientes.
 - Criar visao gerente por vendedor com SLA, atraso e conversao de tarefa em orcamento/venda.
 
+### 2026-05-28 - Orcamento com condicoes e follow-up
+
+Status: concluido.
+
+Entregue:
+- Editor de orcamento passou a calcular condicoes comerciais comparativas: a vista, 30 dias, 30/60, 30/60/90 e cartao.
+- Cada condicao permite ajuste percentual proprio, positivo ou negativo.
+- Preview da proposta e mensagem WhatsApp mostram os valores por prazo.
+- Ao criar um orcamento, o sistema cria automaticamente uma tarefa de follow-up.
+- Follow-up usa a previsao de fechamento quando informada, ou D+2 como padrao.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Persistir versoes de proposta e condicoes comerciais estruturadas em tabela propria.
+- Criar acao "Criar e enviar" para marcar status `enviado` e gerar follow-up de envio.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:
