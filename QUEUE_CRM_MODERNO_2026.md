@@ -221,6 +221,8 @@ Ja entregue:
 - Campanhas agora calculam qualidade do publico por pagina: bloqueados, sem WhatsApp e opt-out.
 - Envio e selecao em lote bloqueiam clientes sem WhatsApp, `Nao contatar` ou com contato recente.
 - Proximo contato sugerido ignora clientes bloqueados por regra comercial.
+- Criada view `vw_clientes_campanha_elegibilidade` para expor `elegivel`, motivo do bloqueio, ultimo acionamento e proximo envio permitido.
+- A tela de Campanhas passou a consumir essa elegibilidade do banco quando disponivel, mantendo fallback local.
 
 Pronto quando:
 - O sistema impede campanha indevida antes de abrir WhatsApp.

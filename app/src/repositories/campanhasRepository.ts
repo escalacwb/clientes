@@ -78,6 +78,14 @@ export type CampanhaInboxItem = CampanhaEnvio & {
   clienteUf?: string
 }
 
+export type CampanhaElegibilidade = {
+  clienteId: string
+  elegivel: boolean
+  motivoBloqueio: string
+  ultimoAcionamento?: string
+  proximoEnvioEm?: string
+}
+
 type CampanhaEnvioRow = {
   id: string
   campanha_id: string
@@ -137,6 +145,14 @@ type CampanhaResumoRow = {
   custo_estimado: number
   meta_receita: number
   roi_percent: number
+}
+
+type CampanhaElegibilidadeRow = {
+  cliente_id: string
+  elegivel: boolean
+  motivo_bloqueio: string
+  ultimo_acionamento: string | null
+  proximo_envio_em: string | null
 }
 
 export const campanhaSegmentos: CampanhaSegmento[] = [
@@ -199,7 +215,7 @@ export async function listCampanhaSegmento(input: {
   campanhaId?: string
   campanhaNome?: string
   clienteIds?: string[]
-}): Promise<{ clientes: Cliente[]; total: number; statuses: Record<string, CampanhaEnvioStatus> }> {
+}): Promise<{ clientes: Cliente[]; total: number; statuses: Record<string, CampanhaEnvioStatus>; elegibilidade: Record<string, CampanhaElegibilidade> }> {
   const segmento = campanhaSegmentos.find((item) => item.id === input.segmentoId) ?? campanhaSegmentos[0]
   const clienteIds = await resolveCampaignClienteIds(input.filtros, input.clienteIds)
   const commonFilters = {
@@ -239,12 +255,15 @@ export async function listCampanhaSegmento(input: {
           ...commonFilters,
         })
 
-  return {
-    ...result,
-    statuses: input.campanhaId
-      ? await listCampanhaStatusesById(input.campanhaId, result.clientes.map((cliente) => cliente.id))
-      : await listCampanhaStatuses(input.campanhaNome ?? segmento.campanhaNome, result.clientes.map((cliente) => cliente.id)),
-  }
+  const resultClienteIds = result.clientes.map((cliente) => cliente.id)
+  const [statuses, elegibilidade] = await Promise.all([
+    input.campanhaId
+      ? listCampanhaStatusesById(input.campanhaId, resultClienteIds)
+      : listCampanhaStatuses(input.campanhaNome ?? segmento.campanhaNome, resultClienteIds),
+    listCampanhaElegibilidade(resultClienteIds),
+  ])
+
+  return { ...result, statuses, elegibilidade }
 }
 
 export async function listCampanhasSalvas(): Promise<CampanhaSalva[]> {
@@ -404,6 +423,31 @@ export async function listCampanhaInbox(input: {
   if (error) throw error
 
   return (data ?? []).map((row) => mapInboxItem(row as CampanhaEnvioRow))
+}
+
+export async function listCampanhaElegibilidade(clienteIds: string[]): Promise<Record<string, CampanhaElegibilidade>> {
+  if (clienteIds.length === 0) return {}
+  const supabase = await getSupabase()
+  if (!supabase) return {}
+
+  const { data, error } = await supabase
+    .from('vw_clientes_campanha_elegibilidade')
+    .select('cliente_id,elegivel,motivo_bloqueio,ultimo_acionamento,proximo_envio_em')
+    .in('cliente_id', clienteIds)
+
+  if (error) return {}
+
+  return (data ?? []).reduce<Record<string, CampanhaElegibilidade>>((acc, row) => {
+    const item = row as CampanhaElegibilidadeRow
+    acc[item.cliente_id] = {
+      clienteId: item.cliente_id,
+      elegivel: item.elegivel,
+      motivoBloqueio: item.motivo_bloqueio,
+      ultimoAcionamento: item.ultimo_acionamento ?? undefined,
+      proximoEnvioEm: item.proximo_envio_em ?? undefined,
+    }
+    return acc
+  }, {})
 }
 
 async function listCampanhasResumoFallback(): Promise<CampanhaResumo[]> {

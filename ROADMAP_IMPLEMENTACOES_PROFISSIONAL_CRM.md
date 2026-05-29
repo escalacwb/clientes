@@ -224,6 +224,7 @@ Prioridade: alta.
    - Evitar duplicidade dentro da mesma campanha.
    - Janela minima entre campanhas.
    - Primeira trava visual entregue: sem WhatsApp, nao contatar e contato recente ficam bloqueados antes do WA.ME.
+   - Elegibilidade no banco entregue em `vw_clientes_campanha_elegibilidade`, com motivo do bloqueio e proximo envio permitido.
 
 4. Relatorio de campanha.
    - Alcance.
@@ -1490,6 +1491,24 @@ Validacao:
 
 Proximo passo tecnico:
 - Criar view de elegibilidade de campanha por cliente com motivo de bloqueio, janela minima configuravel e opt-out auditavel.
+
+### 2026-05-29 - Elegibilidade de campanha no banco
+
+Status: concluido - primeira entrega do M08.
+
+Entregue:
+- Criada view `vw_clientes_campanha_elegibilidade` com `elegivel`, `motivo_bloqueio`, ultimo contato/campanha e proximo envio permitido.
+- Regras cobertas: cliente/lead marcado como nao contatar, ausencia de WhatsApp e contato ou campanha recente nos ultimos 7 dias.
+- Repository de campanhas passou a carregar elegibilidade para os clientes da pagina.
+- Tela de Campanhas usa a elegibilidade do banco para bloquear selecao/envio e mantem fallback local quando a view nao estiver disponivel.
+
+Validacao:
+- SQL aplicado no Supabase com `node scripts/run-sql-file.mjs supabase/queries/campanha_elegibilidade.sql`.
+- Build passou com `npm run build`.
+- Playwright local confirmou Campanhas carregando sem erro na chamada da view de elegibilidade.
+
+Proximo passo tecnico:
+- Transformar a janela de 7 dias em configuracao de campanha/regra e criar opt-out auditavel com motivo, data e usuario.
 
 ## Criterio de qualidade
 

@@ -62,6 +62,7 @@ import {
   listCampanhasResumo,
   listCampanhasSalvas,
   upsertCampanhaEnvio,
+  type CampanhaElegibilidade,
   type CampanhaPublicoFiltros,
   type CampanhaInboxItem,
   type CampanhaResumo,
@@ -6346,6 +6347,7 @@ function Campanhas({
   const [isSaving, setIsSaving] = useState(false)
   const [publicoFiltros, setPublicoFiltros] = useState<CampanhaPublicoFiltros>({})
   const [statuses, setStatuses] = useState<Record<string, CampanhaEnvioStatus>>({})
+  const [elegibilidade, setElegibilidade] = useState<Record<string, CampanhaElegibilidade>>({})
   const [statusFilter, setStatusFilter] = useState<CampanhaEnvioStatus | 'todos'>('todos')
   const [campaignError, setCampaignError] = useState('')
   const [selectedCampaignClientIds, setSelectedCampaignClientIds] = useState<string[]>([])
@@ -6358,7 +6360,7 @@ function Campanhas({
   const campanhaClientes = clientes
   const campaignQuality = campanhaClientes.reduce(
     (acc, cliente) => {
-      const readiness = campaignContactReadiness(cliente)
+      const readiness = campaignContactReadiness(cliente, elegibilidade[cliente.id])
       if (readiness.blocked) acc.bloqueados += 1
       if (!cliente.whatsapp) acc.semWhatsapp += 1
       if (cliente.status === 'Nao contatar' || cliente.leadQualificacaoStatus === 'nao_contatar') acc.optOut += 1
@@ -6367,7 +6369,7 @@ function Campanhas({
     { bloqueados: 0, semWhatsapp: 0, optOut: 0 },
   )
   const nextClient = campanhaClientes
-    .filter((cliente) => (statuses[cliente.id] ?? 'pendente') === 'pendente' && !campaignContactReadiness(cliente).blocked)
+    .filter((cliente) => (statuses[cliente.id] ?? 'pendente') === 'pendente' && !campaignContactReadiness(cliente, elegibilidade[cliente.id]).blocked)
     .sort((a, b) => (b.totalComprado + b.totalServicos) - (a.totalComprado + a.totalServicos))[0]
   const campaignCounts = campanhaClientes.reduce<Record<CampanhaEnvioStatus, number>>(
     (acc, cliente) => {
@@ -6378,7 +6380,7 @@ function Campanhas({
     { pendente: 0, enviado: 0, respondeu: 0, nao_respondeu: 0, virou_orcamento: 0, ganhou: 0, perdido: 0, nao_contatar: 0 },
   )
   const filteredClientes = campanhaClientes.filter((cliente) => statusFilter === 'todos' || (statuses[cliente.id] ?? 'pendente') === statusFilter)
-  const selectableCampaignIds = filteredClientes.filter((cliente) => !campaignContactReadiness(cliente).blocked).map((cliente) => cliente.id)
+  const selectableCampaignIds = filteredClientes.filter((cliente) => !campaignContactReadiness(cliente, elegibilidade[cliente.id]).blocked).map((cliente) => cliente.id)
   const allCampaignRowsSelected = selectableCampaignIds.length > 0 && selectableCampaignIds.every((id) => selectedCampaignClientIds.includes(id))
 
   useEffect(() => {
@@ -6401,6 +6403,7 @@ function Campanhas({
         setClientes(result.clientes)
         setTotal(result.total)
         setStatuses(result.statuses)
+        setElegibilidade(result.elegibilidade)
       })
       .catch((exception) => {
         if (cancelled) return
@@ -6408,6 +6411,7 @@ function Campanhas({
         setClientes([])
         setTotal(0)
         setStatuses({})
+        setElegibilidade({})
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false)
@@ -6989,7 +6993,7 @@ function Campanhas({
         {filteredClientes.map((cliente) => {
           const finalMessage = messageFor(cliente)
           const waUrl = `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(finalMessage)}`
-          const readiness = campaignContactReadiness(cliente)
+          const readiness = campaignContactReadiness(cliente, elegibilidade[cliente.id])
 
           return (
             <div className="table-row campaign campaign-bulk-row" key={cliente.id}>
@@ -7111,7 +7115,13 @@ function campaignTaskPriority(status: CampanhaEnvioStatus) {
   return 50
 }
 
-function campaignContactReadiness(cliente: Cliente) {
+function campaignContactReadiness(cliente: Cliente, elegibilidade?: CampanhaElegibilidade) {
+  if (elegibilidade) {
+    return {
+      blocked: !elegibilidade.elegivel,
+      reason: elegibilidade.motivoBloqueio,
+    }
+  }
   if (cliente.status === 'Nao contatar' || cliente.leadQualificacaoStatus === 'nao_contatar') {
     return { blocked: true, reason: 'Nao contatar' }
   }

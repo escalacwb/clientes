@@ -50,9 +50,9 @@ Entregue nesta rodada:
 - Segmentacao combinavel em campanhas por cidade, UF, vendedor, origem Capital/Rodobens, produto/servico comprado, dias sem compra, dias sem contato, valor historico minimo e somente com WhatsApp.
 - Campanhas salvas preservam os filtros avancados no `filtro_usado`, permitindo reabrir o mesmo publico sem remontar manualmente.
 - Segmentacao passou a cruzar vendedor historico, status de lead, medida, placa/veiculo e faixa de KM com vendas, servicos e cadastro de veiculos.
+- Criada view `vw_clientes_campanha_elegibilidade` para centralizar bloqueios de campanha por nao contatar, falta de WhatsApp e contato recente.
 
 Proximos pontos:
-- View de elegibilidade de campanha por cliente, com motivo do bloqueio.
 - Janela configuravel entre campanhas por cliente.
 - Opt-out com motivo, data e usuario.
 - Inbox dedicado de respostas com status de trabalho: respondeu, pediu preco, pediu retorno, virou orcamento, ganho, perdido.
