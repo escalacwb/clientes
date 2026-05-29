@@ -258,6 +258,7 @@ function App() {
   const [oportunidadesResumo, setOportunidadesResumo] = useState<OportunidadeResumo[]>([])
   const [oportunidadesPage, setOportunidadesPage] = useState(1)
   const [oportunidadesFilter, setOportunidadesFilter] = useState<OportunidadeFilter>('ativas')
+  const [oportunidadesTipoFilter, setOportunidadesTipoFilter] = useState('todos')
   const [vendasItens, setVendasItens] = useState<VendaItem[]>(isSupabaseConfigured ? [] : seedVendasItens)
   const [servicosItens, setServicosItens] = useState<ServicoItem[]>(isSupabaseConfigured ? [] : seedServicosItens)
   const [clienteVeiculos, setClienteVeiculos] = useState<ClienteVeiculoResumo[]>([])
@@ -573,6 +574,7 @@ function App() {
             page: oportunidadesPage,
             pageSize: 50,
             filter: oportunidadesFilter,
+            tipo: oportunidadesTipoFilter,
             vendedorId,
           }),
           listOportunidadesResumo(vendedorId),
@@ -594,7 +596,7 @@ function App() {
     return () => {
       isMounted = false
     }
-  }, [isCheckingSession, oportunidadesFilter, oportunidadesPage, session, view])
+  }, [isCheckingSession, oportunidadesFilter, oportunidadesPage, oportunidadesTipoFilter, session, view])
 
   useEffect(() => {
     let isMounted = true
@@ -1152,10 +1154,15 @@ function App() {
             pageSize={50}
             total={visibleOportunidadesTotal}
             filter={oportunidadesFilter}
+            tipoFilter={oportunidadesTipoFilter}
             isLoading={isLoadingOportunidades}
             onPageChange={setOportunidadesPage}
             onFilterChange={(filter) => {
               setOportunidadesFilter(filter)
+              setOportunidadesPage(1)
+            }}
+            onTipoFilterChange={(tipo) => {
+              setOportunidadesTipoFilter(tipo)
               setOportunidadesPage(1)
             }}
             onCreateTask={async (oportunidade) => {
@@ -2079,9 +2086,11 @@ function Oportunidades({
   pageSize,
   total,
   filter,
+  tipoFilter,
   isLoading,
   onPageChange,
   onFilterChange,
+  onTipoFilterChange,
   onCreateTask,
 }: {
   oportunidades: Oportunidade[]
@@ -2090,9 +2099,11 @@ function Oportunidades({
   pageSize: number
   total: number
   filter: OportunidadeFilter
+  tipoFilter: string
   isLoading: boolean
   onPageChange: (page: number) => void
   onFilterChange: (filter: OportunidadeFilter) => void
+  onTipoFilterChange: (tipo: string) => void
   onCreateTask: (oportunidade: Oportunidade) => Promise<Tarefa>
 }) {
   const [createdTasks, setCreatedTasks] = useState<string[]>([])
@@ -2120,6 +2131,17 @@ function Oportunidades({
           <button className={filter === 'todas' ? 'active' : ''} type="button" onClick={() => onFilterChange('todas')}>Todas</button>
         </div>
       </div>
+      <div className="filter-row compact-filter-row">
+        <label>
+          Tipo de oportunidade
+          <select value={tipoFilter} onChange={(event) => onTipoFilterChange(event.target.value)}>
+            <option value="todos">Todos os tipos</option>
+            {resumo.map((item) => (
+              <option value={item.tipo} key={item.tipo}>{opportunityTypeLabel(item.tipo)}</option>
+            ))}
+          </select>
+        </label>
+      </div>
       {error && <div className="alert">{error}</div>}
       <div className="opportunity-summary-strip">
         <div className="opportunity-summary-card">
@@ -2132,7 +2154,7 @@ function Oportunidades({
             className="opportunity-summary-card"
             type="button"
             key={item.tipo}
-            onClick={() => onFilterChange(item.ativas > 0 ? 'ativas' : 'todas')}
+            onClick={() => onTipoFilterChange(item.tipo)}
           >
             <strong>{item.ativas}</strong>
             <span>{opportunityTypeLabel(item.tipo)}</span>

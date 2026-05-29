@@ -59,6 +59,7 @@ Sintoma:
 Acao recomendada:
 - Adicionados cards de resumo por tipo usando view agregada.
 - Listagem passou a usar contagem planejada.
+- Adicionado filtro por tipo de oportunidade.
 - Ainda falta materializar/otimizar a view para reduzir o tempo de primeira resposta.
 
 ### A5 - William entra mas nao ve carteira

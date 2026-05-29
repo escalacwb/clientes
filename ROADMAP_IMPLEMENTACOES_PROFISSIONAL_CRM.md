@@ -1139,11 +1139,12 @@ Entregue:
 - Tela de Usuarios passou a usar agregados reais de `vendedoresResumo` para total de carteira e risco.
 - Criada view `vw_oportunidades_resumo` com totais, ativas, bloqueadas e prioridade por tipo.
 - Tela de Oportunidades ganhou cards de resumo por tipo e usa contagem planejada na listagem paginada.
+- Oportunidades agora podem ser filtradas por tipo: sem vendedor, recompra, risco, sem WhatsApp, Rodobens, orcamento etc.
 
 Validacao:
 - SQL aplicado com `node scripts/run-sql-file.mjs supabase/queries/oportunidades_resumo.sql`.
 - Build passou com `npm run build`.
-- Playwright validou que erro de Orcamentos nao vaza para Catalogo, Usuarios mostra Mateus com 652 clientes e Oportunidades carrega 50 linhas com cards de resumo.
+- Playwright validou que erro de Orcamentos nao vaza para Catalogo, Usuarios mostra Mateus com 652 clientes e Oportunidades carrega 50 linhas com cards/filtro por tipo.
 
 Proximo passo tecnico:
 - Materializar ou otimizar a view de oportunidades para reduzir o tempo de primeira resposta e criar filtros por tipo de oportunidade.

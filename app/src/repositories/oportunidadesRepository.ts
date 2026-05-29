@@ -63,6 +63,7 @@ export async function listOportunidadesPage(input: {
   page: number
   pageSize: number
   filter: OportunidadeFilter
+  tipo?: string
   vendedorId?: string
 }): Promise<{ oportunidades: Oportunidade[]; total: number }> {
   const supabase = await getSupabase()
@@ -82,6 +83,7 @@ export async function listOportunidadesPage(input: {
   if (input.filter === 'bloqueadas') {
     query = query.or('bloqueada.eq.true,tarefa_existente.eq.true')
   }
+  if (input.tipo && input.tipo !== 'todos') query = query.eq('tipo', input.tipo)
   if (input.vendedorId) query = query.eq('vendedor_id', input.vendedorId)
 
   const { data, error, count } = await query
