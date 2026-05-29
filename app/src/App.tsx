@@ -5379,6 +5379,7 @@ function OrcamentoEditor({
   const [copyFeedback, setCopyFeedback] = useState('')
   const [catalogSuggestions, setCatalogSuggestions] = useState<CatalogoSugestao[]>([])
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
+  const proposalPreviewRef = useRef<HTMLDivElement | null>(null)
 
   const catalogQuickResults = catalogo
     .filter((item) => {
@@ -5512,8 +5513,8 @@ function OrcamentoEditor({
         </div>
         <div className="toolbar-actions">
           <button className="button" type="button" onClick={onBack}>Voltar</button>
-          <button className="button" type="button" onClick={() => printQuotePdf(cliente.nome)}>
-            Imprimir/PDF
+          <button className="button" type="button" onClick={() => void downloadQuotePdf(proposalPreviewRef.current, cliente.nome)}>
+            Baixar PDF
           </button>
           <a className={!waUrl ? 'button disabled' : 'button'} href={waUrl} target="_blank" rel="noreferrer">
             <MessageCircle size={16} /> Abrir WA.ME
@@ -5672,7 +5673,7 @@ function OrcamentoEditor({
             <Info label="Catalogo" value={catalogo.length.toString()} />
             <Info label="Aprovacao" value={approvalWarnings.length > 0 ? 'Necessaria' : 'Dentro do limite'} />
           </div>
-          <div className="proposal-preview">
+          <div className="proposal-preview" ref={proposalPreviewRef}>
             <QuoteProposalPreview
               cliente={cliente}
               itens={validItems}
@@ -6020,25 +6021,48 @@ function quotePdfDatePart(date?: string) {
   return new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')
 }
 
-function printQuotePdf(clienteNome: string, date?: string) {
-  const previousTitle = document.title
-  const printTitle = quotePdfFileName(clienteNome, date)
-  document.title = printTitle
-  document.querySelector('title')?.replaceChildren(document.createTextNode(printTitle))
-  let restored = false
-  const restoreTitle = () => {
-    if (restored) return
-    restored = true
-    window.setTimeout(() => {
-      document.title = previousTitle
-      document.querySelector('title')?.replaceChildren(document.createTextNode(previousTitle))
-    }, 8000)
+async function downloadQuotePdf(element: HTMLElement | null, clienteNome: string, date?: string) {
+  if (!element) return
+  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+    import('html2canvas'),
+    import('jspdf'),
+  ])
+  const canvas = await html2canvas(element, {
+    backgroundColor: '#ffffff',
+    scale: Math.min(window.devicePixelRatio || 1, 2),
+    useCORS: true,
+  })
+  const pdf = new jsPDF('p', 'mm', 'a4')
+  const pageWidth = pdf.internal.pageSize.getWidth()
+  const pageHeight = pdf.internal.pageSize.getHeight()
+  const margin = 10
+  const contentWidth = pageWidth - margin * 2
+  const contentHeight = pageHeight - margin * 2
+  const imageWidth = contentWidth
+  const imageHeight = (canvas.height * imageWidth) / canvas.width
+  const pageCanvasHeight = Math.floor((contentHeight * canvas.width) / imageWidth)
+  let sourceY = 0
+  let pageIndex = 0
+
+  while (sourceY < canvas.height) {
+    const sliceHeight = Math.min(pageCanvasHeight, canvas.height - sourceY)
+    const pageCanvas = document.createElement('canvas')
+    pageCanvas.width = canvas.width
+    pageCanvas.height = sliceHeight
+    const context = pageCanvas.getContext('2d')
+    if (!context) break
+    context.drawImage(canvas, 0, sourceY, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight)
+    if (pageIndex > 0) pdf.addPage()
+    const sliceImageHeight = (sliceHeight * imageWidth) / canvas.width
+    pdf.addImage(pageCanvas.toDataURL('image/png'), 'PNG', margin, margin, imageWidth, Math.min(sliceImageHeight, contentHeight))
+    sourceY += sliceHeight
+    pageIndex += 1
   }
-  window.addEventListener('afterprint', restoreTitle, { once: true })
-  window.setTimeout(() => {
-    window.print()
-    window.setTimeout(restoreTitle, 15000)
-  }, 150)
+
+  if (imageHeight <= contentHeight && pageIndex === 0) {
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', margin, margin, imageWidth, imageHeight)
+  }
+  pdf.save(`${quotePdfFileName(clienteNome, date)}.pdf`)
 }
 
 function groupQuoteItemsForMessage(itens: OrcamentoItemInput[]) {
@@ -9443,6 +9467,7 @@ function OrcamentoWorkspace({
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [error, setError] = useState('')
+  const proposalPreviewRef = useRef<HTMLDivElement | null>(null)
   const validItems = (orcamento.itens ?? []).map((item) => ({ ...item, valorTotal: item.valorTotal ?? quoteItemTotal(item) }))
   const scenarios = quoteScenariosFromBudget(orcamento)
   const message = buildQuoteMessage(cliente, validItems, orcamento.validade, orcamento.observacao, scenarios)
@@ -9493,6 +9518,17 @@ function OrcamentoWorkspace({
     setFeedback('Mensagem copiada.')
   }
 
+  function downloadCurrentPdf() {
+    if (activeTab !== 'resumo' || !proposalPreviewRef.current) {
+      setActiveTab('resumo')
+      window.setTimeout(() => {
+        void downloadQuotePdf(proposalPreviewRef.current, cliente.nome, orcamento.data)
+      }, 100)
+      return
+    }
+    void downloadQuotePdf(proposalPreviewRef.current, cliente.nome, orcamento.data)
+  }
+
   return (
     <section className="quote-workspace">
       <section className={isExpired ? 'panel wide quote-workspace-hero expired-budget' : 'panel wide quote-workspace-hero'}>
@@ -9503,7 +9539,7 @@ function OrcamentoWorkspace({
         </div>
         <div className="toolbar-actions">
           <button className="button" type="button" onClick={onBack}>Voltar</button>
-          <button className="button" type="button" onClick={() => printQuotePdf(cliente.nome, orcamento.data)}>Imprimir/PDF</button>
+          <button className="button" type="button" onClick={downloadCurrentPdf}>Baixar PDF</button>
           <a className={!waUrl ? 'button disabled' : 'button primary'} href={waUrl} target="_blank" rel="noreferrer">
             <MessageCircle size={16} /> Enviar WA.ME
           </a>
@@ -9575,7 +9611,7 @@ function OrcamentoWorkspace({
 
         {activeTab === 'resumo' && (
           <div className="quote-workspace-grid">
-            <div className="proposal-preview">
+            <div className="proposal-preview" ref={proposalPreviewRef}>
               <QuoteProposalPreview
                 cliente={cliente}
                 itens={validItems}
