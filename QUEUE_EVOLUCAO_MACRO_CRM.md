@@ -211,9 +211,9 @@ Ja entregue:
 - Busca por codigo, medida, marca, grupo, tipo e status.
 - Paginacao no Supabase para consultar catalogo sem carregar tudo na tela.
 - Exibicao de preco atual, desconto maximo e estoque quando disponiveis.
+- Historico de vigencia/precos por item, com origem da importacao quando disponivel.
 
 Proximas entregas:
-- Vigencia de preco.
 - Produtos/servicos inativos.
 - Sugestoes complementares.
 

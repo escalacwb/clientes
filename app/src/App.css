@@ -645,13 +645,21 @@ h3 {
 }
 
 .catalog-row {
-  grid-template-columns: 120px minmax(260px, 1.7fr) 90px minmax(150px, 0.9fr) 110px 140px;
+  grid-template-columns: 120px minmax(240px, 1.6fr) 90px minmax(140px, 0.8fr) 100px 130px 94px;
 }
 
 .catalog-row small {
   display: block;
   color: #66736f;
   margin-top: 2px;
+}
+
+.catalog-history {
+  margin-top: 16px;
+}
+
+.catalog-price-row {
+  grid-template-columns: 130px 120px 120px 120px minmax(220px, 1fr);
 }
 
 .table-row.blocked {

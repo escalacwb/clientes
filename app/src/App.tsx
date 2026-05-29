@@ -65,7 +65,7 @@ import {
   type CampanhaSegmentoId,
   attributeCampanhaRevenueByOrcamento,
 } from './repositories/campanhasRepository'
-import { listCatalogoItens, listCatalogoPage, type CatalogoTipoFilter } from './repositories/catalogoRepository'
+import { listCatalogoItens, listCatalogoPage, listCatalogoPrecos, type CatalogoPrecoHistorico, type CatalogoTipoFilter } from './repositories/catalogoRepository'
 import { assignClientesVendedorByFilter, listVendedoresHistoricosResumo, type ClientePageFilters, type VendedorHistoricoResumo } from './repositories/clientesRepository'
 import { assignClienteVendedor } from './repositories/clientesRepository'
 import { listClientesPage } from './repositories/clientesRepository'
@@ -2011,6 +2011,24 @@ function Catalogo({
   const produtos = itens.filter((item) => item.tipo === 'produto').length
   const servicos = itens.filter((item) => item.tipo === 'servico').length
   const semPreco = itens.filter((item) => item.preco <= 0).length
+  const [selectedItem, setSelectedItem] = useState<CatalogoItem | undefined>()
+  const [priceHistory, setPriceHistory] = useState<CatalogoPrecoHistorico[]>([])
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [historyError, setHistoryError] = useState('')
+
+  async function openPriceHistory(item: CatalogoItem) {
+    setSelectedItem(item)
+    setIsLoadingHistory(true)
+    setHistoryError('')
+    try {
+      setPriceHistory(await listCatalogoPrecos(item.id))
+    } catch (exception) {
+      setHistoryError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar historico de precos.')
+      setPriceHistory([])
+    } finally {
+      setIsLoadingHistory(false)
+    }
+  }
 
   return (
     <section className="panel wide">
@@ -2049,6 +2067,7 @@ function Catalogo({
           <span>Marca/grupo</span>
           <span>Preco</span>
           <span>Regra</span>
+          <span>Acoes</span>
         </div>
         {itens.map((item) => (
           <div className="table-row catalog-row" key={item.id}>
@@ -2061,6 +2080,7 @@ function Catalogo({
               {item.descontoMaximo !== undefined ? `Desc. max ${item.descontoMaximo}%` : 'Sem limite'}
               <small>{item.estoque !== undefined ? `Estoque ${item.estoque}` : 'Sem estoque'}</small>
             </span>
+            <button className="button compact-button" type="button" onClick={() => openPriceHistory(item)}>Historico</button>
           </div>
         ))}
         {!isLoading && itens.length === 0 && <div className="empty-state">Nenhum item encontrado no catalogo.</div>}
@@ -2071,6 +2091,39 @@ function Catalogo({
         <span>Pagina {page} de {totalPages} - {total} itens</span>
         <button className="button" type="button" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>Proxima</button>
       </div>
+
+      {selectedItem && (
+        <section className="panel catalog-history">
+          <div className="panel-header">
+            <div>
+              <h2>Historico de preco</h2>
+              <p>{selectedItem.codigo} - {selectedItem.descricao}</p>
+            </div>
+            <button className="button" type="button" onClick={() => setSelectedItem(undefined)}>Fechar</button>
+          </div>
+          {historyError && <div className="alert">{historyError}</div>}
+          {isLoadingHistory && <div className="empty-state">Carregando historico...</div>}
+          <div className="table">
+            <div className="table-head catalog-price-row">
+              <span>Vigencia</span>
+              <span>Preco</span>
+              <span>Desconto</span>
+              <span>Estoque</span>
+              <span>Origem</span>
+            </div>
+            {priceHistory.map((preco) => (
+              <div className="table-row catalog-price-row" key={preco.id}>
+                <span>{dateLabel(preco.vigenciaInicio)}</span>
+                <strong>{money(preco.valor)}</strong>
+                <span>{preco.descontoMaximo !== undefined ? `${preco.descontoMaximo}%` : 'Sem limite'}</span>
+                <span>{preco.estoque !== undefined ? preco.estoque : 'Sem estoque'}</span>
+                <span>{preco.arquivoNome || dateLabel(preco.criadoEm) || 'Sem origem'}</span>
+              </div>
+            ))}
+            {!isLoadingHistory && priceHistory.length === 0 && <div className="empty-state">Nenhum historico de preco encontrado.</div>}
+          </div>
+        </section>
+      )}
     </section>
   )
 }

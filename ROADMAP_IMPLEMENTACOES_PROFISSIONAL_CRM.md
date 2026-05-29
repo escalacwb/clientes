@@ -939,6 +939,21 @@ Validacao:
 Proximo passo tecnico:
 - Adicionar historico de vigencia de preco e itens inativos, preparando revisao de mudancas de tabela.
 
+### 2026-05-28 - Historico de preco no catalogo
+
+Status: concluido.
+
+Entregue:
+- Cada item do catalogo ganhou acao `Historico`.
+- O historico consulta `catalogo_precos` sob demanda, sem carregar todos os precos.
+- A tabela mostra vigencia, preco, desconto maximo, estoque e arquivo/importacao de origem quando houver.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Exibir produtos/servicos inativos e criar indicador de mudanca de preco entre importacoes.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

@@ -13,14 +13,29 @@ type CatalogoRow = {
 }
 
 type PrecoRow = {
+  id?: string
   catalogo_item_id: string
   valor: number
   desconto_maximo: number | null
   estoque: number | null
   vigencia_inicio: string
+  criado_em?: string | null
+  importacao_arquivo_id?: string | null
+  importacao_arquivos?: { arquivo_nome: string | null } | Array<{ arquivo_nome: string | null }> | null
 }
 
 export type CatalogoTipoFilter = 'todos' | CatalogoItem['tipo']
+
+export type CatalogoPrecoHistorico = {
+  id: string
+  catalogoItemId: string
+  valor: number
+  descontoMaximo?: number
+  estoque?: number
+  vigenciaInicio: string
+  criadoEm?: string
+  arquivoNome?: string
+}
 
 export async function listCatalogoItens(): Promise<CatalogoItem[]> {
   const supabase = await getSupabase()
@@ -101,6 +116,33 @@ export async function listCatalogoPage(input: {
     itens: rows.map((item) => mapCatalogoItem(item, prices.get(item.id))),
     total: count ?? 0,
   }
+}
+
+export async function listCatalogoPrecos(catalogoItemId: string): Promise<CatalogoPrecoHistorico[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('catalogo_precos')
+    .select('id,catalogo_item_id,valor,desconto_maximo,estoque,vigencia_inicio,criado_em,importacao_arquivo_id,importacao_arquivos(arquivo_nome)')
+    .eq('catalogo_item_id', catalogoItemId)
+    .order('vigencia_inicio', { ascending: false })
+    .order('criado_em', { ascending: false })
+    .limit(20)
+
+  if (error) throw error
+  return (data as PrecoRow[] | null ?? []).map((preco) => ({
+    id: preco.id ?? `${preco.catalogo_item_id}-${preco.vigencia_inicio}-${preco.valor}`,
+    catalogoItemId: preco.catalogo_item_id,
+    valor: preco.valor,
+    descontoMaximo: preco.desconto_maximo ?? undefined,
+    estoque: preco.estoque ?? undefined,
+    vigenciaInicio: preco.vigencia_inicio,
+    criadoEm: preco.criado_em ?? undefined,
+    arquivoNome: Array.isArray(preco.importacao_arquivos)
+      ? preco.importacao_arquivos[0]?.arquivo_nome ?? undefined
+      : preco.importacao_arquivos?.arquivo_nome ?? undefined,
+  }))
 }
 
 async function listLatestPrices(itemIds: string[]) {
