@@ -60,6 +60,10 @@ export type ImportacaoArquivoResumo = {
 export type ImportacaoQualidadeResumo = {
   ultimaImportacaoEm?: string
   ultimaImportacaoStatus?: Importacao['status']
+  oportunidadesAtualizadoEm?: string
+  oportunidadesTotal: number
+  oportunidadesAtivas: number
+  oportunidadesDesatualizadas: boolean
   clientesSemWhatsapp: number
   clientesSemVendedor: number
   clientesOrigemDesconhecida: number
@@ -175,6 +179,9 @@ export async function getImportacaoQualidadeResumo(): Promise<ImportacaoQualidad
       clientesSemWhatsapp: 0,
       clientesSemVendedor: 0,
       clientesOrigemDesconhecida: 0,
+      oportunidadesTotal: 0,
+      oportunidadesAtivas: 0,
+      oportunidadesDesatualizadas: false,
       conflitosPendentes: 0,
       arquivosObrigatoriosOk: 0,
       arquivosObrigatoriosTotal: 4,
@@ -188,6 +195,9 @@ export async function getImportacaoQualidadeResumo(): Promise<ImportacaoQualidad
     origemDesconhecida,
     conflitosPendentes,
     arquivosObrigatorios,
+    oportunidadesTotal,
+    oportunidadesAtivas,
+    oportunidadesAtualizacao,
   ] = await Promise.all([
     supabase
       .from('importacoes')
@@ -220,6 +230,20 @@ export async function getImportacaoQualidadeResumo(): Promise<ImportacaoQualidad
       .eq('obrigatorio', true)
       .order('processado_em', { ascending: false })
       .limit(20),
+    supabase
+      .from('oportunidades_cache')
+      .select('cliente_id', { count: 'exact', head: true }),
+    supabase
+      .from('oportunidades_cache')
+      .select('cliente_id', { count: 'exact', head: true })
+      .eq('bloqueada', false)
+      .eq('tarefa_existente', false),
+    supabase
+      .from('vw_oportunidades_resumo_cache')
+      .select('gerado_em')
+      .order('gerado_em', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ])
 
   const errors = [
@@ -229,6 +253,9 @@ export async function getImportacaoQualidadeResumo(): Promise<ImportacaoQualidad
     origemDesconhecida.error,
     conflitosPendentes.error,
     arquivosObrigatorios.error,
+    oportunidadesTotal.error,
+    oportunidadesAtivas.error,
+    oportunidadesAtualizacao.error,
   ].filter(Boolean)
   if (errors.length > 0) throw errors[0]
 
@@ -239,10 +266,17 @@ export async function getImportacaoQualidadeResumo(): Promise<ImportacaoQualidad
       .map((arquivo) => arquivo.tipo),
   )
   const latest = ultimaImportacao.data as { data_importacao?: string; status?: string } | null
+  const latestOportunidades = oportunidadesAtualizacao.data as { gerado_em?: string } | null
+  const importacaoTime = latest?.data_importacao ? new Date(latest.data_importacao).getTime() : 0
+  const oportunidadeTime = latestOportunidades?.gerado_em ? new Date(latestOportunidades.gerado_em).getTime() : 0
 
   return {
     ultimaImportacaoEm: latest?.data_importacao,
     ultimaImportacaoStatus: latest?.status === 'com_conflitos' ? 'com-conflitos' : latest?.status as Importacao['status'] | undefined,
+    oportunidadesAtualizadoEm: latestOportunidades?.gerado_em,
+    oportunidadesTotal: oportunidadesTotal.count ?? 0,
+    oportunidadesAtivas: oportunidadesAtivas.count ?? 0,
+    oportunidadesDesatualizadas: Boolean(importacaoTime && (!oportunidadeTime || oportunidadeTime < importacaoTime)),
     clientesSemWhatsapp: semWhatsapp.count ?? 0,
     clientesSemVendedor: semVendedor.count ?? 0,
     clientesOrigemDesconhecida: origemDesconhecida.count ?? 0,

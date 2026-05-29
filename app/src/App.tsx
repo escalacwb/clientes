@@ -1606,7 +1606,7 @@ function Dashboard({
   const inativos90 = resumo?.clientesInativos90 ?? scoredClientes.filter((cliente) => daysSince(cliente.ultimaCompraEm) > 90).length
   const vencidos = resumo?.acoesVencidas ?? scoredClientes.filter((cliente) => cliente.proximaAcaoEm && daysSince(cliente.proximaAcaoEm) > 0).length
   const semVendedor = resumo?.clientesSemVendedor ?? scoredClientes.filter((cliente) => !cliente.vendedorId).length
-  const oportunidadesAtivas = oportunidades.filter((oportunidade) => !oportunidade.bloqueada).length
+  const oportunidadesAtivas = resumo?.oportunidadesAtivas ?? oportunidades.filter((oportunidade) => !oportunidade.bloqueada).length
   const chartData = vendedoresResumo.length > 0
     ? vendedoresResumo
         .filter((vendedor) => vendedor.role !== 'operacao')
@@ -1633,6 +1633,7 @@ function Dashboard({
         <Metric icon={CalendarClock} label="Acoes vencidas" value={vencidos.toString()} tone="red" />
         <Metric icon={UserRound} label="Sem vendedor" value={semVendedor.toString()} tone="blue" />
         <Metric icon={AlertTriangle} label="Oportunidades" value={oportunidadesAtivas.toString()} tone="amber" />
+        <Metric icon={Gauge} label="Fila total" value={(resumo?.oportunidadesTotal ?? oportunidades.length).toString()} tone="blue" />
       </div>
 
       <section className="panel wide">
@@ -1668,6 +1669,12 @@ function Dashboard({
           <FileUp size={18} />
         </div>
         <div className="status-list">
+          {resumo?.oportunidadesAtualizadoEm && (
+            <div className="status-row">
+              <span>Fila recalculada</span>
+              <strong>{dateLabel(resumo.oportunidadesAtualizadoEm)}</strong>
+            </div>
+          )}
           {importacoes.map((importacao) => (
             <div className="status-row" key={importacao.id}>
               <span>{importacao.arquivoNome}</span>
@@ -4712,12 +4719,28 @@ function Importacoes({
           />
           <Metric icon={AlertTriangle} label="Conflitos pendentes" value={(qualidadeResumo?.conflitosPendentes ?? 0).toString()} tone="amber" />
           <Metric icon={UsersRound} label="Sem vendedor" value={(qualidadeResumo?.clientesSemVendedor ?? 0).toString()} tone="amber" />
+          <Metric
+            icon={Gauge}
+            label="Fila oportunidades"
+            value={(qualidadeResumo?.oportunidadesAtivas ?? 0).toString()}
+            tone={qualidadeResumo?.oportunidadesDesatualizadas ? 'red' : 'green'}
+          />
         </div>
         {referenceImportResult && <div className="success-alert">{referenceImportResult}</div>}
         <div className="status-list quality-list">
           <div className="status-row"><span>Clientes sem WhatsApp</span><strong>{qualidadeResumo?.clientesSemWhatsapp ?? 0}</strong></div>
           <div className="status-row"><span>Origem desconhecida</span><strong>{qualidadeResumo?.clientesOrigemDesconhecida ?? 0}</strong></div>
           <div className="status-row"><span>Status da ultima importacao</span><strong>{qualidadeResumo?.ultimaImportacaoStatus ?? 'Sem registro'}</strong></div>
+          <div className="status-row">
+            <span>Fila recalculada</span>
+            <strong>{qualidadeResumo?.oportunidadesAtualizadoEm ? dateLabel(qualidadeResumo.oportunidadesAtualizadoEm) : 'Sem registro'}</strong>
+          </div>
+          {qualidadeResumo?.oportunidadesDesatualizadas && (
+            <div className="status-row danger-row">
+              <span>Fechamento pendente</span>
+              <strong>Reprocessar</strong>
+            </div>
+          )}
         </div>
         <div className="info-grid import-quality">
           <Info label="Linhas recentes" value={importacaoIndicadores.linhas.toString()} />

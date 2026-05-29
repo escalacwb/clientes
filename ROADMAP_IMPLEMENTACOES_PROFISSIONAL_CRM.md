@@ -1192,6 +1192,25 @@ Proximo passo tecnico:
 - Criar uma tela/acao de manutencao para reprocessar pos-importacao manualmente se a Edge Function cair no meio de uma importacao grande.
 - Evoluir o Dashboard para alertar quando a fila de oportunidades estiver desatualizada.
 
+### 2026-05-28 - Dashboard com fila comercial agregada
+
+Status: concluido.
+
+Entregue:
+- View `vw_dashboard_resumo` passou a expor `oportunidades_ativas`, `oportunidades_total` e `oportunidades_atualizado_em`.
+- Dashboard deixou de depender da lista local/tela de oportunidades para mostrar o total de oportunidades.
+- Dashboard ganhou card de fila total e mostra quando a fila foi recalculada.
+- Saude da base passou a mostrar oportunidades ativas, data de recalc da fila e alerta de fechamento pendente quando a fila estiver mais antiga que a ultima importacao.
+
+Validacao:
+- SQL aplicado com `node scripts/run-sql-file.mjs supabase/queries/dashboard_summary_views.sql`.
+- Consulta direta retornou 43.605 oportunidades ativas e 43.605 totais no agregado.
+- Build passou com `npm run build`.
+- Playwright local validou Dashboard com oportunidades reais e Saude da Base com 4/4 arquivos obrigatorios, 20.921 sem vendedor e 43.605 oportunidades.
+
+Proximo passo tecnico:
+- Criar painel gerencial de acoes prioritarias: sem vendedor, Rodobens sem contato, orcamentos vencidos e campanhas paradas, cada uma com atalho para a tela operacional.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

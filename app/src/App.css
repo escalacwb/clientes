@@ -1569,6 +1569,11 @@ h3 {
   padding-bottom: 10px;
 }
 
+.status-row.danger-row {
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
 .import-flow {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));

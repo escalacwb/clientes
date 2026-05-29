@@ -19,6 +19,9 @@ export type DashboardResumo = {
   orcamentosAbertos: number
   orcamentosGanhos: number
   orcamentosTotal: number
+  oportunidadesAtivas: number
+  oportunidadesTotal: number
+  oportunidadesAtualizadoEm?: string
   campanhasPendentes: number
   campanhasEnviadas: number
   campanhasResponderam: number
@@ -94,6 +97,9 @@ type DashboardResumoRow = {
   orcamentos_abertos: number
   orcamentos_ganhos: number
   orcamentos_total: number
+  oportunidades_ativas: number
+  oportunidades_total: number
+  oportunidades_atualizado_em: string | null
   campanhas_pendentes: number
   campanhas_enviadas: number
   campanhas_responderam: number
@@ -285,6 +291,9 @@ function mapDashboardResumo(row: DashboardResumoRow): DashboardResumo {
     orcamentosAbertos: Number(row.orcamentos_abertos ?? 0),
     orcamentosGanhos: Number(row.orcamentos_ganhos ?? 0),
     orcamentosTotal: Number(row.orcamentos_total ?? 0),
+    oportunidadesAtivas: Number(row.oportunidades_ativas ?? 0),
+    oportunidadesTotal: Number(row.oportunidades_total ?? 0),
+    oportunidadesAtualizadoEm: row.oportunidades_atualizado_em ?? undefined,
     campanhasPendentes: Number(row.campanhas_pendentes ?? 0),
     campanhasEnviadas: Number(row.campanhas_enviadas ?? 0),
     campanhasResponderam: Number(row.campanhas_responderam ?? 0),

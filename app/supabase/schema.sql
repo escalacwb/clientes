@@ -1252,7 +1252,15 @@ select
   (select count(*) from public.campanha_envios ce where ce.status = 'pendente') as campanhas_pendentes,
   (select count(*) from public.campanha_envios ce where ce.status = 'enviado') as campanhas_enviadas,
   (select count(*) from public.campanha_envios ce where ce.status = 'respondeu') as campanhas_responderam,
-  (select count(*) from public.campanha_envios ce where ce.status = 'virou_orcamento') as campanhas_viraram_orcamento;
+  (select count(*) from public.campanha_envios ce where ce.status = 'virou_orcamento') as campanhas_viraram_orcamento,
+  (
+    select count(*)
+    from public.oportunidades_cache oc
+    where not oc.bloqueada
+      and not oc.tarefa_existente
+  ) as oportunidades_ativas,
+  (select count(*) from public.oportunidades_cache oc) as oportunidades_total,
+  (select max(oc.gerado_em) from public.oportunidades_cache oc) as oportunidades_atualizado_em;
 
 create or replace view public.vw_vendedores_resumo as
 select
