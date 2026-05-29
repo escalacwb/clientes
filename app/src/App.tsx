@@ -63,6 +63,7 @@ import {
   listCampanhasSalvas,
   upsertCampanhaEnvio,
   type CampanhaElegibilidade,
+  type CampanhaImagemPadrao,
   type CampanhaPublicoFiltros,
   type CampanhaInboxItem,
   type CampanhaResumo,
@@ -6341,6 +6342,8 @@ function Campanhas({
   const [campaignObjective, setCampaignObjective] = useState('')
   const [campaignCost, setCampaignCost] = useState('')
   const [campaignRevenueGoal, setCampaignRevenueGoal] = useState('')
+  const [campaignImage, setCampaignImage] = useState<CampanhaImagemPadrao | undefined>()
+  const [campaignClipboardMessage, setCampaignClipboardMessage] = useState('')
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [total, setTotal] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
@@ -6486,6 +6489,8 @@ function Campanhas({
     setCampaignObjective(campanha.objetivo ?? '')
     setCampaignCost(campanha.custoEstimado ? String(campanha.custoEstimado) : '')
     setCampaignRevenueGoal(campanha.metaReceita ? String(campanha.metaReceita) : '')
+    setCampaignImage(campanha.filtroUsado.imagemPadrao)
+    setCampaignClipboardMessage('')
     setPage(1)
     setStatusFilter('todos')
   }
@@ -6521,6 +6526,7 @@ function Campanhas({
           query,
           clienteIds: activeSavedCampaign?.filtroUsado.clienteIds,
           origemLista: activeSavedCampaign?.filtroUsado.origemLista,
+          imagemPadrao: campaignImage,
         },
         criadaPor: currentUser.id,
       })
@@ -6625,6 +6631,32 @@ function Campanhas({
     } finally {
       setIsCreatingCampaignTasks(false)
     }
+  }
+
+  async function handleCampaignImageChange(file?: File) {
+    setCampaignClipboardMessage('')
+    if (!file) return
+    try {
+      const image = await optimizeCampaignImage(file)
+      setCampaignImage(image)
+      setActiveCampanhaId('')
+    } catch (exception) {
+      setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel preparar a imagem da campanha.')
+    }
+  }
+
+  async function openCampaignWhatsapp(cliente: Cliente, finalMessage: string) {
+    const waUrl = `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(finalMessage)}`
+    let copiedImage = false
+    if (campaignImage) {
+      copiedImage = await copyCampaignImageToClipboard(campaignImage)
+      setCampaignClipboardMessage(
+        copiedImage
+          ? 'Imagem copiada. No WhatsApp, use Ctrl+V e Enter para anexar.'
+          : 'Nao foi possivel copiar a imagem automaticamente neste navegador. Abra o WhatsApp e copie a imagem manualmente pela previa.',
+      )
+    }
+    window.open(waUrl, '_blank', 'noopener,noreferrer')
   }
 
   return (
@@ -6880,6 +6912,31 @@ function Campanhas({
           rows={3}
         />
       </label>
+      <div className="campaign-image-panel">
+        <label className="button">
+          <FileUp size={16} /> Imagem padrao
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={(event) => handleCampaignImageChange(event.target.files?.[0])}
+          />
+        </label>
+        {campaignImage ? (
+          <div className="campaign-image-preview">
+            <img src={campaignImage.dataUrl} alt={campaignImage.nome} />
+            <span>
+              <strong>{campaignImage.nome}</strong>
+              <small>Ao abrir WhatsApp, o sistema tenta copiar esta imagem para colar na conversa.</small>
+            </span>
+            <button className="button" type="button" onClick={() => setCampaignImage(undefined)}>
+              Remover
+            </button>
+          </div>
+        ) : (
+          <span className="muted">Sem imagem padrao nesta campanha.</span>
+        )}
+        {campaignClipboardMessage && <small className="score">{campaignClipboardMessage}</small>}
+      </div>
       <div className="campaign-save-bar">
         <span>{activeCampanhaId ? 'Campanha salva selecionada.' : 'Ajuste filtros e mensagem antes de salvar para reutilizar.'}</span>
         <button className="button primary" disabled={isSaving} onClick={saveCurrentCampaign} type="button">
@@ -6916,15 +6973,14 @@ function Campanhas({
             <strong>Proximo contato sugerido: {nextClient.nome}</strong>
             <small>{nextClient.cidade || 'Cidade nao informada'} · ultima compra {dateLabel(nextClient.ultimaCompraEm)}</small>
           </span>
-          <a
+          <button
             className="button primary"
-            href={nextClient.whatsapp ? `https://wa.me/${nextClient.whatsapp}?text=${encodeURIComponent(messageFor(nextClient))}` : undefined}
-            target="_blank"
-            rel="noreferrer"
-            aria-disabled={!nextClient.whatsapp}
+            type="button"
+            disabled={!nextClient.whatsapp}
+            onClick={() => openCampaignWhatsapp(nextClient, messageFor(nextClient))}
           >
             <MessageCircle size={16} /> Abrir WhatsApp
-          </a>
+          </button>
         </div>
       )}
       <div className="campaign-history">
@@ -6992,7 +7048,6 @@ function Campanhas({
         </div>
         {filteredClientes.map((cliente) => {
           const finalMessage = messageFor(cliente)
-          const waUrl = `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(finalMessage)}`
           const readiness = campaignContactReadiness(cliente, elegibilidade[cliente.id])
 
           return (
@@ -7020,14 +7075,14 @@ function Campanhas({
               <span>{finalMessage}</span>
               <span className="status-pill">{statuses[cliente.id] ?? 'pendente'}</span>
               <span className="campaign-actions">
-                <a
+                <button
                   className={readiness.blocked ? 'button disabled' : 'button'}
-                  href={readiness.blocked ? undefined : waUrl}
-                  target="_blank"
-                  rel="noreferrer"
+                  type="button"
+                  disabled={readiness.blocked}
+                  onClick={() => openCampaignWhatsapp(cliente, finalMessage)}
                 >
                   <MessageCircle size={16} /> Abrir
-                </a>
+                </button>
                 <button className="button" type="button" disabled={readiness.blocked} onClick={() => markStatus(cliente, 'enviado', finalMessage)}>
                   Enviado
                 </button>
@@ -7198,6 +7253,54 @@ function numberFromInput(value: string) {
 function positiveIntegerOrUndefined(value: string) {
   const parsed = Number(value.replace(/\D/g, ''))
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
+
+async function optimizeCampaignImage(file: File): Promise<CampanhaImagemPadrao> {
+  if (!file.type.startsWith('image/')) throw new Error('Selecione um arquivo de imagem valido.')
+  const source = await fileToDataUrl(file)
+  const image = await loadBrowserImage(source)
+  const maxSize = 1200
+  const scale = Math.min(1, maxSize / Math.max(image.width, image.height))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(image.width * scale))
+  canvas.height = Math.max(1, Math.round(image.height * scale))
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('Nao foi possivel otimizar a imagem.')
+  context.drawImage(image, 0, 0, canvas.width, canvas.height)
+  return {
+    nome: file.name,
+    dataUrl: canvas.toDataURL('image/png'),
+    mimeType: 'image/png',
+  }
+}
+
+async function copyCampaignImageToClipboard(image: CampanhaImagemPadrao) {
+  if (!navigator.clipboard || typeof ClipboardItem === 'undefined') return false
+  try {
+    const blob = await (await fetch(image.dataUrl)).blob()
+    await navigator.clipboard.write([new ClipboardItem({ [image.mimeType]: blob })])
+    return true
+  } catch {
+    return false
+  }
+}
+
+function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(new Error('Nao foi possivel ler a imagem.'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function loadBrowserImage(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('Nao foi possivel carregar a imagem.'))
+    image.src = src
+  })
 }
 
 function lossReasonLabel(reason: string) {

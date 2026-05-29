@@ -38,6 +38,13 @@ export type CampanhaFiltroUsado = {
   query?: string
   clienteIds?: string[]
   origemLista?: string
+  imagemPadrao?: CampanhaImagemPadrao
+}
+
+export type CampanhaImagemPadrao = {
+  nome: string
+  dataUrl: string
+  mimeType: string
 }
 
 export type CampanhaSalva = {
