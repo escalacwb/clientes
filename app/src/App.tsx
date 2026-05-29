@@ -1411,6 +1411,7 @@ function App() {
         )}
         {canUseScopedClientViews && view === 'clientes' && (
           <Clientes
+            currentUser={session}
             clientes={filteredClientes}
             selectedClient={selectedClient}
             interacoes={scopedInteracoes}
@@ -1528,6 +1529,7 @@ function App() {
         {canUseScopedClientViews && view === 'orcamento-editor' && hasSelectedClient && (
           <OrcamentoEditor
             cliente={selectedClient}
+            currentUser={session}
             catalogo={catalogo}
             regrasDesconto={catalogoRegrasDesconto}
             originContext={quoteOriginContext}
@@ -1554,7 +1556,7 @@ function App() {
               }
               const interacao = await createInteracao({
                 clienteId: created.clienteId,
-                vendedorId: created.vendedorId ?? selectedClient.vendedorId ?? 'u-1',
+                vendedorId: created.vendedorId ?? selectedClient.vendedorId ?? session.id,
                 canal: 'WhatsApp',
                 tipo: 'orcamento',
                 resumo: `${created.observacao || `Orcamento criado no valor de ${money(created.valorTotal)}.`} Origem: ${quoteOriginContext.label}.`,
@@ -1567,6 +1569,7 @@ function App() {
         )}
         {canUseScopedClientViews && view === 'rodobens' && (
           <RodobensInbox
+            currentUser={session}
             leads={rodobensLeads}
             funil={rodobensFunil}
             total={rodobensTotal}
@@ -3136,6 +3139,7 @@ function Dashboard({
 }
 
 function Clientes({
+  currentUser,
   clientes,
   selectedClient,
   interacoes,
@@ -3157,6 +3161,7 @@ function Clientes({
   onAddInteraction,
   onAddBudget,
 }: {
+  currentUser: SessaoUsuario
   clientes: Array<Cliente & { score: number; motivo: string; proximaMelhorAcao: string }>
   selectedClient: Cliente
   interacoes: Interacao[]
@@ -3225,6 +3230,7 @@ function Clientes({
       </div>
       {visibleClientes.length > 0 ? (
         <FichaCliente
+          currentUser={currentUser}
           cliente={selectedClient}
           interacoes={interacoes}
           orcamentos={orcamentos}
@@ -3297,6 +3303,7 @@ function rodobensQualificacaoLabel(status: LeadQualificacaoStatus) {
 }
 
 function RodobensInbox({
+  currentUser,
   leads,
   funil,
   total,
@@ -3314,6 +3321,7 @@ function RodobensInbox({
   onUpdateQualificacao,
   onCreateCampaignFromSelection,
 }: {
+  currentUser: SessaoUsuario
   leads: Cliente[]
   funil: RodobensFunilResumo[]
   total: number
@@ -3348,7 +3356,7 @@ function RodobensInbox({
   async function registerFirstContact(cliente: Cliente) {
     await onAddInteraction({
       clienteId: cliente.id,
-      vendedorId: cliente.vendedorId ?? 'u-1',
+      vendedorId: cliente.vendedorId ?? currentUser.id,
       canal: 'WhatsApp',
       tipo: 'primeiro contato lista externa',
       resumo: 'Primeiro contato iniciado pela fila de clientes sem cadastro.',
@@ -4682,6 +4690,7 @@ function buildRoutineSuggestions(clientes: Cliente[], orcamentos: Orcamento[], t
 }
 
 function FichaCliente({
+  currentUser,
   cliente,
   interacoes,
   orcamentos,
@@ -4694,6 +4703,7 @@ function FichaCliente({
   onOpenFullProfile,
   onOpenBudgetEditor,
 }: {
+  currentUser: SessaoUsuario
   cliente: Cliente
   interacoes: Interacao[]
   orcamentos: Orcamento[]
@@ -4793,7 +4803,7 @@ function FichaCliente({
     try {
       await onAddInteraction({
       clienteId: cliente.id,
-      vendedorId: cliente.vendedorId ?? 'u-1',
+      vendedorId: cliente.vendedorId ?? currentUser.id,
       canal: form.canal as Interacao['canal'],
       tipo: form.tipo,
       resumo: form.resumo.trim(),
@@ -4822,7 +4832,7 @@ function FichaCliente({
     try {
       await onAddBudget({
         clienteId: cliente.id,
-        vendedorId: cliente.vendedorId ?? 'u-1',
+        vendedorId: cliente.vendedorId ?? currentUser.id,
         valorTotal: budgetTotal,
         validade: budgetForm.validade,
         previsaoFechamento: budgetForm.previsaoFechamento || undefined,
@@ -4833,7 +4843,7 @@ function FichaCliente({
 
       await onAddInteraction({
         clienteId: cliente.id,
-        vendedorId: cliente.vendedorId ?? 'u-1',
+        vendedorId: cliente.vendedorId ?? currentUser.id,
         canal: 'WhatsApp',
         tipo: 'orcamento',
         resumo: budgetForm.observacao || `Orcamento criado no valor de ${money(budgetTotal)}.`,
@@ -4915,7 +4925,7 @@ function FichaCliente({
             onUpdateClient(cliente.id, { status: 'Nao contatar' })
             await onAddInteraction({
               clienteId: cliente.id,
-              vendedorId: cliente.vendedorId ?? 'u-1',
+              vendedorId: cliente.vendedorId ?? currentUser.id,
               canal: 'WhatsApp',
               tipo: 'atualizacao cadastral',
               resumo: 'Cliente marcado como nao contatar.',
@@ -5267,6 +5277,7 @@ function FichaCliente({
 
 function OrcamentoEditor({
   cliente,
+  currentUser,
   catalogo,
   regrasDesconto,
   originContext,
@@ -5275,6 +5286,7 @@ function OrcamentoEditor({
   onCreate,
 }: {
   cliente: Cliente
+  currentUser: SessaoUsuario
   catalogo: CatalogoItem[]
   regrasDesconto: CatalogoRegraDesconto[]
   originContext: QuoteOriginContext
@@ -5407,7 +5419,7 @@ function OrcamentoEditor({
     try {
       const created = await onCreate({
         clienteId: cliente.id,
-        vendedorId: cliente.vendedorId ?? 'u-1',
+        vendedorId: cliente.vendedorId ?? currentUser.id,
         status: needsApproval ? 'aguardando_aprovacao' : shouldSend ? 'enviado' : 'aberto',
         valorTotal: total,
         validade,
@@ -5422,7 +5434,7 @@ function OrcamentoEditor({
       })
       await onCreateTask({
         clienteId: cliente.id,
-        vendedorId: cliente.vendedorId,
+        vendedorId: cliente.vendedorId ?? currentUser.id,
         titulo: shouldSend ? 'Follow-up de proposta enviada' : 'Follow-up do orcamento',
         descricao: `${shouldSend ? 'Confirmar recebimento da proposta' : 'Retornar proposta'} ${created.id.slice(0, 8)} de ${money(created.valorTotal)}.`,
         dataVencimento: previsaoFechamento || new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10),
@@ -7548,7 +7560,7 @@ function Campanhas({
       })
       await onAddInteraction({
         clienteId: cliente.id,
-        vendedorId: cliente.vendedorId ?? 'u-1',
+        vendedorId: cliente.vendedorId ?? currentUser.id,
         canal: 'Campanha',
         tipo: 'campanha',
         resumo: campaignSummary(status, mensagemFinal),
@@ -7677,7 +7689,7 @@ function Campanhas({
         })
         await onAddInteraction({
           clienteId: cliente.id,
-          vendedorId: cliente.vendedorId ?? 'u-1',
+          vendedorId: cliente.vendedorId ?? currentUser.id,
           canal: 'Campanha',
           tipo: 'campanha',
           resumo: campaignSummary('pendente', finalMessage),

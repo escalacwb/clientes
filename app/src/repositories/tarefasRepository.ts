@@ -126,7 +126,7 @@ export async function createTarefa(input: TarefaInput): Promise<Tarefa> {
     }
   }
 
-  let query = supabase
+  const { data, error } = await supabase
     .from('tarefas')
     .insert({
       cliente_id: input.clienteId,
@@ -139,27 +139,7 @@ export async function createTarefa(input: TarefaInput): Promise<Tarefa> {
       origem: input.origem,
     })
     .select('*, clientes(nome), users(nome)')
-
-  if (input.origem) {
-    query = supabase
-      .from('tarefas')
-      .upsert(
-        {
-          cliente_id: input.clienteId,
-          vendedor_id: input.vendedorId ?? null,
-          titulo: input.titulo,
-          descricao: input.descricao ?? null,
-          data_vencimento: input.dataVencimento,
-          status: input.status ?? 'aberta',
-          prioridade: input.prioridade,
-          origem: input.origem,
-        },
-        { onConflict: 'cliente_id,origem', ignoreDuplicates: false },
-      )
-      .select('*, clientes(nome), users(nome)')
-  }
-
-  const { data, error } = await query.single()
+    .single()
 
   if (error) throw error
 
