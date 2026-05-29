@@ -6848,8 +6848,12 @@ function Cliente360({
   const [endDate, setEndDate] = useState('')
   const [isCreatingTask, setIsCreatingTask] = useState(false)
   const [contactChannel, setContactChannel] = useState<Interacao['canal']>('WhatsApp')
+  const [contactReason, setContactReason] = useState('prospeccao')
   const [contactNote, setContactNote] = useState('')
   const [contactResult, setContactResult] = useState('respondeu')
+  const [contactTemperature, setContactTemperature] = useState('morno')
+  const [contactNextActionText, setContactNextActionText] = useState('')
+  const [contactBudgetId, setContactBudgetId] = useState('')
   const [nextActionDate, setNextActionDate] = useState('')
   const [isSavingContact, setIsSavingContact] = useState(false)
   const [contactFeedback, setContactFeedback] = useState('')
@@ -6869,7 +6873,7 @@ function Cliente360({
   const clienteVendas = vendasItens.filter((venda) => venda.clienteId === cliente.id)
   const clienteServicos = servicosItens.filter((servico) => servico.clienteId === cliente.id)
   const clienteInteracoes = interacoes.filter((interacao) => interacao.clienteId === cliente.id)
-  const recentContactHistory = [...clienteInteracoes].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 3)
+  const recentContactHistory = [...clienteInteracoes].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 8)
   const clienteOrcamentos = orcamentos.filter((orcamento) => orcamento.clienteId === cliente.id)
   const clienteTarefas = tarefas.filter((tarefa) => tarefa.clienteId === cliente.id)
   const clienteCampanhas = campanhaEnvios.filter((envio) => envio.clienteId === cliente.id)
@@ -6941,6 +6945,14 @@ function Cliente360({
 
   async function registerContact(createQuote = false) {
     const resultado = contactResult
+    const tipo = createQuote ? 'orcamento' : contactReason
+    const resumo = buildContactSummary({
+      reason: contactReason,
+      result: resultado,
+      temperature: contactTemperature,
+      note: contactNote,
+      nextAction: contactNextActionText,
+    })
     setIsSavingContact(true)
     setContactFeedback('')
     try {
@@ -6948,16 +6960,20 @@ function Cliente360({
         clienteId: cliente.id,
         vendedorId: cliente.vendedorId ?? currentUser.id,
         canal: contactChannel,
-        tipo: createQuote ? 'orcamento' : 'atendimento',
-        resumo: contactNote.trim() || `Atendimento registrado: ${resultado}.`,
+        tipo,
+        resumo,
         resultado,
-        proximaAcao: nextActionDate ? nextActionLabelFromResult(resultado) : undefined,
+        proximaAcao: nextActionDate ? contactNextActionText.trim() || nextActionLabelFromResult(resultado) : undefined,
         dataProximaAcao: nextActionDate || undefined,
+        orcamentoId: contactBudgetId || undefined,
       })
       setContactFeedback(`Contato registrado em ${dateLabel(created.data)}.`)
       setContactNote('')
       setNextActionDate('')
+      setContactNextActionText('')
+      setContactBudgetId('')
       setContactResult('respondeu')
+      setContactTemperature('morno')
       if (createQuote) onCreateQuote()
     } finally {
       setIsSavingContact(false)
@@ -7102,6 +7118,18 @@ function Cliente360({
               </select>
             </label>
             <label>
+              Objetivo
+              <select value={contactReason} onChange={(event) => setContactReason(event.target.value)}>
+                <option value="prospeccao">Prospeccao</option>
+                <option value="reativacao">Reativacao</option>
+                <option value="orcamento">Orcamento</option>
+                <option value="follow-up">Follow-up</option>
+                <option value="pos-venda">Pos-venda</option>
+                <option value="cobranca">Cobranca</option>
+                <option value="cadastro">Cadastro</option>
+              </select>
+            </label>
+            <label>
               Resultado do contato
               <select value={contactResult} onChange={(event) => setContactResult(event.target.value)}>
                 <option value="respondeu">Respondeu</option>
@@ -7109,16 +7137,72 @@ function Cliente360({
                 <option value="nao respondeu">Nao respondeu</option>
                 <option value="comprar depois">Comprar depois</option>
                 <option value="sem interesse">Sem interesse</option>
+                <option value="numero invalido">Numero invalido</option>
+                <option value="dados atualizados">Dados atualizados</option>
+                <option value="reclamacao">Reclamacao</option>
+                <option value="fechou pedido">Fechou pedido</option>
               </select>
             </label>
             <label>
-              Proxima acao
+              Temperatura
+              <select value={contactTemperature} onChange={(event) => setContactTemperature(event.target.value)}>
+                <option value="quente">Quente</option>
+                <option value="morno">Morno</option>
+                <option value="frio">Frio</option>
+                <option value="bloqueado">Bloqueado</option>
+              </select>
+            </label>
+            <label>
+              Data da proxima acao
               <input type="date" value={nextActionDate} onChange={(event) => setNextActionDate(event.target.value)} />
             </label>
+            <label>
+              Orcamento vinculado
+              <select value={contactBudgetId} onChange={(event) => setContactBudgetId(event.target.value)}>
+                <option value="">Sem vinculo</option>
+                {clienteOrcamentos.slice(0, 20).map((orcamento) => (
+                  <option value={orcamento.id} key={orcamento.id}>
+                    {orcamento.id.slice(0, 8)} - {money(orcamento.valorTotal)} - {orcamento.status}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="client360-outcome-buttons">
+            {[
+              ['pediu orcamento', 'Pediu orcamento'],
+              ['nao respondeu', 'Nao respondeu'],
+              ['comprar depois', 'Comprar depois'],
+              ['sem interesse', 'Sem interesse'],
+              ['fechou pedido', 'Fechou pedido'],
+            ].map(([value, label]) => (
+              <button
+                className={contactResult === value ? 'button primary' : 'button'}
+                type="button"
+                key={value}
+                onClick={() => {
+                  setContactResult(value)
+                  if (value === 'pediu orcamento') {
+                    setContactReason('orcamento')
+                    setContactTemperature('quente')
+                  }
+                  if (value === 'nao respondeu' && !nextActionDate) {
+                    setNextActionDate(addDays(new Date().toISOString().slice(0, 10), 1))
+                    setContactNextActionText('Tentar novo contato')
+                  }
+                }}
+              >
+                {label}
+              </button>
+            ))}
           </div>
           <label className="client360-contact-note">
             Observacao do contato
             <textarea value={contactNote} onChange={(event) => setContactNote(event.target.value)} placeholder="Ex.: pediu pneu 295/80 para cotar hoje, prefere pagamento 30/60." />
+          </label>
+          <label className="client360-contact-note">
+            Proxima acao planejada
+            <input value={contactNextActionText} onChange={(event) => setContactNextActionText(event.target.value)} placeholder="Ex.: enviar proposta revisada, ligar as 14h, confirmar disponibilidade." />
           </label>
           <div className="client360-save-bar">
             <button className="button primary" type="button" disabled={isSavingContact} onClick={() => void registerContact(false)}>
@@ -7130,11 +7214,20 @@ function Cliente360({
             <span>{nextActionDate ? `Proxima acao em ${dateLabel(nextActionDate)}` : 'Sem proxima acao agendada'}</span>
           </div>
           <div className="client360-recent-history">
-            <strong>Ultimos registros</strong>
+            <strong>Historico de atendimento</strong>
             {recentContactHistory.map((interacao) => (
-              <div className="status-row compact" key={interacao.id}>
-                <span>{dateLabel(interacao.data)} - {interacao.canal} - {interacao.resultado}</span>
-                <small>{interacao.resumo}</small>
+              <div className="contact-history-card" key={interacao.id}>
+                <div>
+                  <span className="status-pill">{interacao.resultado || 'sem resultado'}</span>
+                  <strong>{interacao.canal} - {interactionTypeLabel(interacao.tipo)}</strong>
+                  <small>{dateLabel(interacao.data)}</small>
+                </div>
+                <p>{interacao.resumo}</p>
+                <div className="contact-history-meta">
+                  {interacao.dataProximaAcao && <span>Proxima acao: {dateLabel(interacao.dataProximaAcao)}</span>}
+                  {interacao.proximaAcao && <span>{interacao.proximaAcao}</span>}
+                  {interacao.orcamentoId && <button className="button compact-button" type="button" onClick={() => onOpenBudget(interacao.orcamentoId!)}>Abrir orcamento</button>}
+                </div>
               </div>
             ))}
             {clienteInteracoes.length === 0 && <div className="empty-state compact">Nenhum atendimento registrado ainda.</div>}
@@ -7524,6 +7617,39 @@ function nextActionLabelFromResult(resultado: string) {
   if (resultado === 'comprar depois') return 'Retomar oportunidade'
   if (resultado === 'pediu orcamento') return 'Follow-up de proposta'
   return 'Próximo contato'
+}
+
+function interactionTypeLabel(tipo: string) {
+  const labels: Record<string, string> = {
+    atendimento: 'Atendimento',
+    prospeccao: 'Prospeccao',
+    reativacao: 'Reativacao',
+    orcamento: 'Orcamento',
+    'follow-up': 'Follow-up',
+    'pos-venda': 'Pos-venda',
+    cobranca: 'Cobranca',
+    cadastro: 'Cadastro',
+    campanha: 'Campanha',
+    campanha_inbox: 'Campanha',
+  }
+  return labels[tipo] ?? tipo
+}
+
+function buildContactSummary(input: {
+  reason: string
+  result: string
+  temperature: string
+  note: string
+  nextAction: string
+}) {
+  const lines = [
+    `Objetivo: ${interactionTypeLabel(input.reason)}.`,
+    `Resultado: ${input.result}.`,
+    `Temperatura: ${input.temperature}.`,
+    input.note.trim() ? `Resumo: ${input.note.trim()}` : '',
+    input.nextAction.trim() ? `Proxima acao: ${input.nextAction.trim()}` : '',
+  ]
+  return lines.filter(Boolean).join('\n')
 }
 
 function buildClientServiceTimeline(

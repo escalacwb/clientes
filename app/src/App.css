@@ -2991,6 +2991,7 @@ h3 {
 
 .client360-contact-grid select,
 .client360-contact-grid input,
+.client360-contact-note input,
 .client360-contact-note textarea,
 .client360-edit-grid input,
 .client360-edit-grid select,
@@ -3007,6 +3008,13 @@ h3 {
 .client360-contact-note textarea {
   min-height: 84px;
   resize: vertical;
+}
+
+.client360-outcome-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
 }
 
 .client360-save-bar {
@@ -3043,6 +3051,38 @@ h3 {
 .status-row.compact small {
   color: #60706c;
   line-height: 1.35;
+}
+
+.contact-history-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #dce5df;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfdfa;
+}
+
+.contact-history-card > div:first-child {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.contact-history-card p {
+  margin: 0;
+  color: #263430;
+  line-height: 1.45;
+  white-space: pre-line;
+}
+
+.contact-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: #60706c;
+  font-size: 12px;
 }
 
 .client360-edit-grid {
