@@ -7110,7 +7110,7 @@ function Campanhas({
     }
   }
 
-  async function openCampaignWhatsapp(cliente: Cliente, finalMessage: string) {
+  async function openCampaignWhatsapp(cliente: Cliente, finalMessage: string, options?: { forceRegister?: boolean }) {
     const waUrl = `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(finalMessage)}`
     const whatsappWindow = window.open('about:blank', '_blank')
     if (whatsappWindow) whatsappWindow.opener = null
@@ -7126,7 +7126,7 @@ function Campanhas({
     }
 
     const currentStatus = statuses[cliente.id] ?? 'pendente'
-    if (currentStatus === 'pendente') {
+    if (currentStatus === 'pendente' || options?.forceRegister) {
       try {
         const envio = await upsertCampanhaEnvio({
           campanhaId: activeCampanhaId || segmento.campanhaId,
@@ -7611,6 +7611,8 @@ function Campanhas({
         {filteredClientes.map((cliente) => {
           const finalMessage = messageFor(cliente)
           const readiness = campaignContactReadiness(cliente, elegibilidade[cliente.id], numberFromInput(campaignWindowDays) || 7)
+          const canResend = Boolean(cliente.whatsapp && cliente.status !== 'Nao contatar' && cliente.leadQualificacaoStatus !== 'nao_contatar')
+          const canOpenNormally = !readiness.blocked && canResend
 
           return (
             <div className="table-row campaign campaign-bulk-row" key={cliente.id}>
@@ -7638,15 +7640,27 @@ function Campanhas({
               <span className="status-pill">{statuses[cliente.id] ?? 'pendente'}</span>
               <span className="campaign-actions">
                 <button
-                  className={readiness.blocked ? 'button disabled' : 'button'}
+                  className={canOpenNormally ? 'button' : 'button disabled'}
                   type="button"
-                  disabled={readiness.blocked}
+                  disabled={!canOpenNormally}
                   onClick={() => openCampaignWhatsapp(cliente, finalMessage)}
                 >
                   <MessageCircle size={16} /> Abrir
                 </button>
-                <button className="button" type="button" disabled={readiness.blocked} onClick={() => markStatus(cliente, 'enviado', finalMessage)}>
+                <button
+                  className="button"
+                  type="button"
+                  disabled={!canResend}
+                  onClick={() => openCampaignWhatsapp(cliente, finalMessage, { forceRegister: true })}
+                  title="Reabre o WhatsApp e volta o envio para pendente, mesmo quando ha contato recente."
+                >
+                  Reenviar
+                </button>
+                <button className="button" type="button" disabled={!canOpenNormally} onClick={() => markStatus(cliente, 'enviado', finalMessage)}>
                   Enviado
+                </button>
+                <button className="button" type="button" onClick={() => markStatus(cliente, 'pendente', finalMessage)}>
+                  Voltar p/ pendente
                 </button>
                 <button className="button" type="button" onClick={() => markStatus(cliente, 'respondeu', finalMessage)}>
                   Respondeu
