@@ -91,6 +91,8 @@ export async function createImportacaoPreview(input: ImportacaoPreviewInput): Pr
       clientesEncontrados: input.clientesEncontrados,
       clientesCriados: input.clientesCriados ?? 0,
       conflitos: input.conflitos ?? 0,
+      itensCriados: 0,
+      itensIgnorados: 0,
       status: input.conflitos ? 'com-conflitos' : 'pendente',
     }
   }
@@ -247,6 +249,8 @@ function mapImportacao(row: ImportacaoRow): Importacao {
     clientesEncontrados: row.clientes_encontrados,
     clientesCriados: row.clientes_criados,
     conflitos: row.conflitos,
+    itensCriados: row.itens_criados,
+    itensIgnorados: row.itens_ignorados,
     status: row.status === 'com_conflitos' ? 'com-conflitos' : (row.status as Importacao['status']),
   }
 }

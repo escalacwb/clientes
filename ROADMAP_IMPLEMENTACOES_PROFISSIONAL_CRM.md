@@ -1094,6 +1094,22 @@ Validacao:
 Proximo passo tecnico:
 - Levar a mesma inteligencia para criacao de campanhas por produto e para repeticao de compra na Ficha 360.
 
+### 2026-05-28 - Indicadores de deduplicacao na importacao
+
+Status: concluido.
+
+Entregue:
+- Tipo `Importacao` passou a carregar `itensCriados` e `itensIgnorados`.
+- Painel de Saude da base mostra linhas recentes, itens novos, ignorados/repetidos e clientes novos.
+- Cada card de importacao agora exibe criados e ignorados, facilitando ver reprocessamento sem abrir SQL.
+
+Validacao:
+- Build passou com `npm run build`.
+- Consulta direta em `importacoes` validou registros com `itens_criados` e `itens_ignorados`, incluindo uma importacao pequena com 26 criados e 14 ignorados.
+
+Proximo passo tecnico:
+- Criar tendencia de mudancas de preco por importacao e painel de possiveis duplicados.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

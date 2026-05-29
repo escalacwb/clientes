@@ -4372,6 +4372,15 @@ function Importacoes({
       return acc
     }, {})
   }, [arquivosResumo])
+  const importacaoIndicadores = useMemo(() => {
+    const recentes = importacoes.slice(0, 10)
+    return {
+      linhas: recentes.reduce((total, importacao) => total + importacao.totalItens, 0),
+      novos: recentes.reduce((total, importacao) => total + (importacao.itensCriados ?? 0), 0),
+      ignorados: recentes.reduce((total, importacao) => total + (importacao.itensIgnorados ?? 0), 0),
+      clientesCriados: recentes.reduce((total, importacao) => total + importacao.clientesCriados, 0),
+    }
+  }, [importacoes])
 
   useEffect(() => {
     listImportacaoArquivos().then(setArquivosResumo).catch(() => setArquivosResumo([]))
@@ -4547,6 +4556,12 @@ function Importacoes({
           <div className="status-row"><span>Clientes sem WhatsApp</span><strong>{qualidadeResumo?.clientesSemWhatsapp ?? 0}</strong></div>
           <div className="status-row"><span>Origem desconhecida</span><strong>{qualidadeResumo?.clientesOrigemDesconhecida ?? 0}</strong></div>
           <div className="status-row"><span>Status da ultima importacao</span><strong>{qualidadeResumo?.ultimaImportacaoStatus ?? 'Sem registro'}</strong></div>
+        </div>
+        <div className="info-grid import-quality">
+          <Info label="Linhas recentes" value={importacaoIndicadores.linhas.toString()} />
+          <Info label="Itens novos" value={importacaoIndicadores.novos.toString()} />
+          <Info label="Ignorados/repetidos" value={importacaoIndicadores.ignorados.toString()} />
+          <Info label="Clientes novos" value={importacaoIndicadores.clientesCriados.toString()} />
         </div>
       </section>
       <section className="panel wide">
@@ -4781,6 +4796,8 @@ function Importacoes({
             <Info label="Encontrados" value={importacao.clientesEncontrados.toString()} />
             <Info label="Novos" value={importacao.clientesCriados.toString()} />
             <Info label="Conflitos" value={importacao.conflitos.toString()} />
+            <Info label="Criados" value={(importacao.itensCriados ?? 0).toString()} />
+            <Info label="Ignorados" value={(importacao.itensIgnorados ?? 0).toString()} />
           </div>
           {arquivosPorImportacao[importacao.id]?.length > 0 && (
             <div className="import-file-list">

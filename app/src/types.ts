@@ -166,6 +166,8 @@ export type Importacao = {
   clientesEncontrados: number
   clientesCriados: number
   conflitos: number
+  itensCriados?: number
+  itensIgnorados?: number
   status: 'processada' | 'pendente' | 'com-conflitos' | 'processando' | 'erro'
 }
 

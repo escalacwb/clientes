@@ -290,9 +290,9 @@ Ja entregue:
 - Conflitos pendentes.
 - Clientes sem WhatsApp, sem vendedor, sem origem, possiveis duplicados.
 - Alertas de arquivos obrigatorios ausentes.
+- Linhas processadas, itens criados e ignorados/repetidos por importacao.
 
 Proximas entregas:
-- Linhas novas/atualizadas/ignoradas por arquivo.
 - Possiveis duplicados no painel de saude.
 - Tendencia de mudancas de preco por importacao.
 
