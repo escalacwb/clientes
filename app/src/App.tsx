@@ -1367,6 +1367,12 @@ function App() {
               }
               setView(target)
             }}
+            onOpenTasksOrigin={(filter) => {
+              setTarefasStatusFilter('abertas')
+              setTarefasOriginFilter(filter)
+              setTarefasPage(1)
+              setView('tarefas')
+            }}
             onCompleteTask={async (id) => {
               await completeTarefa(id)
               setCockpitTarefas((current) => current.filter((tarefa) => tarefa.id !== id))
@@ -2460,6 +2466,7 @@ function Cockpit({
   onOpenClient,
   onOpenBudget,
   onOpenModule,
+  onOpenTasksOrigin,
   onCompleteTask,
   onRescheduleTask,
   onCreateTask,
@@ -2479,6 +2486,7 @@ function Cockpit({
   onOpenClient: (clienteId: string) => Promise<void>
   onOpenBudget: (clienteId: string, originContext: QuoteOriginContext) => Promise<void>
   onOpenModule: (target: 'tarefas' | 'orcamentos' | 'rodobens' | 'oportunidades' | 'campanhas') => void
+  onOpenTasksOrigin: (filter: TarefaOriginFilter) => void
   onCompleteTask: (id: string) => Promise<void>
   onRescheduleTask: (id: string, dataVencimento: string, motivo: string) => Promise<void>
   onCreateTask: (task: TarefaInput) => Promise<Tarefa>
@@ -2778,7 +2786,7 @@ function Cockpit({
             <h2>Clientes sem proxima acao</h2>
             <p>Clientes com potencial ou risco, mas sem tarefa aberta nem proposta vencida na fila.</p>
           </div>
-          <button className="button" type="button" onClick={() => onOpenModule('tarefas')}>Abrir tarefas</button>
+          <button className="button" type="button" onClick={() => onOpenTasksOrigin('cockpit')}>Abrir tarefas</button>
         </div>
         <div className="cockpit-list two-col">
           {clientesSemProximaAcao.map((cliente) => (
@@ -2822,6 +2830,7 @@ function Cockpit({
             ['orcamento', 'Propostas'],
             ['campanha', 'Campanhas'],
             ['cliente360', 'Ficha 360'],
+            ['cockpit', 'Sem prox. acao'],
           ].map(([origin, label]) => {
             const items = contactFollowups.filter((tarefa) => (tarefa.origem ?? '').startsWith(origin))
             return (
@@ -4802,6 +4811,7 @@ function Tarefas({
               <option value="manual">Manual</option>
               <option value="atendimento">Atendimento</option>
               <option value="cliente360">Ficha 360</option>
+              <option value="cockpit">Sem proxima acao</option>
               <option value="interacao">Interacao</option>
               <option value="orcamento">Orcamento</option>
               <option value="importacao">Importacao</option>
@@ -10514,6 +10524,7 @@ function taskSlaExpected(origin: string) {
   if (origin.startsWith('orcamento')) return 2
   if (origin.startsWith('atendimento')) return 1
   if (origin.startsWith('cliente360')) return 2
+  if (origin.startsWith('cockpit')) return 1
   if (origin.startsWith('rodobens')) return 1
   if (origin.startsWith('oportunidade')) return 3
   return 3
@@ -10524,6 +10535,7 @@ function taskOriginSlaLabel(origin: string) {
   if (origin.startsWith('orcamento')) return 'Orcamento'
   if (origin.startsWith('atendimento')) return 'Atendimento'
   if (origin.startsWith('cliente360')) return 'Ficha 360'
+  if (origin.startsWith('cockpit')) return 'Sem proxima acao'
   if (origin.startsWith('rodobens')) return 'Clientes sem cadastro'
   if (origin.startsWith('oportunidade')) return 'Oportunidade'
   if (origin.startsWith('interacao')) return 'Interacao'
@@ -10541,6 +10553,7 @@ function isCommercialFollowupTask(tarefa: Tarefa) {
     'atendimento',
     'interacao',
     'cliente360',
+    'cockpit',
     'orcamento',
     'campanha',
   ].some((prefix) => origin.startsWith(prefix))
