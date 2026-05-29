@@ -8680,7 +8680,7 @@ function Campanhas({
   const filteredClientes = campanhaClientes.filter((cliente) => statusFilter === 'todos' || (statuses[cliente.id] ?? 'pendente') === statusFilter)
   const selectableCampaignIds = filteredClientes.filter((cliente) => !campaignContactReadiness(cliente, elegibilidade[cliente.id], numberFromInput(campaignWindowDays) || 7).blocked).map((cliente) => cliente.id)
   const allCampaignRowsSelected = selectableCampaignIds.length > 0 && selectableCampaignIds.every((id) => selectedCampaignClientIds.includes(id))
-  const activePublicoFilterCount = Object.entries(publicoFiltros).filter(([, value]) => {
+  const activePublicoFilterCount = (segmento.filtro || segmento.id === 'rodobens-pendentes' ? 1 : 0) + Object.entries(publicoFiltros).filter(([, value]) => {
     if (value === undefined || value === '' || value === 'todos' || value === false) return false
     return true
   }).length

@@ -267,7 +267,8 @@ export async function listCampanhaSegmento(input: {
   clienteIds?: string[]
 }): Promise<{ clientes: Cliente[]; total: number; statuses: Record<string, CampanhaEnvioStatus>; elegibilidade: Record<string, CampanhaElegibilidade> }> {
   const segmento = campanhaSegmentos.find((item) => item.id === input.segmentoId) ?? campanhaSegmentos[0]
-  const clienteIds = await resolveCampaignClienteIds(input.filtros, input.clienteIds)
+  const savedClienteIds = input.clienteIds?.length ? input.clienteIds : undefined
+  const clienteIds = await resolveCampaignClienteIds(input.filtros, savedClienteIds)
   const commonFilters = {
     cidade: input.filtros?.cidade,
     uf: input.filtros?.uf,
@@ -286,7 +287,8 @@ export async function listCampanhaSegmento(input: {
           page: input.page,
           pageSize: input.pageSize,
           query: input.query,
-          clienteIds: input.clienteIds ?? [],
+          origemBase: input.filtros?.origemBase,
+          ...commonFilters,
         })
       : segmento.id === 'rodobens-pendentes'
       ? await listClientesPage({
