@@ -12,7 +12,7 @@ type AlteracaoRow = {
   origem: string | null
   criado_em: string
   clientes?: { nome: string } | null
-  users?: { nome: string } | null
+  usuario?: { nome: string } | null
 }
 
 export async function listClienteAlteracoes(): Promise<ClienteAlteracao[]> {
@@ -21,7 +21,7 @@ export async function listClienteAlteracoes(): Promise<ClienteAlteracao[]> {
 
   const { data, error } = await supabase
     .from('cliente_alteracoes')
-    .select('*, clientes(nome), users(nome)')
+    .select('*, clientes(nome), usuario:users!cliente_alteracoes_usuario_id_fkey(nome)')
     .order('criado_em', { ascending: false })
     .limit(100)
 
@@ -31,7 +31,7 @@ export async function listClienteAlteracoes(): Promise<ClienteAlteracao[]> {
     id: row.id,
     clienteId: row.cliente_id,
     clienteNome: row.clientes?.nome ?? 'Cliente',
-    usuarioNome: row.users?.nome ?? 'Sistema',
+    usuarioNome: row.usuario?.nome ?? 'Sistema',
     campo: row.campo,
     valorAnterior: row.valor_anterior ?? undefined,
     valorNovo: row.valor_novo ?? undefined,

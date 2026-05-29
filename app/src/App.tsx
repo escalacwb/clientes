@@ -19,6 +19,8 @@ import {
   UsersRound,
   WalletCards,
 } from 'lucide-react'
+import html2canvas from 'html2canvas'
+import { jsPDF } from 'jspdf'
 import { lazy, type FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import capitalLogo from './assets/capital-truck-center-logo.svg'
@@ -6382,10 +6384,6 @@ function quotePdfDatePart(date?: string) {
 
 async function downloadQuotePdf(element: HTMLElement | null, clienteNome: string, date?: string) {
   if (!element) return
-  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-    import('html2canvas'),
-    import('jspdf'),
-  ])
   const exportStage = document.createElement('div')
   const exportElement = element.cloneNode(true) as HTMLElement
   exportStage.className = 'pdf-export-stage'

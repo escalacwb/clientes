@@ -11,8 +11,10 @@ type MesclagemRow = {
   criado_em: string
   principal?: { nome: string } | null
   mesclado?: { nome: string } | null
-  users?: { nome: string } | null
+  usuario?: { nome: string } | null
 }
+
+const MESCLAGEM_SELECT = '*, principal:clientes!cliente_principal_id(nome), mesclado:clientes!cliente_mesclado_id(nome), usuario:users!cliente_mesclagens_usuario_id_fkey(nome)'
 
 export async function listPossiveisDuplicados(): Promise<PossivelDuplicado[]> {
   const supabase = await getSupabase()
@@ -43,7 +45,7 @@ export async function listMesclagens(): Promise<ClienteMesclagem[]> {
 
   const { data, error } = await supabase
     .from('cliente_mesclagens')
-    .select('*, principal:clientes!cliente_principal_id(nome), mesclado:clientes!cliente_mesclado_id(nome), users(nome)')
+    .select(MESCLAGEM_SELECT)
     .order('criado_em', { ascending: false })
 
   if (error) throw error
@@ -79,7 +81,7 @@ export async function createMesclagem(input: {
 
   const { data, error } = await supabase
     .from('cliente_mesclagens')
-    .select('*, principal:clientes!cliente_principal_id(nome), mesclado:clientes!cliente_mesclado_id(nome), users(nome)')
+    .select(MESCLAGEM_SELECT)
     .eq('cliente_principal_id', input.clientePrincipalId)
     .eq('cliente_mesclado_id', input.clienteMescladoId)
     .order('criado_em', { ascending: false })
@@ -100,7 +102,7 @@ function mapMesclagem(row: MesclagemRow): ClienteMesclagem {
     clientePrincipalNome: row.principal?.nome ?? 'Cliente principal',
     clienteMescladoId: row.cliente_mesclado_id,
     clienteMescladoNome: row.mesclado?.nome ?? 'Cliente mesclado',
-    usuarioNome: row.users?.nome ?? 'Sistema',
+    usuarioNome: row.usuario?.nome ?? 'Sistema',
     motivo: row.motivo ?? '',
     dadosMovidos,
     criadoEm: row.criado_em,

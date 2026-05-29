@@ -16,8 +16,10 @@ type TarefaRow = {
   reagendada_em: string | null
   reagendamento_motivo: string | null
   clientes?: { nome: string } | null
-  users?: { nome: string } | null
+  vendedor?: { nome: string } | null
 }
+
+const TAREFA_SELECT = '*, clientes(nome), vendedor:users!tarefas_vendedor_id_fkey(nome)'
 
 export type TarefaStatusFilter = 'abertas' | 'vencidas' | 'concluidas'
 
@@ -37,7 +39,7 @@ export async function listTarefas(limit = 100): Promise<Tarefa[]> {
 
   const { data, error } = await supabase
     .from('tarefas')
-    .select('*, clientes(nome), users(nome)')
+    .select(TAREFA_SELECT)
     .order('status', { ascending: true })
     .order('data_vencimento', { ascending: true })
     .limit(limit)
@@ -68,7 +70,7 @@ export async function listTarefasPage(input: {
   const to = from + input.pageSize - 1
   let query = supabase
     .from('tarefas')
-    .select('*, clientes(nome), users(nome)', { count: 'exact' })
+    .select(TAREFA_SELECT, { count: 'exact' })
     .order('data_vencimento', { ascending: true })
     .order('prioridade', { ascending: false })
     .range(from, to)
@@ -102,7 +104,7 @@ export async function listClienteTarefas(clienteId: string, limit = 50): Promise
 
   const { data, error } = await supabase
     .from('tarefas')
-    .select('*, clientes(nome), users(nome)')
+    .select(TAREFA_SELECT)
     .eq('cliente_id', clienteId)
     .order('status', { ascending: true })
     .order('data_vencimento', { ascending: true })
@@ -138,7 +140,7 @@ export async function createTarefa(input: TarefaInput): Promise<Tarefa> {
       prioridade: input.prioridade,
       origem: input.origem,
     })
-    .select('*, clientes(nome), users(nome)')
+    .select(TAREFA_SELECT)
     .single()
 
   if (error) throw error
@@ -179,7 +181,7 @@ export async function rescheduleTarefa(id: string, dataVencimento: string, motiv
       reagendamento_motivo: motivo,
     })
     .eq('id', id)
-    .select('*, clientes(nome), users(nome)')
+    .select(TAREFA_SELECT)
     .single()
 
   if (error) throw error
@@ -192,7 +194,7 @@ function mapTarefa(row: TarefaRow): Tarefa {
     clienteId: row.cliente_id,
     clienteNome: row.clientes?.nome ?? 'Cliente',
     vendedorId: row.vendedor_id ?? undefined,
-    vendedorNome: row.users?.nome ?? undefined,
+    vendedorNome: row.vendedor?.nome ?? undefined,
     titulo: row.titulo,
     descricao: row.descricao ?? undefined,
     dataVencimento: row.data_vencimento,
