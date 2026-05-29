@@ -755,6 +755,71 @@ h3 {
   gap: 14px;
 }
 
+.cockpit-followups {
+  display: grid;
+  gap: 14px;
+}
+
+.followup-stage-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.followup-stage-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #dfe8e2;
+  border-radius: 8px;
+  background: #fbfdfa;
+  padding: 10px;
+}
+
+.followup-stage-card > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.followup-stage-card > div span {
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #103b35;
+  color: #ffffff;
+  font-weight: 900;
+}
+
+.followup-mini-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid #dfe8e2;
+  border-radius: 8px;
+  background: #ffffff;
+  color: inherit;
+  padding: 8px;
+  text-align: left;
+}
+
+.followup-mini-row span {
+  min-width: 0;
+}
+
+.followup-mini-row strong,
+.followup-mini-row small {
+  display: block;
+}
+
+.followup-mini-row small {
+  color: #64736f;
+  font-size: 12px;
+}
+
 .next-action-list {
   display: grid;
   gap: 8px;

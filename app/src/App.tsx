@@ -2482,6 +2482,10 @@ function Cockpit({
   const [isRunningFollowups, setIsRunningFollowups] = useState(false)
   const [followupAutomationMessage, setFollowupAutomationMessage] = useState('')
   const todayTasks = tarefas.filter((tarefa) => daysSince(tarefa.dataVencimento) >= 0)
+  const contactFollowups = tarefas
+    .filter((tarefa) => isCommercialFollowupTask(tarefa))
+    .sort((a, b) => b.prioridade - a.prioridade || a.dataVencimento.localeCompare(b.dataVencimento))
+    .slice(0, 12)
   const highPriorityTasks = tarefas
     .filter((tarefa) => tarefa.prioridade >= 80 && !todayTasks.some((item) => item.id === tarefa.id))
     .slice(0, 4)
@@ -2624,7 +2628,7 @@ function Cockpit({
         </div>
         <div className="cockpit-kpis">
           <Info label="Atrasadas" value={tarefasVencidas.length.toString()} />
-          <Info label="Hoje/prioridade" value={todayTasks.length.toString()} />
+          <Info label="Follow-ups" value={contactFollowups.length.toString()} />
           <Info label="Respostas campanha" value={campanhas.length.toString()} />
           <Info label="Orc. vencidos" value={orcamentos.length.toString()} />
           <Info label="Sem cadastro" value={rodobens.length.toString()} />
@@ -2713,6 +2717,70 @@ function Cockpit({
             </article>
           ))}
           {nextActions.length === 0 && <div className="empty-state compact">Nenhuma acao urgente agora.</div>}
+        </div>
+      </section>
+
+      <section className="panel wide cockpit-followups">
+        <div className="panel-header">
+          <div>
+            <h2>Fila de follow-up comercial</h2>
+            <p>Retornos criados por atendimento, propostas, campanhas e Ficha 360.</p>
+          </div>
+          <button className="button" type="button" onClick={() => onOpenModule('tarefas')}>Abrir tarefas</button>
+        </div>
+        <div className="followup-stage-grid">
+          {[
+            ['atendimento', 'Atendimento'],
+            ['orcamento', 'Propostas'],
+            ['campanha', 'Campanhas'],
+            ['cliente360', 'Ficha 360'],
+          ].map(([origin, label]) => {
+            const items = contactFollowups.filter((tarefa) => (tarefa.origem ?? '').startsWith(origin))
+            return (
+              <article className="followup-stage-card" key={origin}>
+                <div>
+                  <strong>{label}</strong>
+                  <span>{items.length}</span>
+                </div>
+                {items.slice(0, 3).map((tarefa) => {
+                  const sla = taskSla(tarefa)
+                  return (
+                    <button className="followup-mini-row" key={tarefa.id} type="button" onClick={() => onOpenClient(tarefa.clienteId)}>
+                      <span>
+                        <strong>{tarefa.clienteNome || tarefa.titulo}</strong>
+                        <small>{tarefa.titulo} - {dateLabel(tarefa.dataVencimento)}</small>
+                      </span>
+                      <b className={`sla-pill ${sla.tone}`}>{sla.label}</b>
+                    </button>
+                  )
+                })}
+                {items.length === 0 && <small className="muted">Sem pendencias nesta etapa.</small>}
+              </article>
+            )
+          })}
+        </div>
+        <div className="cockpit-list">
+          {contactFollowups.slice(0, 6).map((tarefa) => {
+            const sla = taskSla(tarefa)
+            return (
+              <article className={sla.tone === 'danger' ? 'cockpit-card danger' : 'cockpit-card'} key={tarefa.id}>
+                <div>
+                  <strong>{tarefa.clienteNome || tarefa.titulo}</strong>
+                  <small>{taskOriginLabel(tarefa.origem)} - {dateLabel(tarefa.dataVencimento)} - prioridade {tarefa.prioridade}</small>
+                </div>
+                <span className={`sla-pill ${sla.tone}`}>{sla.label}</span>
+                {tarefa.descricao && <p>{tarefa.descricao}</p>}
+                <div className="row-actions">
+                  <button className="button" type="button" onClick={() => onOpenClient(tarefa.clienteId)}>Ficha</button>
+                  <button className="button" type="button" onClick={() => openReschedule(tarefa)}>Reagendar</button>
+                  <button className="button primary" type="button" disabled={busyTaskId === tarefa.id} onClick={() => complete(tarefa.id)}>
+                    {busyTaskId === tarefa.id ? 'Concluindo...' : 'Concluir'}
+                  </button>
+                </div>
+              </article>
+            )
+          })}
+          {contactFollowups.length === 0 && <div className="empty-state compact">Nenhum follow-up comercial aberto.</div>}
         </div>
       </section>
 
@@ -10305,6 +10373,8 @@ function taskSla(tarefa: Tarefa): { label: string; tone: 'ok' | 'warn' | 'danger
 function taskSlaExpected(origin: string) {
   if (origin.startsWith('campanha')) return 1
   if (origin.startsWith('orcamento')) return 2
+  if (origin.startsWith('atendimento')) return 1
+  if (origin.startsWith('cliente360')) return 2
   if (origin.startsWith('rodobens')) return 1
   if (origin.startsWith('oportunidade')) return 3
   return 3
@@ -10313,10 +10383,28 @@ function taskSlaExpected(origin: string) {
 function taskOriginSlaLabel(origin: string) {
   if (origin.startsWith('campanha')) return 'Campanha'
   if (origin.startsWith('orcamento')) return 'Orcamento'
+  if (origin.startsWith('atendimento')) return 'Atendimento'
+  if (origin.startsWith('cliente360')) return 'Ficha 360'
   if (origin.startsWith('rodobens')) return 'Clientes sem cadastro'
   if (origin.startsWith('oportunidade')) return 'Oportunidade'
   if (origin.startsWith('interacao')) return 'Interacao'
   return 'SLA'
+}
+
+function taskOriginLabel(origin?: string) {
+  if (!origin) return 'Sem origem'
+  return taskOriginSlaLabel(origin.toLowerCase())
+}
+
+function isCommercialFollowupTask(tarefa: Tarefa) {
+  const origin = (tarefa.origem ?? '').toLowerCase()
+  return [
+    'atendimento',
+    'interacao',
+    'cliente360',
+    'orcamento',
+    'campanha',
+  ].some((prefix) => origin.startsWith(prefix))
 }
 
 function sellerCriticalOrigin(row?: TarefaSlaVendedorResumo) {
