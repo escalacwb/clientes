@@ -79,6 +79,17 @@ export type ImportacaoQualidadeResumo = {
   arquivosObrigatoriosTotal: number
 }
 
+export type ImportacaoQualidadeIssue = {
+  id: string
+  tipo: 'cliente_sem_whatsapp' | 'cliente_sem_vendedor' | 'origem_desconhecida' | 'servico_sem_placa' | 'conflito_importacao'
+  severidade: 'alta' | 'media' | 'baixa'
+  titulo: string
+  detalhe: string
+  clienteId?: string
+  clienteNome?: string
+  acaoSugerida: string
+}
+
 export async function listImportacoes(limit = 100): Promise<Importacao[]> {
   const supabase = await getSupabase()
   if (!supabase) return mockImportacoes
@@ -318,6 +329,136 @@ export async function getImportacaoQualidadeResumo(): Promise<ImportacaoQualidad
     arquivosObrigatoriosOk: latestRequired.size,
     arquivosObrigatoriosTotal: requiredTypes.length,
   }
+}
+
+export async function listImportacaoQualidadeIssues(limit = 40): Promise<ImportacaoQualidadeIssue[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const perGroup = Math.max(5, Math.ceil(limit / 5))
+  const [
+    semWhatsapp,
+    semVendedor,
+    origemDesconhecida,
+    servicosSemPlaca,
+    conflitos,
+  ] = await Promise.all([
+    supabase
+      .from('clientes')
+      .select('id,nome,cidade,uf')
+      .is('excluido_em', null)
+      .or('whatsapp_principal.is.null,whatsapp_principal.eq.')
+      .order('ultima_compra_em', { ascending: false, nullsFirst: false })
+      .limit(perGroup),
+    supabase
+      .from('clientes')
+      .select('id,nome,cidade,uf')
+      .is('excluido_em', null)
+      .is('vendedor_id', null)
+      .order('total_comprado', { ascending: false })
+      .limit(perGroup),
+    supabase
+      .from('clientes')
+      .select('id,nome,cidade,uf,origem')
+      .is('excluido_em', null)
+      .eq('origem_base', 'desconhecida')
+      .order('total_comprado', { ascending: false })
+      .limit(perGroup),
+    supabase
+      .from('servicos_itens')
+      .select('id,cliente_id,servico_nome,data_servico,clientes(nome)')
+      .or('placa.is.null,placa.eq.')
+      .order('data_servico', { ascending: false })
+      .limit(perGroup),
+    supabase
+      .from('importacao_conflitos')
+      .select('id,tipo_conflito,dados_recebidos')
+      .eq('resolvido', false)
+      .limit(perGroup),
+  ])
+
+  const firstError = [semWhatsapp.error, semVendedor.error, origemDesconhecida.error, servicosSemPlaca.error, conflitos.error].find(Boolean)
+  if (firstError) throw firstError
+
+  const issues: ImportacaoQualidadeIssue[] = []
+  ;((semWhatsapp.data ?? []) as Array<{ id: string; nome: string; cidade?: string | null; uf?: string | null }>).forEach((row) => {
+    issues.push({
+      id: `sem-whatsapp-${row.id}`,
+      tipo: 'cliente_sem_whatsapp',
+      severidade: 'alta',
+      titulo: 'Cliente sem WhatsApp',
+      detalhe: `${row.nome}${localLabel(row.cidade, row.uf)} precisa de contato valido para campanhas e propostas.`,
+      clienteId: row.id,
+      clienteNome: row.nome,
+      acaoSugerida: 'Completar contato na ficha do cliente.',
+    })
+  })
+
+  ;((semVendedor.data ?? []) as Array<{ id: string; nome: string; cidade?: string | null; uf?: string | null }>).forEach((row) => {
+    issues.push({
+      id: `sem-vendedor-${row.id}`,
+      tipo: 'cliente_sem_vendedor',
+      severidade: 'alta',
+      titulo: 'Cliente sem vendedor',
+      detalhe: `${row.nome}${localLabel(row.cidade, row.uf)} nao entra em carteira nem metas ate receber responsavel.`,
+      clienteId: row.id,
+      clienteNome: row.nome,
+      acaoSugerida: 'Atribuir vendedor em Clientes ou Vendedores.',
+    })
+  })
+
+  ;((origemDesconhecida.data ?? []) as Array<{ id: string; nome: string; cidade?: string | null; uf?: string | null; origem?: string | null }>).forEach((row) => {
+    issues.push({
+      id: `origem-${row.id}`,
+      tipo: 'origem_desconhecida',
+      severidade: 'media',
+      titulo: 'Origem sem classificacao',
+      detalhe: `${row.nome}${localLabel(row.cidade, row.uf)} esta como origem desconhecida${row.origem ? ` (${row.origem})` : ''}.`,
+      clienteId: row.id,
+      clienteNome: row.nome,
+      acaoSugerida: 'Classificar como base propria ou lista externa.',
+    })
+  })
+
+  ;((servicosSemPlaca.data ?? []) as Array<{ id: string; cliente_id?: string | null; servico_nome: string; data_servico?: string | null; clientes?: { nome?: string | null } | null }>).forEach((row) => {
+    issues.push({
+      id: `servico-sem-placa-${row.id}`,
+      tipo: 'servico_sem_placa',
+      severidade: 'media',
+      titulo: 'Servico sem placa vinculada',
+      detalhe: `${row.servico_nome} em ${row.data_servico ?? 'data nao informada'} ficou sem veiculo estruturado.`,
+      clienteId: row.cliente_id ?? undefined,
+      clienteNome: row.clientes?.nome ?? undefined,
+      acaoSugerida: 'Revisar extracao de placa/KM nos arquivos de servico.',
+    })
+  })
+
+  ;((conflitos.data ?? []) as Array<{ id: string; tipo_conflito?: string | null; dados_recebidos?: Record<string, unknown> | null }>).forEach((row) => {
+    const cliente = typeof row.dados_recebidos?.clienteNome === 'string' ? row.dados_recebidos.clienteNome : undefined
+    issues.push({
+      id: `conflito-${row.id}`,
+      tipo: 'conflito_importacao',
+      severidade: 'alta',
+      titulo: 'Conflito de importacao pendente',
+      detalhe: `${row.tipo_conflito ?? 'Conflito'}${cliente ? ` - ${cliente}` : ''}.`,
+      acaoSugerida: 'Resolver em Conflitos antes da proxima importacao.',
+    })
+  })
+
+  return issues
+    .sort((a, b) => severityWeight(b.severidade) - severityWeight(a.severidade))
+    .slice(0, limit)
+}
+
+function localLabel(cidade?: string | null, uf?: string | null) {
+  const local = [cidade, uf].filter(Boolean).join('/')
+  return local ? ` (${local})` : ''
+}
+
+function severityWeight(severidade: ImportacaoQualidadeIssue['severidade']) {
+  if (severidade === 'alta') return 3
+  if (severidade === 'media') return 2
+  return 1
 }
 
 function mapImportacao(row: ImportacaoRow): Importacao {

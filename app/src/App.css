@@ -2790,6 +2790,47 @@ h3 {
   padding: 9px 10px;
 }
 
+.quality-issue-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.quality-issue {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  border: 1px solid #dfe7e2;
+  border-left-width: 4px;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.quality-issue.alta {
+  border-left-color: #c1121f;
+}
+
+.quality-issue.media {
+  border-left-color: #d9822b;
+}
+
+.quality-issue.baixa {
+  border-left-color: #386fa4;
+}
+
+.quality-issue strong,
+.quality-issue span,
+.quality-issue small {
+  display: block;
+}
+
+.quality-issue span,
+.quality-issue small {
+  color: #53645f;
+  line-height: 1.45;
+}
+
 .info-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

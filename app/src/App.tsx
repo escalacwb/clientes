@@ -127,7 +127,7 @@ import { finalizeImportacaoDiaria } from './repositories/importacoesRepository'
 import { getImportacaoQualidadeResumo } from './repositories/importacoesRepository'
 import { importCatalogPriceFiles } from './repositories/importacoesRepository'
 import { importReferenceFiles } from './repositories/importacoesRepository'
-import { listImportacaoArquivos, type ImportacaoArquivoResumo, type ImportacaoQualidadeResumo } from './repositories/importacoesRepository'
+import { listImportacaoArquivos, listImportacaoQualidadeIssues, type ImportacaoArquivoResumo, type ImportacaoQualidadeIssue, type ImportacaoQualidadeResumo } from './repositories/importacoesRepository'
 import { listImportacoes } from './repositories/importacoesRepository'
 import { runFollowupAutomations } from './repositories/importacoesRepository'
 import { createMesclagem, listMesclagens, listPossiveisDuplicados } from './repositories/mesclagensRepository'
@@ -7614,6 +7614,7 @@ function Importacoes({
 }) {
   const [arquivosResumo, setArquivosResumo] = useState<ImportacaoArquivoResumo[]>([])
   const [qualidadeResumo, setQualidadeResumo] = useState<ImportacaoQualidadeResumo | undefined>()
+  const [qualidadeIssues, setQualidadeIssues] = useState<ImportacaoQualidadeIssue[]>([])
   const [previews, setPreviews] = useState<XmlImportPreview[]>([])
   const [workbookPreviews, setWorkbookPreviews] = useState<WorkbookImportPreview[]>([])
   const [referencePreview, setReferencePreview] = useState<ReferenceImportPreview | null>(null)
@@ -7650,7 +7651,17 @@ function Importacoes({
   useEffect(() => {
     listImportacaoArquivos().then(setArquivosResumo).catch(() => setArquivosResumo([]))
     getImportacaoQualidadeResumo().then(setQualidadeResumo).catch(() => setQualidadeResumo(undefined))
+    listImportacaoQualidadeIssues().then(setQualidadeIssues).catch(() => setQualidadeIssues([]))
   }, [importacoes.length])
+
+  async function refreshQuality() {
+    const [resumo, issues] = await Promise.all([
+      getImportacaoQualidadeResumo(),
+      listImportacaoQualidadeIssues(),
+    ])
+    setQualidadeResumo(resumo)
+    setQualidadeIssues(issues)
+  }
 
   async function handleFiles(files: FileList | null) {
     if (!files?.length) return
@@ -7807,7 +7818,7 @@ function Importacoes({
       const created = updated.find((item) => item.id === result.importacaoId)
       if (created) onAddImportacao(created)
       setArquivosResumo(await listImportacaoArquivos())
-      setQualidadeResumo(await getImportacaoQualidadeResumo())
+      await refreshQuality()
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Nao foi possivel concluir a importacao diaria.')
     } finally {
@@ -7831,7 +7842,7 @@ function Importacoes({
       const created = updated.find((item) => item.id === result.importacaoId)
       if (created) onAddImportacao(created)
       setArquivosResumo(await listImportacaoArquivos())
-      setQualidadeResumo(await getImportacaoQualidadeResumo())
+      await refreshQuality()
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Nao foi possivel concluir a importacao de catalogo.')
     } finally {
@@ -7849,7 +7860,7 @@ function Importacoes({
       setReferenceImportResult(
         `Fechamento reprocessado: ${result.clientes_atualizados ?? 0} clientes recalculados, ${result.oportunidades_geradas ?? 0} oportunidades e ${result.tarefas_followup?.tarefas_followup_total ?? 0} follow-ups sincronizados.`,
       )
-      setQualidadeResumo(await getImportacaoQualidadeResumo())
+      await refreshQuality()
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Nao foi possivel reprocessar o fechamento da importacao.')
     } finally {
@@ -7935,6 +7946,30 @@ function Importacoes({
           <Info label="Itens novos" value={importacaoIndicadores.novos.toString()} />
           <Info label="Ignorados/repetidos" value={importacaoIndicadores.ignorados.toString()} />
           <Info label="Clientes novos" value={importacaoIndicadores.clientesCriados.toString()} />
+        </div>
+      </section>
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Fila de saneamento</h2>
+            <p>Problemas priorizados para corrigir cadastro, carteira e historico antes das campanhas.</p>
+          </div>
+          <button className="button" type="button" onClick={() => void refreshQuality()}>
+            <RefreshCw size={16} /> Atualizar fila
+          </button>
+        </div>
+        <div className="quality-issue-grid">
+          {qualidadeIssues.map((issue) => (
+            <article className={`quality-issue ${issue.severidade}`} key={issue.id}>
+              <div>
+                <strong>{issue.titulo}</strong>
+                <span>{issue.detalhe}</span>
+              </div>
+              <small>{issue.acaoSugerida}</small>
+              <span className="status-pill">{qualityIssueSeverityLabel(issue.severidade)}</span>
+            </article>
+          ))}
+          {qualidadeIssues.length === 0 && <div className="empty-state">Nenhum problema prioritario encontrado agora.</div>}
         </div>
       </section>
       <section className="panel wide">
@@ -8276,6 +8311,12 @@ function workbookStats(preview: WorkbookImportPreview) {
     vendasSheets: preview.sheets.filter((sheet) => sheet.role === 'vendas').length,
     servicosSheets: preview.sheets.filter((sheet) => sheet.role === 'servicos').length,
   }
+}
+
+function qualityIssueSeverityLabel(severidade: ImportacaoQualidadeIssue['severidade']) {
+  if (severidade === 'alta') return 'Alta prioridade'
+  if (severidade === 'media') return 'Media prioridade'
+  return 'Baixa prioridade'
 }
 
 function workbookReadiness(preview: WorkbookImportPreview) {
