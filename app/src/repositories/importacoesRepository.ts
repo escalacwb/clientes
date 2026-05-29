@@ -32,6 +32,13 @@ export type ReferenceImportResult = {
   ordens: number
   vendas: { created: number; ignored: number; conflitos: number }
   servicos: { created: number; ignored: number; conflitos: number }
+  catalogo?: {
+    itens: number
+    precos: number
+    precosNovos?: number
+    precosAlterados?: number
+    precosInalterados?: number
+  }
   movimentosComVeiculo: number
   movimentosSemVeiculo: number
 }

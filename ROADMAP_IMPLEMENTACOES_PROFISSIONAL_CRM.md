@@ -954,6 +954,23 @@ Validacao:
 Proximo passo tecnico:
 - Exibir produtos/servicos inativos e criar indicador de mudanca de preco entre importacoes.
 
+### 2026-05-28 - Importacao incremental de precos
+
+Status: concluido.
+
+Entregue:
+- Importacao de `precoprodutos` e `precoservicos` agora compara com o ultimo preco do item.
+- Nova vigencia em `catalogo_precos` so e criada quando preco, desconto maximo ou estoque mudam.
+- Resultado da importacao mostra precos novos, alterados e inalterados.
+- Script local de importacao e Edge Function foram atualizados com a mesma regra.
+
+Validacao:
+- Build passou com `npm run build`.
+- Edge Function `import-reference-files` foi publicada no Supabase.
+
+Proximo passo tecnico:
+- Criar painel de qualidade de importacao com alertas de arquivos obrigatorios, conflitos e mudancas de preco.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

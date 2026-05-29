@@ -227,11 +227,13 @@ Status: Parcial.
 Objetivo:
 Atualizar catalogo e precos sem duplicar e com historico.
 
-Entregas:
+Ja entregue:
 - Importar `precoprodutos` e `precosservicos` incrementalmente.
 - Criar vigencia quando preco mudar.
 - Resumo de alteracoes de preco.
 - Guardar preco anterior.
+
+Proximas entregas:
 - Validar desconto maximo quando existir.
 
 Pronto quando:

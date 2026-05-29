@@ -607,12 +607,49 @@ async function upsertCatalogo(rows, arquivos) {
     }]
   })
 
-  for (const batch of chunks(pricePayload, batchSize)) {
+  const latestPrices = await fetchLatestCatalogPrices(Array.from(catalogIndex.values()))
+  const changedPrices = pricePayload.filter((price) => {
+    const latest = latestPrices.get(String(price.catalogo_item_id))
+    if (!latest) return true
+    return Number(latest.valor || 0) !== Number(price.valor || 0)
+      || nullableNumber(latest.desconto_maximo) !== nullableNumber(price.desconto_maximo)
+      || nullableNumber(latest.estoque) !== nullableNumber(price.estoque)
+  })
+
+  for (const batch of chunks(changedPrices, batchSize)) {
     const { error } = await supabase.from('catalogo_precos').upsert(batch, { onConflict: 'catalogo_item_id,vigencia_inicio,importacao_arquivo_id' })
     if (error) throw error
   }
 
-  return { itens: payload.length, precos: pricePayload.length }
+  return {
+    itens: payload.length,
+    precos: changedPrices.length,
+    precosNovos: changedPrices.filter((price) => !latestPrices.has(String(price.catalogo_item_id))).length,
+    precosAlterados: changedPrices.filter((price) => latestPrices.has(String(price.catalogo_item_id))).length,
+    precosInalterados: pricePayload.length - changedPrices.length,
+  }
+}
+
+async function fetchLatestCatalogPrices(itemIds) {
+  const latest = new Map()
+  for (const batch of chunks(itemIds, 1000)) {
+    const { data, error } = await supabase
+      .from('catalogo_precos')
+      .select('catalogo_item_id,valor,desconto_maximo,estoque,vigencia_inicio,criado_em')
+      .in('catalogo_item_id', batch)
+      .order('vigencia_inicio', { ascending: false })
+      .order('criado_em', { ascending: false })
+    if (error) throw error
+    data.forEach((price) => {
+      if (!latest.has(price.catalogo_item_id)) latest.set(price.catalogo_item_id, price)
+    })
+  }
+  return latest
+}
+
+function nullableNumber(value) {
+  if (value === null || value === undefined || value === '') return null
+  return Number(value)
 }
 
 async function updateClienteStats() {

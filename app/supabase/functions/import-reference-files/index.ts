@@ -621,8 +621,39 @@ async function upsertCatalogo(service: ReturnType<typeof createClient>, rows: Ca
       raw_data: row.raw,
     }]
   })
-  await upsert(service, 'catalogo_precos', pricePayload, 'catalogo_item_id,vigencia_inicio,importacao_arquivo_id')
-  return { itens: payload.length, precos: pricePayload.length }
+  const latestPrices = await fetchLatestCatalogPrices(service, Array.from(catalogIndex.values()))
+  const changedPrices = pricePayload.filter((price) => {
+    const latest = latestPrices.get(String(price.catalogo_item_id))
+    if (!latest) return true
+    return number(latest.valor) !== number(price.valor)
+      || nullableNumber(latest.desconto_maximo) !== nullableNumber(price.desconto_maximo)
+      || nullableNumber(latest.estoque) !== nullableNumber(price.estoque)
+  })
+  await upsert(service, 'catalogo_precos', changedPrices, 'catalogo_item_id,vigencia_inicio,importacao_arquivo_id')
+  return {
+    itens: payload.length,
+    precos: changedPrices.length,
+    precosNovos: changedPrices.filter((price) => !latestPrices.has(String(price.catalogo_item_id))).length,
+    precosAlterados: changedPrices.filter((price) => latestPrices.has(String(price.catalogo_item_id))).length,
+    precosInalterados: pricePayload.length - changedPrices.length,
+  }
+}
+
+async function fetchLatestCatalogPrices(service: ReturnType<typeof createClient>, itemIds: string[]) {
+  const latest = new Map<string, { valor: number; desconto_maximo: number | null; estoque: number | null }>()
+  for (const batch of chunks(itemIds, 800)) {
+    const { data, error } = await service
+      .from('catalogo_precos')
+      .select('catalogo_item_id,valor,desconto_maximo,estoque,vigencia_inicio,criado_em')
+      .in('catalogo_item_id', batch)
+      .order('vigencia_inicio', { ascending: false })
+      .order('criado_em', { ascending: false })
+    if (error) throw error
+    ;(data ?? []).forEach((price: { catalogo_item_id: string; valor: number; desconto_maximo: number | null; estoque: number | null }) => {
+      if (!latest.has(price.catalogo_item_id)) latest.set(price.catalogo_item_id, price)
+    })
+  }
+  return latest
 }
 
 async function upsert(service: ReturnType<typeof createClient>, table: string, payload: Record<string, unknown>[], onConflict: string) {
@@ -848,6 +879,11 @@ function number(value: string | number) {
   if (!raw) return 0
   const parsed = Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+function nullableNumber(value: unknown) {
+  if (value === null || value === undefined || value === '') return null
+  return number(value as string | number)
 }
 
 function toIsoDate(value: string) {
