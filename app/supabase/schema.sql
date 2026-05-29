@@ -1211,6 +1211,12 @@ create index if not exists oportunidades_cliente_idx on public.oportunidades(cli
 create index if not exists oportunidades_responsavel_idx on public.oportunidades(responsavel_id, estagio);
 create index if not exists oportunidades_estagio_idx on public.oportunidades(estagio, previsao_fechamento);
 create index if not exists oportunidades_origem_idx on public.oportunidades(origem);
+create unique index if not exists oportunidades_orcamento_unique_idx
+on public.oportunidades(orcamento_id)
+where orcamento_id is not null;
+create unique index if not exists oportunidades_campanha_cliente_unique_idx
+on public.oportunidades(campanha_id, cliente_id)
+where campanha_id is not null;
 
 drop trigger if exists oportunidades_set_atualizado_em on public.oportunidades;
 create trigger oportunidades_set_atualizado_em
@@ -2451,3 +2457,52 @@ with check (
       and c.vendedor_id = public.current_app_user_id()
   )
 );
+
+create table if not exists public.automacao_regras (
+  id uuid primary key default gen_random_uuid(),
+  codigo text not null unique,
+  nome text not null,
+  descricao text,
+  evento text not null,
+  acao text not null,
+  ativo boolean not null default true,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+
+create table if not exists public.automacao_logs (
+  id uuid primary key default gen_random_uuid(),
+  regra_codigo text not null,
+  entidade_tipo text not null,
+  entidade_id uuid,
+  resultado text not null,
+  criado_em timestamptz not null default now()
+);
+
+create index if not exists automacao_logs_regra_idx on public.automacao_logs(regra_codigo, criado_em desc);
+create index if not exists automacao_logs_entidade_idx on public.automacao_logs(entidade_tipo, entidade_id, criado_em desc);
+
+drop trigger if exists automacao_regras_set_atualizado_em on public.automacao_regras;
+create trigger automacao_regras_set_atualizado_em
+before update on public.automacao_regras
+for each row execute function public.set_atualizado_em();
+
+alter table public.automacao_regras enable row level security;
+alter table public.automacao_logs enable row level security;
+
+create policy automacao_regras_read_admin
+on public.automacao_regras for select
+using (public.current_user_is_admin());
+
+create policy automacao_logs_read_admin
+on public.automacao_logs for select
+using (public.current_user_is_admin());
+
+create policy automacao_regras_admin_write
+on public.automacao_regras for all
+using (public.current_user_is_admin())
+with check (public.current_user_is_admin());
+
+create policy automacao_logs_insert_authenticated
+on public.automacao_logs for insert
+with check (auth.role() = 'authenticated' or public.current_user_is_admin());

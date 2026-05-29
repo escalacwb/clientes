@@ -117,6 +117,9 @@ Ja entregue:
 - Tela `Oportunidades` ganhou resumo de pipeline aberto, forecast e distribuicao por estagio.
 - Sugestoes da fila cacheada agora podem virar deal real em um clique.
 - Estagio do deal pode ser atualizado direto pela tela.
+- Tela `Oportunidades` ganhou kanban por etapa, edicao de valor/probabilidade/previsao/responsavel e motivo obrigatorio para perda.
+- Orcamentos criados/revisados/fechados sincronizam automaticamente com oportunidade real.
+- Campanhas respondidas, convertidas, ganhas ou perdidas sincronizam automaticamente com oportunidade real.
 
 Pronto quando:
 - Cada venda potencial pode ser acompanhada ate ganhar ou perder.
@@ -283,6 +286,8 @@ Ja entregue:
 - Criada view `vw_sequencias_execucao` com cliente, vendedor, etapa atual e proxima acao.
 - Motor de oportunidades ganhou acao em lote `Sequencia 0/2/7/15` para iniciar cadencia manual sem duplicar clientes ja existentes na sequencia.
 - Sequencia padrao de WhatsApp comercial cria etapas de dia 0, dia 2, dia 7 e dia 15.
+- Sequencias ativas pausam automaticamente quando o cliente responde campanha, vira orcamento, ganha, perde, marca nao contatar ou recebe/revisa orcamento.
+- Criadas tabelas `automacao_regras` e `automacao_logs` para rastrear automacoes executadas.
 
 Pronto quando:
 - A equipe consegue fazer cadencias consistentes sem lembrar manualmente cada passo.

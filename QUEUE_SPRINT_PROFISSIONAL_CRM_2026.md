@@ -74,6 +74,8 @@ Entregue nesta rodada:
 - View `vw_oportunidades_pipeline` criada para forecast e acompanhamento.
 - Motor de oportunidades passa a converter sugestao cacheada em deal persistido.
 - Tela de oportunidades mostra pipeline aberto, valor em aberto, forecast e estagios.
+- Kanban de oportunidades por etapa, edicao comercial do deal e motivo obrigatorio para perda.
+- Sincronizacao automatica de orcamentos e campanhas com oportunidades reais.
 
 ## Sprint D - Automacoes e sequencias
 
@@ -89,6 +91,8 @@ Entregue nesta rodada:
 - Tabelas de sequencias comerciais, etapas e execucoes.
 - Sequencia padrao de WhatsApp manual 0/2/7/15.
 - Acao em lote no motor de oportunidades para iniciar a cadencia.
+- Pausa automatica de sequencias quando cliente responde, vira orcamento, ganha/perde ou recebe orcamento.
+- Tabelas de regras/logs de automacao para rastreabilidade.
 
 ## Sprint E - Qualidade de dados e governanca
 

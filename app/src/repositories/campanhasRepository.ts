@@ -1,5 +1,7 @@
 import { getSupabase } from '../lib/supabase'
 import { listClientesPage } from './clientesRepository'
+import { syncPipelineFromCampanha } from './pipelineRepository'
+import { pauseActiveSequencesForClient } from './sequenciasRepository'
 import type { CampanhaEnvio, CampanhaEnvioStatus, CarteiraFiltro, Cliente, LeadQualificacaoStatus } from '../types'
 
 export type CampanhaSegmentoId = 'inativos-90' | 'rodobens-pendentes' | 'sem-contato-60' | 'sem-whatsapp' | 'selecionados'
@@ -715,7 +717,20 @@ export async function upsertCampanhaEnvio(input: {
 
   if (error) throw error
 
-  return mapEnvio(data as CampanhaEnvioRow)
+  const envio = mapEnvio(data as CampanhaEnvioRow)
+  await syncPipelineFromCampanha({
+    campanhaId,
+    campanhaNome: input.campanhaNome,
+    clienteId: input.clienteId,
+    vendedorId: input.vendedorId,
+    status: input.status,
+    orcamentoId: input.orcamentoId,
+    receitaAtribuida: input.receitaAtribuida,
+  })
+  if (['respondeu', 'virou_orcamento', 'ganhou', 'perdido', 'nao_contatar'].includes(input.status)) {
+    await pauseActiveSequencesForClient(input.clienteId, `Campanha marcada como ${input.status}.`)
+  }
+  return envio
 }
 
 export async function attributeCampanhaRevenueByOrcamento(orcamentoId: string, receita: number): Promise<void> {
@@ -734,6 +749,33 @@ export async function attributeCampanhaRevenueByOrcamento(orcamentoId: string, r
     .eq('orcamento_id', orcamentoId)
 
   if (error) throw error
+
+  const { data: envios } = await supabase
+    .from('campanha_envios')
+    .select('campanha_id,cliente_id,vendedor_id,status,orcamento_id,receita_atribuida,campanhas(nome)')
+    .eq('orcamento_id', orcamentoId)
+
+  for (const envio of envios ?? []) {
+    const row = envio as unknown as {
+      campanha_id: string
+      cliente_id: string
+      vendedor_id: string | null
+      status: CampanhaEnvioStatus
+      orcamento_id: string | null
+      receita_atribuida: number | null
+      campanhas?: { nome: string | null } | Array<{ nome: string | null }> | null
+    }
+    const campanhaNome = Array.isArray(row.campanhas) ? row.campanhas[0]?.nome : row.campanhas?.nome
+    await syncPipelineFromCampanha({
+      campanhaId: row.campanha_id,
+      campanhaNome: campanhaNome ?? undefined,
+      clienteId: row.cliente_id,
+      vendedorId: row.vendedor_id ?? undefined,
+      status: row.status,
+      orcamentoId: row.orcamento_id ?? undefined,
+      receitaAtribuida: row.receita_atribuida ?? undefined,
+    })
+  }
 }
 
 async function ensureCampanha(

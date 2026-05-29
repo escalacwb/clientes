@@ -1,5 +1,7 @@
 import { orcamentoItens as mockOrcamentoItens, orcamentos as mockOrcamentos } from '../data/mockData'
 import { getSupabase } from '../lib/supabase'
+import { syncPipelineFromOrcamento } from './pipelineRepository'
+import { pauseActiveSequencesForClient } from './sequenciasRepository'
 import type { Orcamento, OrcamentoCondicao, OrcamentoCondicaoInput, OrcamentoInput, OrcamentoItem, OrcamentoItemInput, OrcamentoVersao } from '../types'
 
 type OrcamentoRow = {
@@ -220,6 +222,8 @@ export async function createOrcamento(input: OrcamentoInput, itens: OrcamentoIte
     mensagem: input.versaoMensagem,
     origem: input.versaoOrigem,
   })
+  await syncPipelineFromOrcamento(created)
+  await pauseActiveSequencesForClient(created.clienteId, 'Orcamento criado para o cliente.')
 
   return created
 }
@@ -300,6 +304,8 @@ export async function reviseOrcamento(
     mensagem: input.versaoMensagem,
     origem: input.versaoOrigem,
   })
+  await syncPipelineFromOrcamento(revised)
+  await pauseActiveSequencesForClient(revised.clienteId, 'Orcamento revisado para o cliente.')
 
   return revised
 }
@@ -328,6 +334,19 @@ export async function updateOrcamentoStatus(
     .eq('id', id)
 
   if (error) throw error
+
+  const { data: updated, error: fetchError } = await supabase
+    .from('orcamentos')
+    .select('*,clientes(nome),users!orcamentos_vendedor_id_fkey(nome)')
+    .eq('id', id)
+    .single()
+
+  if (fetchError) throw fetchError
+  const changed = mapOrcamento(updated as OrcamentoRow)
+  await syncPipelineFromOrcamento(changed)
+  if (status === 'ganho' || status === 'perdido') {
+    await pauseActiveSequencesForClient(changed.clienteId, `Orcamento marcado como ${status}.`)
+  }
 }
 
 async function listOrcamentoItens(orcamentoIds: string[]): Promise<OrcamentoItem[]> {

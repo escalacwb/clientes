@@ -138,7 +138,7 @@ import { listOrcamentoVersoes } from './repositories/orcamentosRepository'
 import { reviseOrcamento } from './repositories/orcamentosRepository'
 import { updateOrcamentoStatus } from './repositories/orcamentosRepository'
 import { listOportunidadesPage, listOportunidadesResumo, markOportunidadeComTarefa, refreshOportunidadesCache, type OportunidadeFilter, type OportunidadeResumo } from './repositories/oportunidadesRepository'
-import { createPipelineFromSuggestion, listPipelineOportunidades, updatePipelineStage } from './repositories/pipelineRepository'
+import { createPipelineFromSuggestion, listPipelineOportunidades, updatePipelineOportunidade, updatePipelineStage } from './repositories/pipelineRepository'
 import { startDefaultCommercialSequence } from './repositories/sequenciasRepository'
 import {
   completeTarefa,
@@ -1780,6 +1780,11 @@ function App() {
             }}
             onUpdatePipelineStage={async (dealId, estagio, motivoPerda) => {
               const updated = await updatePipelineStage(dealId, estagio, motivoPerda)
+              setPipelineOportunidades((current) => current.map((item) => (item.id === dealId ? updated : item)))
+              return updated
+            }}
+            onUpdatePipeline={async (dealId, patch) => {
+              const updated = await updatePipelineOportunidade(dealId, patch)
               setPipelineOportunidades((current) => current.map((item) => (item.id === dealId ? updated : item)))
               return updated
             }}
@@ -3765,6 +3770,7 @@ function Oportunidades({
   onCreateTask,
   onCreatePipeline,
   onUpdatePipelineStage,
+  onUpdatePipeline,
   onStartSequence,
   onCreateCampaignFromSelection,
 }: {
@@ -3787,6 +3793,10 @@ function Oportunidades({
   onCreateTask: (oportunidade: Oportunidade) => Promise<Tarefa>
   onCreatePipeline: (oportunidade: Oportunidade) => Promise<OportunidadePipeline>
   onUpdatePipelineStage: (dealId: string, estagio: OportunidadeEstagio, motivoPerda?: string) => Promise<OportunidadePipeline>
+  onUpdatePipeline: (
+    dealId: string,
+    patch: Partial<Pick<OportunidadePipeline, 'titulo' | 'valorEstimado' | 'probabilidade' | 'previsaoFechamento' | 'responsavelId' | 'observacao'>>,
+  ) => Promise<OportunidadePipeline>
   onStartSequence: (clienteIds: string[]) => Promise<number>
   onCreateCampaignFromSelection: (clienteIds: string[], tipo: string) => Promise<number>
 }) {
@@ -3799,6 +3809,17 @@ function Oportunidades({
   const [isAssigning, setIsAssigning] = useState(false)
   const [isCreatingCampaign, setIsCreatingCampaign] = useState(false)
   const [isStartingSequence, setIsStartingSequence] = useState(false)
+  const [editingDealId, setEditingDealId] = useState('')
+  const [dealDraft, setDealDraft] = useState({
+    titulo: '',
+    valorEstimado: 0,
+    probabilidade: 0,
+    previsaoFechamento: '',
+    responsavelId: '',
+    observacao: '',
+  })
+  const [lossReasons, setLossReasons] = useState<Record<string, string>>({})
+  const [isSavingDeal, setIsSavingDeal] = useState(false)
   const vendedores = usuarios.filter((usuario) => usuario.role === 'vendedor')
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const totalAtivas = resumo.reduce((sum, item) => sum + item.ativas, 0)
@@ -3829,6 +3850,32 @@ function Oportunidades({
   useEffect(() => {
     setSelectedIds([])
   }, [filter, page, tipoFilter])
+
+  function startDealEdit(deal: OportunidadePipeline) {
+    setEditingDealId(deal.id)
+    setDealDraft({
+      titulo: deal.titulo,
+      valorEstimado: deal.valorEstimado,
+      probabilidade: deal.probabilidade,
+      previsaoFechamento: deal.previsaoFechamento ?? '',
+      responsavelId: deal.responsavelId ?? '',
+      observacao: deal.observacao ?? '',
+    })
+  }
+
+  async function saveDealEdit() {
+    if (!editingDealId) return
+    setError('')
+    setIsSavingDeal(true)
+    try {
+      await onUpdatePipeline(editingDealId, dealDraft)
+      setEditingDealId('')
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar a oportunidade.')
+    } finally {
+      setIsSavingDeal(false)
+    }
+  }
 
   return (
     <section className="panel wide">
@@ -3895,31 +3942,80 @@ function Oportunidades({
         })}
       </div>
       {pipelineAberto.length > 0 && (
-        <div className="pipeline-list">
-          {pipelineAberto.slice(0, 6).map((deal) => (
-            <div className="pipeline-deal-row" key={deal.id}>
-              <span>
-                <strong>{deal.titulo}</strong>
-                <small>{deal.clienteNome || 'Cliente'} - {deal.responsavelNome || 'Sem responsavel'} - {deal.previsaoFechamento ? dateLabel(deal.previsaoFechamento) : 'Sem previsao'}</small>
-              </span>
-              <select
-                value={deal.estagio}
-                onChange={async (event) => {
-                  setError('')
-                  try {
-                    await onUpdatePipelineStage(deal.id, event.target.value as OportunidadeEstagio)
-                  } catch (exception) {
-                    setError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o pipeline.')
-                  }
-                }}
-              >
-                {pipelineStages.map((stage) => (
-                  <option value={stage} key={stage}>{pipelineStageLabel(stage)}</option>
+        <div className="pipeline-kanban">
+          {pipelineStages.slice(0, 5).map((stage) => {
+            const stageDeals = pipelineAberto.filter((item) => item.estagio === stage).slice(0, 8)
+            return (
+              <div className="pipeline-column" key={stage}>
+                <div className="pipeline-column-header">
+                  <strong>{pipelineStageLabel(stage)}</strong>
+                  <span>{stageDeals.length}</span>
+                </div>
+                {stageDeals.map((deal) => (
+                  <div className="pipeline-card" key={deal.id}>
+                    {editingDealId === deal.id ? (
+                      <div className="pipeline-edit-form">
+                        <input value={dealDraft.titulo} onChange={(event) => setDealDraft((current) => ({ ...current, titulo: event.target.value }))} />
+                        <input type="number" value={dealDraft.valorEstimado} onChange={(event) => setDealDraft((current) => ({ ...current, valorEstimado: Number(event.target.value) }))} />
+                        <input type="number" min={0} max={100} value={dealDraft.probabilidade} onChange={(event) => setDealDraft((current) => ({ ...current, probabilidade: Number(event.target.value) }))} />
+                        <input type="date" value={dealDraft.previsaoFechamento} onChange={(event) => setDealDraft((current) => ({ ...current, previsaoFechamento: event.target.value }))} />
+                        <select value={dealDraft.responsavelId} onChange={(event) => setDealDraft((current) => ({ ...current, responsavelId: event.target.value }))}>
+                          <option value="">Sem responsavel</option>
+                          {vendedores.map((usuario) => (
+                            <option value={usuario.id} key={usuario.id}>{usuario.nome}</option>
+                          ))}
+                        </select>
+                        <textarea value={dealDraft.observacao} onChange={(event) => setDealDraft((current) => ({ ...current, observacao: event.target.value }))} placeholder="Observacao comercial" />
+                        <div className="row-actions">
+                          <button className="button primary compact-button" type="button" disabled={isSavingDeal} onClick={() => void saveDealEdit()}>
+                            {isSavingDeal ? 'Salvando...' : 'Salvar'}
+                          </button>
+                          <button className="button compact-button" type="button" onClick={() => setEditingDealId('')}>Cancelar</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <strong>{deal.titulo}</strong>
+                        <small>{deal.clienteNome || 'Cliente'}</small>
+                        <span>{deal.responsavelNome || 'Sem responsavel'}</span>
+                        <b>{deal.valorEstimado > 0 ? money(deal.valorEstimado) : `${deal.probabilidade}%`}</b>
+                        <small>{deal.previsaoFechamento ? dateLabel(deal.previsaoFechamento) : 'Sem previsao'}</small>
+                        <select
+                          value={deal.estagio}
+                          onChange={async (event) => {
+                            const nextStage = event.target.value as OportunidadeEstagio
+                            const motivoPerda = nextStage === 'perdido' ? lossReasons[deal.id]?.trim() : undefined
+                            if (nextStage === 'perdido' && !motivoPerda) {
+                              setError('Informe o motivo de perda antes de mover para Perdido.')
+                              return
+                            }
+                            setError('')
+                            try {
+                              await onUpdatePipelineStage(deal.id, nextStage, motivoPerda)
+                            } catch (exception) {
+                              setError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o pipeline.')
+                            }
+                          }}
+                        >
+                          {pipelineStages.map((stageOption) => (
+                            <option value={stageOption} key={stageOption}>{pipelineStageLabel(stageOption)}</option>
+                          ))}
+                        </select>
+                        <input
+                          className="compact-input"
+                          value={lossReasons[deal.id] ?? ''}
+                          onChange={(event) => setLossReasons((current) => ({ ...current, [deal.id]: event.target.value }))}
+                          placeholder="Motivo se perdido"
+                        />
+                        <button className="button compact-button" type="button" onClick={() => startDealEdit(deal)}>Editar</button>
+                      </>
+                    )}
+                  </div>
                 ))}
-              </select>
-              <b>{deal.valorEstimado > 0 ? money(deal.valorEstimado) : `${deal.probabilidade}%`}</b>
-            </div>
-          ))}
+                {stageDeals.length === 0 && <div className="empty-state compact">Sem oportunidades.</div>}
+              </div>
+            )
+          })}
         </div>
       )}
       {error && <div className="alert">{error}</div>}

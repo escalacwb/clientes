@@ -30,6 +30,30 @@ export async function startDefaultCommercialSequence(clienteIds: string[], vende
   return data?.length ?? 0
 }
 
+export async function pauseActiveSequencesForClient(clienteId: string, motivo: string): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase) return
+
+  const { error } = await supabase
+    .from('sequencia_execucoes')
+    .update({
+      status: 'pausada',
+      motivo_encerramento: motivo,
+      encerrada_em: new Date().toISOString(),
+    })
+    .eq('cliente_id', clienteId)
+    .eq('status', 'ativa')
+
+  if (error) throw error
+
+  await supabase.from('automacao_logs').insert({
+    regra_codigo: 'pausar-sequencia-cliente',
+    entidade_tipo: 'cliente',
+    entidade_id: clienteId,
+    resultado: motivo,
+  })
+}
+
 async function ensureDefaultSequence(): Promise<SequenciaRow> {
   const supabase = await getSupabase()
   if (!supabase) throw new Error('Supabase nao configurado.')

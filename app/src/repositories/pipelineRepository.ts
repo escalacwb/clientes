@@ -1,5 +1,5 @@
 import { getSupabase } from '../lib/supabase'
-import type { Oportunidade, OportunidadeEstagio, OportunidadePipeline, OportunidadePipelineInput } from '../types'
+import type { CampanhaEnvioStatus, Oportunidade, OportunidadeEstagio, OportunidadePipeline, OportunidadePipelineInput, Orcamento } from '../types'
 
 type OportunidadePipelineRow = {
   id: string
@@ -101,6 +101,122 @@ export async function updatePipelineStage(
   return mapPipelineOportunidade(data as OportunidadePipelineRow)
 }
 
+export async function updatePipelineOportunidade(
+  id: string,
+  patch: Partial<Pick<OportunidadePipeline, 'titulo' | 'valorEstimado' | 'probabilidade' | 'previsaoFechamento' | 'responsavelId' | 'observacao'>>,
+): Promise<OportunidadePipeline> {
+  const supabase = await getSupabase()
+  if (!supabase) throw new Error('Supabase nao configurado.')
+
+  const { data, error } = await supabase
+    .from('oportunidades')
+    .update({
+      titulo: patch.titulo,
+      valor_estimado: patch.valorEstimado,
+      probabilidade: patch.probabilidade,
+      previsao_fechamento: patch.previsaoFechamento ?? null,
+      responsavel_id: patch.responsavelId ?? null,
+      observacao: patch.observacao,
+    })
+    .eq('id', id)
+    .select('*,clientes(nome),users!oportunidades_responsavel_id_fkey(nome)')
+    .single()
+
+  if (error) throw error
+  return mapPipelineOportunidade(data as OportunidadePipelineRow)
+}
+
+export async function syncPipelineFromOrcamento(orcamento: Orcamento): Promise<OportunidadePipeline | undefined> {
+  const supabase = await getSupabase()
+  if (!supabase) return undefined
+
+  const stage = stageFromOrcamentoStatus(orcamento.status)
+  const shouldClose = stage === 'ganho' || stage === 'perdido'
+  const payload = {
+    cliente_id: orcamento.clienteId,
+    titulo: `Proposta ${orcamento.clienteNome ?? ''}`.trim(),
+    estagio: stage,
+    origem: 'orcamento',
+    valor_estimado: orcamento.valorTotal,
+    probabilidade: probabilityFromOrcamentoStatus(orcamento.status),
+    previsao_fechamento: orcamento.previsaoFechamento ?? orcamento.validade ?? null,
+    responsavel_id: orcamento.vendedorId,
+    orcamento_id: orcamento.id,
+    motivo_perda: orcamento.motivoPerda ?? null,
+    observacao: orcamento.observacao ?? null,
+    encerrada_em: shouldClose ? new Date().toISOString() : null,
+  }
+
+  const { data: existing, error: existingError } = await supabase
+    .from('oportunidades')
+    .select('id')
+    .eq('orcamento_id', orcamento.id)
+    .maybeSingle()
+
+  if (existingError) throw existingError
+
+  const query = existing
+    ? supabase.from('oportunidades').update(payload).eq('id', existing.id)
+    : supabase.from('oportunidades').insert(payload)
+
+  const { data, error } = await query
+    .select('*,clientes(nome),users!oportunidades_responsavel_id_fkey(nome)')
+    .single()
+
+  if (error) throw error
+  return mapPipelineOportunidade(data as OportunidadePipelineRow)
+}
+
+export async function syncPipelineFromCampanha(input: {
+  campanhaId: string
+  campanhaNome?: string
+  clienteId: string
+  vendedorId?: string
+  status: CampanhaEnvioStatus
+  orcamentoId?: string
+  receitaAtribuida?: number
+}): Promise<OportunidadePipeline | undefined> {
+  const supabase = await getSupabase()
+  if (!supabase) return undefined
+  if (!['respondeu', 'virou_orcamento', 'ganhou', 'perdido'].includes(input.status)) return undefined
+
+  const stage = stageFromCampanhaStatus(input.status)
+  const shouldClose = stage === 'ganho' || stage === 'perdido'
+  const payload = {
+    cliente_id: input.clienteId,
+    titulo: input.campanhaNome ? `Campanha: ${input.campanhaNome}` : 'Oportunidade de campanha',
+    estagio: stage,
+    origem: 'campanha',
+    valor_estimado: input.receitaAtribuida ?? 0,
+    probabilidade: probabilityFromCampaignStatus(input.status),
+    previsao_fechamento: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString().slice(0, 10),
+    responsavel_id: input.vendedorId ?? null,
+    campanha_id: input.campanhaId,
+    orcamento_id: input.orcamentoId ?? null,
+    encerrada_em: shouldClose ? new Date().toISOString() : null,
+  }
+
+  const { data: existing, error: existingError } = await supabase
+    .from('oportunidades')
+    .select('id')
+    .eq('campanha_id', input.campanhaId)
+    .eq('cliente_id', input.clienteId)
+    .maybeSingle()
+
+  if (existingError) throw existingError
+
+  const query = existing
+    ? supabase.from('oportunidades').update(payload).eq('id', existing.id)
+    : supabase.from('oportunidades').insert(payload)
+
+  const { data, error } = await query
+    .select('*,clientes(nome),users!oportunidades_responsavel_id_fkey(nome)')
+    .single()
+
+  if (error) throw error
+  return mapPipelineOportunidade(data as OportunidadePipelineRow)
+}
+
 function mapPipelineOportunidade(row: OportunidadePipelineRow): OportunidadePipeline {
   return {
     id: row.id,
@@ -122,6 +238,39 @@ function mapPipelineOportunidade(row: OportunidadePipelineRow): OportunidadePipe
     atualizadoEm: row.atualizado_em,
     encerradaEm: row.encerrada_em ?? undefined,
   }
+}
+
+function stageFromOrcamentoStatus(status: Orcamento['status']): OportunidadeEstagio {
+  if (status === 'ganho') return 'ganho'
+  if (status === 'perdido') return 'perdido'
+  if (status === 'negociando') return 'negociacao'
+  return 'orcamento'
+}
+
+function probabilityFromOrcamentoStatus(status: Orcamento['status']) {
+  const map: Record<Orcamento['status'], number> = {
+    aberto: 35,
+    aguardando_aprovacao: 45,
+    enviado: 55,
+    negociando: 70,
+    ganho: 100,
+    perdido: 0,
+  }
+  return map[status]
+}
+
+function stageFromCampanhaStatus(status: CampanhaEnvioStatus): OportunidadeEstagio {
+  if (status === 'ganhou') return 'ganho'
+  if (status === 'perdido') return 'perdido'
+  if (status === 'virou_orcamento') return 'orcamento'
+  return 'qualificado'
+}
+
+function probabilityFromCampaignStatus(status: CampanhaEnvioStatus) {
+  if (status === 'ganhou') return 100
+  if (status === 'perdido') return 0
+  if (status === 'virou_orcamento') return 55
+  return 30
 }
 
 function toPipelineRow(input: OportunidadePipelineInput) {
