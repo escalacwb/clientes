@@ -1563,6 +1563,7 @@ function App() {
                 resultado: 'pediu orcamento',
               })
               setInteracoes((current) => [interacao, ...current])
+              setQuoteOriginContext({ kind: 'cliente', label: 'Ficha do cliente' })
               return created
             }}
           />
@@ -1991,6 +1992,7 @@ function App() {
             usuarios={usuarios}
             currentUser={session}
             catalogo={catalogo}
+            preparedQuoteContext={quoteOriginContext}
             page={orcamentosPage}
             pageSize={50}
             total={orcamentosTotal}
@@ -2012,7 +2014,11 @@ function App() {
               )
               setSelectedClientId(cliente.id)
               setQuoteSourceView('orcamentos')
-              setQuoteOriginContext({ kind: 'cliente', label: 'Orcamento avulso' })
+              setQuoteOriginContext((current) =>
+                current.initialItems?.length
+                  ? { ...current, label: current.label || 'Orcamento avulso' }
+                  : { kind: 'cliente', label: 'Orcamento avulso' },
+              )
               setView('orcamento-editor')
             }}
             onRevise={async (id, input) => {
@@ -2112,6 +2118,15 @@ function App() {
               setCatalogoPage(1)
             }}
             onPageChange={setCatalogoPage}
+            onQuoteItem={(item) => {
+              setQuoteSourceView('catalogo')
+              setQuoteOriginContext({
+                kind: 'cliente',
+                label: `Catalogo ${item.codigo}`,
+                initialItems: [quoteItemFromCatalogo(item)],
+              })
+              setView('orcamentos')
+            }}
           />
         )}
         {session.role === 'admin' && view === 'relatorios' && (
@@ -3688,6 +3703,13 @@ function Oportunidades({
     .map((oportunidade) => oportunidade.id)
   const allVisibleSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id))
   const selectedOportunidades = filtered.filter((oportunidade) => selectedIds.includes(oportunidade.id))
+  const resumoByTipo = new Map(resumo.map((item) => [item.tipo, item]))
+  const workBatches = [
+    { tipo: 'cliente_risco_180', title: 'Reativar carteira parada', detail: 'Clientes com alto risco de perda e sem compra recente.' },
+    { tipo: 'sem_vendedor', title: 'Distribuir sem responsavel', detail: 'Clientes sem vendedor atual para redistribuir em lote.' },
+    { tipo: 'recompra_90', title: 'Recompra por ciclo', detail: 'Clientes com janela provavel para nova compra.' },
+    { tipo: 'rodobens', title: 'Converter lista externa', detail: 'Leads externos prontos para primeira abordagem.' },
+  ].map((batch) => ({ ...batch, resumo: resumoByTipo.get(batch.tipo) })).filter((batch) => batch.resumo)
 
   useEffect(() => {
     setSelectedIds([])
@@ -3741,6 +3763,25 @@ function Oportunidades({
         </label>
       </div>
       {error && <div className="alert">{error}</div>}
+      <div className="work-batch-grid">
+        {workBatches.map((batch) => (
+          <button
+            className={tipoFilter === batch.tipo ? 'work-batch-card active' : 'work-batch-card'}
+            key={batch.tipo}
+            type="button"
+            onClick={() => {
+              onFilterChange('ativas')
+              onTipoFilterChange(batch.tipo)
+            }}
+          >
+            <span>
+              <strong>{batch.title}</strong>
+              <small>{batch.detail}</small>
+            </span>
+            <b>{batch.resumo?.ativas ?? 0}</b>
+          </button>
+        ))}
+      </div>
       <div className="bulk-action-bar">
         {isSemVendedor && (
           <label>
@@ -3913,6 +3954,7 @@ function Catalogo({
   onTipoFilterChange,
   onAtivoFilterChange,
   onPageChange,
+  onQuoteItem,
 }: {
   itens: CatalogoItem[]
   total: number
@@ -3926,6 +3968,7 @@ function Catalogo({
   onTipoFilterChange: (filter: CatalogoTipoFilter) => void
   onAtivoFilterChange: (filter: CatalogoAtivoFilter) => void
   onPageChange: (page: number) => void
+  onQuoteItem: (item: CatalogoItem) => void
 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const produtos = itens.filter((item) => item.tipo === 'produto').length
@@ -4015,7 +4058,10 @@ function Catalogo({
               {item.descontoMaximo !== undefined ? `Desc. max ${item.descontoMaximo}%` : 'Sem limite'}
               <small>{item.ativo ? 'Ativo' : 'Inativo'} - {item.estoque !== undefined ? `Estoque ${item.estoque}` : 'Sem estoque'}</small>
             </span>
-            <button className="button compact-button" type="button" onClick={() => openPriceHistory(item)}>Historico</button>
+            <span className="catalog-actions">
+              <button className="button compact-button primary" type="button" onClick={() => onQuoteItem(item)}>Usar no orcamento</button>
+              <button className="button compact-button" type="button" onClick={() => openPriceHistory(item)}>Historico</button>
+            </span>
           </div>
         ))}
         {!isLoading && itens.length === 0 && <div className="empty-state">Nenhum item encontrado no catalogo.</div>}
@@ -6050,6 +6096,20 @@ function quoteItemFromServico(servico: ServicoItem): OrcamentoItemInput {
   }
 }
 
+function quoteItemFromCatalogo(item: CatalogoItem): OrcamentoItemInput {
+  return {
+    catalogoItemId: item.id,
+    codigo: item.codigo,
+    descricao: item.descricao,
+    tipo: item.tipo,
+    quantidade: 1,
+    valorUnitario: item.preco,
+    descontoPercentual: 0,
+    observacao: item.grupo || item.marca || undefined,
+    apresentacao: item.tipo === 'servico' ? 'complementar' : 'normal',
+  }
+}
+
 function origemLabel(origemBase?: Cliente['origemBase']) {
   const labels: Record<NonNullable<Cliente['origemBase']>, string> = {
     capital_truck: 'Capital Truck',
@@ -6642,6 +6702,7 @@ function Importacoes({
       clientesCriados: recentes.reduce((total, importacao) => total + importacao.clientesCriados, 0),
     }
   }, [importacoes])
+  const importacoesRecentes = useMemo(() => importacoes.slice(0, 8), [importacoes])
 
   useEffect(() => {
     listImportacaoArquivos().then(setArquivosResumo).catch(() => setArquivosResumo([]))
@@ -7092,35 +7153,46 @@ function Importacoes({
           </div>
         )}
       </section>
-      {importacoes.map((importacao) => (
-        <section className="panel" key={importacao.id}>
-          <div className="panel-header">
-            <div>
-              <h2>{importacao.tipo}</h2>
-              <p>{importacao.arquivoNome}</p>
-            </div>
-            <span className="status-pill">{importacao.status}</span>
+      <section className="panel wide import-timeline-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Historico recente</h2>
+            <p>Ultimas importacoes em formato operacional. Detalhes tecnicos ficam recolhidos por evento.</p>
           </div>
-          <div className="info-grid">
-            <Info label="Itens" value={importacao.totalItens.toString()} />
-            <Info label="Encontrados" value={importacao.clientesEncontrados.toString()} />
-            <Info label="Novos" value={importacao.clientesCriados.toString()} />
-            <Info label="Conflitos" value={importacao.conflitos.toString()} />
-            <Info label="Criados" value={(importacao.itensCriados ?? 0).toString()} />
-            <Info label="Ignorados" value={(importacao.itensIgnorados ?? 0).toString()} />
-          </div>
-          {arquivosPorImportacao[importacao.id]?.length > 0 && (
-            <div className="import-file-list">
-              {arquivosPorImportacao[importacao.id].map((arquivo) => (
-                <span key={arquivo.id}>
-                  <strong>{arquivo.tipo}</strong>
-                  {arquivo.arquivoNome} - {arquivo.totalLinhas} linhas
-                </span>
-              ))}
-            </div>
-          )}
-        </section>
-      ))}
+          <span className="status-pill">{importacoes.length} registros</span>
+        </div>
+        <div className="import-timeline">
+          {importacoesRecentes.map((importacao) => (
+            <article className={`import-timeline-item ${importacao.status}`} key={importacao.id}>
+              <div>
+                <strong>{importacao.tipo}</strong>
+                <small>{importacao.arquivoNome}</small>
+              </div>
+              <div className="import-timeline-kpis">
+                <span>{importacao.totalItens} itens</span>
+                <span>{importacao.clientesEncontrados} clientes</span>
+                <span>{importacao.clientesCriados} novos</span>
+                <span>{importacao.conflitos} conflitos</span>
+              </div>
+              <span className="status-pill">{importacao.status}</span>
+              {arquivosPorImportacao[importacao.id]?.length > 0 && (
+                <details className="import-details">
+                  <summary>Arquivos processados</summary>
+                  <div className="import-file-list">
+                    {arquivosPorImportacao[importacao.id].map((arquivo) => (
+                      <span key={arquivo.id}>
+                        <strong>{arquivo.tipo}</strong>
+                        {arquivo.arquivoNome} - {arquivo.totalLinhas} linhas
+                      </span>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </article>
+          ))}
+          {importacoesRecentes.length === 0 && <div className="empty-state">Nenhuma importacao registrada ainda.</div>}
+        </div>
+      </section>
     </section>
   )
 }
@@ -7487,6 +7559,13 @@ function Campanhas({
     if (value === undefined || value === '' || value === 'todos' || value === false) return false
     return true
   }).length
+  const campaignReadyCount = Math.max(0, total - campaignQuality.bloqueados - campaignQuality.semWhatsapp - campaignQuality.optOut)
+  const campaignStepHelp: Record<typeof campaignTab, string> = {
+    publico: 'Defina quem entra na campanha e valide se o publico faz sentido antes de escrever.',
+    mensagem: 'Edite a mensagem, variaveis e imagem padrao que o vendedor vai usar no WhatsApp.',
+    execucao: 'Trabalhe os primeiros 50 contatos, registre envios e crie tarefas em lote.',
+    resultado: 'Acompanhe respostas, orcamentos, ganhos, perdas e ROI da campanha.',
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -7870,17 +7949,43 @@ function Campanhas({
       </div>
       <div className="campaign-workflow-tabs">
         <button className={campaignTab === 'publico' ? 'active' : ''} type="button" onClick={() => setCampaignTab('publico')}>
-          Publico <span>{total}</span>
+          1. Publico <span>{total}</span>
         </button>
         <button className={campaignTab === 'mensagem' ? 'active' : ''} type="button" onClick={() => setCampaignTab('mensagem')}>
-          Mensagem
+          2. Mensagem
         </button>
         <button className={campaignTab === 'execucao' ? 'active' : ''} type="button" onClick={() => setCampaignTab('execucao')}>
-          Execucao <span>{filteredClientes.length}</span>
+          3. Execucao <span>{filteredClientes.length}</span>
         </button>
         <button className={campaignTab === 'resultado' ? 'active' : ''} type="button" onClick={() => setCampaignTab('resultado')}>
-          Resultado
+          4. Resultado
         </button>
+      </div>
+      <div className="campaign-guide-summary">
+        <div>
+          <strong>{campaignStepHelp[campaignTab]}</strong>
+          <small>{activePublicoFilterCount} filtros ativos · {campaignReadyCount} prontos · {campaignQuality.bloqueados} bloqueados · {campaignQuality.semWhatsapp} sem WhatsApp</small>
+        </div>
+        <div className="toolbar-actions">
+          {campaignTab !== 'publico' && (
+            <button
+              className="button"
+              type="button"
+              onClick={() => setCampaignTab(campaignTab === 'mensagem' ? 'publico' : campaignTab === 'execucao' ? 'mensagem' : 'execucao')}
+            >
+              Voltar etapa
+            </button>
+          )}
+          {campaignTab !== 'resultado' && (
+            <button
+              className="button primary"
+              type="button"
+              onClick={() => setCampaignTab(campaignTab === 'publico' ? 'mensagem' : campaignTab === 'mensagem' ? 'execucao' : 'resultado')}
+            >
+              Proxima etapa
+            </button>
+          )}
+        </div>
       </div>
       <div className="message-template">
         <strong>{segmento.nome}</strong>
@@ -8698,6 +8803,7 @@ function Orcamentos({
   usuarios,
   currentUser,
   catalogo,
+  preparedQuoteContext,
   page,
   pageSize,
   total,
@@ -8715,6 +8821,7 @@ function Orcamentos({
   usuarios: Vendedor[]
   currentUser: SessaoUsuario
   catalogo: CatalogoItem[]
+  preparedQuoteContext: QuoteOriginContext
   page: number
   pageSize: number
   total: number
@@ -8790,6 +8897,12 @@ function Orcamentos({
     }
   }, [currentUser.id, currentUser.role, looseBudgetQuery, showLooseBudgetSearch])
 
+  useEffect(() => {
+    if (preparedQuoteContext.initialItems?.length) {
+      setShowLooseBudgetSearch(true)
+    }
+  }, [preparedQuoteContext])
+
   async function openVersionHistory(orcamento: Orcamento) {
     setVersionTarget(orcamento)
     setVersions([])
@@ -8840,7 +8953,11 @@ function Orcamentos({
           <div className="panel-header">
             <div>
               <h3>Novo orcamento avulso</h3>
-              <p>Pesquise qualquer cliente por nome, cidade, CPF/CNPJ ou codigo e escolha para montar a proposta.</p>
+              <p>
+                {preparedQuoteContext.initialItems?.length
+                  ? `Item preparado a partir de ${preparedQuoteContext.label}. Escolha o cliente para montar a proposta.`
+                  : 'Pesquise qualquer cliente por nome, cidade, CPF/CNPJ ou codigo e escolha para montar a proposta.'}
+              </p>
             </div>
             <button className="button" type="button" onClick={() => setShowLooseBudgetSearch(false)}>Fechar</button>
           </div>
@@ -8918,10 +9035,34 @@ function Orcamentos({
               </span>
               <span>
                 <strong>{vendedor?.nome ?? orcamento.vendedorNome ?? 'Vendedor nao carregado'}</strong>
-                <div className="budget-status-actions">
+                <div className="budget-row-actions">
+                  <button className="button primary" type="button" onClick={() => onOpenDetail(orcamento)}>
+                    Abrir
+                  </button>
+                  <select
+                    className="assign-select"
+                    value=""
+                    aria-label="Acoes da proposta"
+                    onChange={(event) => {
+                      const action = event.target.value
+                      event.currentTarget.value = ''
+                      if (action === 'enviado') onStatusChange(orcamento.id, 'enviado')
+                      if (action === 'negociando') onStatusChange(orcamento.id, 'negociando')
+                      if (action === 'ganho') onStatusChange(orcamento.id, 'ganho')
+                      if (action === 'versoes') openVersionHistory(orcamento)
+                      if (action === 'revisar') setRevisionTarget(orcamento)
+                    }}
+                  >
+                    <option value="">Mais acoes</option>
+                    <option value="enviado">Marcar enviado</option>
+                    <option value="negociando">Marcar negociando</option>
+                    <option value="ganho">Marcar ganho</option>
+                    <option value="versoes">Ver versoes</option>
+                    <option value="revisar">Revisar proposta</option>
+                  </select>
                   {orcamento.status === 'aguardando_aprovacao' && canApprove && (
                     <button className="button primary" type="button" onClick={() => onStatusChange(orcamento.id, 'enviado')}>
-                      Aprovar e enviar
+                      Aprovar
                     </button>
                   )}
                   {orcamento.status === 'aguardando_aprovacao' && canApprove && (
@@ -8948,17 +9089,8 @@ function Orcamentos({
                       </button>
                     </>
                   )}
-                  {orcamento.status === 'enviado' && (
-                    <button className="button" type="button" onClick={() => onStatusChange(orcamento.id, 'negociando')}>
-                      Negociando
-                    </button>
-                  )}
-                  <button className="button" type="button" onClick={() => onStatusChange(orcamento.id, 'enviado')}>
-                    Enviado
-                  </button>
-                  <button className="button" type="button" onClick={() => onStatusChange(orcamento.id, 'ganho')}>
-                    Ganho
-                  </button>
+                </div>
+                <div className="budget-loss-row">
                   <select
                     className="assign-select"
                     value={lossReasons[orcamento.id] ?? ''}
@@ -8978,16 +9110,7 @@ function Orcamentos({
                     type="button"
                     onClick={() => onStatusChange(orcamento.id, 'perdido', lossReasons[orcamento.id])}
                   >
-                    Perdido
-                  </button>
-                  <button className="button" type="button" onClick={() => openVersionHistory(orcamento)}>
-                    Versoes
-                  </button>
-                  <button className="button primary" type="button" onClick={() => onOpenDetail(orcamento)}>
-                    Abrir proposta
-                  </button>
-                  <button className="button" type="button" onClick={() => setRevisionTarget(orcamento)}>
-                    Revisar
+                    Perder
                   </button>
                 </div>
               </span>
