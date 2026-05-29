@@ -28,36 +28,38 @@ Correcao aplicada:
 
 ### A2 - Banner global de erro fica preso
 
-Status: pendente.
+Status: corrigido.
 
 Impacto:
 - Mesmo depois de trocar de tela, uma falha antiga continua aparecendo.
 
 Acao recomendada:
-- Transformar `dataError` em erro por modulo ou limpar erro na troca de `view`.
-- Cada tela deve ter seu estado local de falha, sem poluir o app inteiro.
+- Implementado mapa de erros por modulo.
+- O banner mostra apenas o erro da tela atual.
 
 ### A3 - Algumas metricas usam pagina atual, nao base inteira
 
-Status: pendente.
+Status: parcial.
 
 Exemplos:
 - Usuarios mostrou carteira com contagens inconsistentes com a base real.
 - Dashboard ainda mistura alguns indicadores globais com dados da pagina inicial de clientes.
 
 Acao recomendada:
-- Criar views agregadas por usuario/perfil e substituir calculos derivados de `clientes` paginado.
+- Tela de Usuarios passou a usar agregados reais de vendedor.
+- Ainda falta substituir todos os calculos residuais por views agregadas.
 
 ### A4 - Oportunidades pode demorar e aparentar travamento
 
-Status: pendente.
+Status: parcial.
 
 Sintoma:
 - Tela mostrou `Carregando oportunidades...` mesmo com a view tendo dezenas de milhares de registros.
 
 Acao recomendada:
-- Garantir resposta paginada com filtro padrao limitado.
-- Adicionar cards de contagem por tipo e skeleton por no maximo alguns segundos.
+- Adicionados cards de resumo por tipo usando view agregada.
+- Listagem passou a usar contagem planejada.
+- Ainda falta materializar/otimizar a view para reduzir o tempo de primeira resposta.
 
 ### A5 - William entra mas nao ve carteira
 

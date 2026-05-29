@@ -119,7 +119,7 @@ import { listOrcamentosPage, type OrcamentoListFilter } from './repositories/orc
 import { listOrcamentoVersoes } from './repositories/orcamentosRepository'
 import { reviseOrcamento } from './repositories/orcamentosRepository'
 import { updateOrcamentoStatus } from './repositories/orcamentosRepository'
-import { listOportunidadesPage, type OportunidadeFilter } from './repositories/oportunidadesRepository'
+import { listOportunidadesPage, listOportunidadesResumo, type OportunidadeFilter, type OportunidadeResumo } from './repositories/oportunidadesRepository'
 import {
   completeTarefa,
   createTarefa,
@@ -255,6 +255,7 @@ function App() {
   const [tarefasOwnerFilter, setTarefasOwnerFilter] = useState('todos')
   const [oportunidades, setOportunidades] = useState<Oportunidade[]>([])
   const [oportunidadesTotal, setOportunidadesTotal] = useState(0)
+  const [oportunidadesResumo, setOportunidadesResumo] = useState<OportunidadeResumo[]>([])
   const [oportunidadesPage, setOportunidadesPage] = useState(1)
   const [oportunidadesFilter, setOportunidadesFilter] = useState<OportunidadeFilter>('ativas')
   const [vendasItens, setVendasItens] = useState<VendaItem[]>(isSupabaseConfigured ? [] : seedVendasItens)
@@ -295,7 +296,21 @@ function App() {
   const [isLoadingTarefas, setIsLoadingTarefas] = useState(false)
   const [isLoadingOportunidades, setIsLoadingOportunidades] = useState(false)
   const [isLoadingCatalogo, setIsLoadingCatalogo] = useState(false)
-  const [dataError, setDataError] = useState('')
+  const [moduleErrors, setModuleErrors] = useState<Record<string, string>>({})
+  const dataError = moduleErrors[view] ?? ''
+
+  function setModuleError(module: string, message: string) {
+    setModuleErrors((current) => ({ ...current, [module]: message }))
+  }
+
+  function clearModuleError(module: string) {
+    setModuleErrors((current) => {
+      if (!current[module]) return current
+      const next = { ...current }
+      delete next[module]
+      return next
+    })
+  }
 
   useEffect(() => {
     let isMounted = true
@@ -336,7 +351,7 @@ function App() {
       }
 
       setIsLoadingData(true)
-      setDataError('')
+      clearModuleError('dashboard')
 
       try {
         const [
@@ -400,7 +415,7 @@ function App() {
         setAtividadesDia(loadedAtividadesDia)
       } catch (exception) {
         if (!isMounted) return
-        setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar os dados.')
+        setModuleError('dashboard', exception instanceof Error ? exception.message : 'Nao foi possivel carregar os dados.')
       } finally {
         if (isMounted) setIsLoadingData(false)
       }
@@ -437,11 +452,12 @@ function App() {
         if (!isMounted) return
         setClientes(result.clientes)
         setClientesTotal(result.total)
+        clearModuleError('clientes')
         setSelectedClientId((current) =>
           result.clientes.some((cliente) => cliente.id === current) ? current : result.clientes[0]?.id ?? '',
         )
       } catch (exception) {
-        if (isMounted) setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar os clientes.')
+        if (isMounted) setModuleError('clientes', exception instanceof Error ? exception.message : 'Nao foi possivel carregar os clientes.')
       } finally {
         if (isMounted) setIsLoadingClientes(false)
       }
@@ -478,8 +494,9 @@ function App() {
         if (!isMounted) return
         setOrcamentos(result.orcamentos)
         setOrcamentosTotal(result.total)
+        clearModuleError('orcamentos')
       } catch (exception) {
-        if (isMounted) setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar os orcamentos.')
+        if (isMounted) setModuleError('orcamentos', exception instanceof Error ? exception.message : 'Nao foi possivel carregar os orcamentos.')
       } finally {
         if (isMounted) setIsLoadingOrcamentos(false)
       }
@@ -520,8 +537,9 @@ function App() {
         if (!isMounted) return
         setTarefas(result.tarefas)
         setTarefasTotal(result.total)
+        clearModuleError('tarefas')
       } catch (exception) {
-        if (isMounted) setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar as tarefas.')
+        if (isMounted) setModuleError('tarefas', exception instanceof Error ? exception.message : 'Nao foi possivel carregar as tarefas.')
       } finally {
         if (isMounted) setIsLoadingTarefas(false)
       }
@@ -549,17 +567,23 @@ function App() {
 
       setIsLoadingOportunidades(true)
       try {
-        const result = await listOportunidadesPage({
-          page: oportunidadesPage,
-          pageSize: 50,
-          filter: oportunidadesFilter,
-          vendedorId: session.role === 'vendedor' ? session.id : undefined,
-        })
+        const vendedorId = session.role === 'vendedor' ? session.id : undefined
+        const [result, resumo] = await Promise.all([
+          listOportunidadesPage({
+            page: oportunidadesPage,
+            pageSize: 50,
+            filter: oportunidadesFilter,
+            vendedorId,
+          }),
+          listOportunidadesResumo(vendedorId),
+        ])
         if (!isMounted) return
         setOportunidades(result.oportunidades)
         setOportunidadesTotal(result.total)
+        setOportunidadesResumo(resumo)
+        clearModuleError('oportunidades')
       } catch (exception) {
-        if (isMounted) setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar oportunidades.')
+        if (isMounted) setModuleError('oportunidades', exception instanceof Error ? exception.message : 'Nao foi possivel carregar oportunidades.')
       } finally {
         if (isMounted) setIsLoadingOportunidades(false)
       }
@@ -601,8 +625,9 @@ function App() {
         if (!isMounted) return
         setCatalogoLista(result.itens)
         setCatalogoTotal(result.total)
+        clearModuleError('catalogo')
       } catch (exception) {
-        if (isMounted) setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar o catalogo.')
+        if (isMounted) setModuleError('catalogo', exception instanceof Error ? exception.message : 'Nao foi possivel carregar o catalogo.')
       } finally {
         if (isMounted) setIsLoadingCatalogo(false)
       }
@@ -643,8 +668,9 @@ function App() {
         setRodobensLeads(result.clientes)
         setRodobensTotal(result.total)
         setRodobensFunil(funil)
+        clearModuleError('rodobens')
       } catch (exception) {
-        if (isMounted) setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar Inbox Rodobens.')
+        if (isMounted) setModuleError('rodobens', exception instanceof Error ? exception.message : 'Nao foi possivel carregar Inbox Rodobens.')
       } finally {
         if (isMounted) setIsLoadingRodobens(false)
       }
@@ -680,8 +706,9 @@ function App() {
         setClienteVeiculos(loadedVeiculos)
         setClienteTarefas(loadedTarefas)
         setClienteCampanhas(loadedCampanhas)
+        clearModuleError('cliente360')
       } catch (exception) {
-        if (isMounted) setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar o historico do cliente.')
+        if (isMounted) setModuleError('cliente360', exception instanceof Error ? exception.message : 'Nao foi possivel carregar o historico do cliente.')
       } finally {
         if (isMounted) setIsLoadingHistory(false)
       }
@@ -935,7 +962,7 @@ function App() {
             }}
             onUpdateClient={(clienteId, patch) => {
               updateClienteComercial(clienteId, patch).catch((exception) => {
-                setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o cliente.')
+                setModuleError('clientes', exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o cliente.')
               })
               const currentCliente = clientes.find((cliente) => cliente.id === clienteId)
               setClientes((current) =>
@@ -1120,6 +1147,7 @@ function App() {
         {canUseScopedClientViews && view === 'oportunidades' && (
           <Oportunidades
             oportunidades={visibleOportunidades}
+            resumo={oportunidadesResumo}
             page={oportunidadesPage}
             pageSize={50}
             total={visibleOportunidadesTotal}
@@ -1213,7 +1241,7 @@ function App() {
             }}
             onComplete={(id) => {
               completeTarefa(id).catch((exception) => {
-                setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel concluir a tarefa.')
+                setModuleError('tarefas', exception instanceof Error ? exception.message : 'Nao foi possivel concluir a tarefa.')
               })
               setTarefas((current) =>
                 current.map((tarefa) =>
@@ -1317,12 +1345,12 @@ function App() {
             onStatusChange={(id, status, motivoPerda) => {
               const changedOrcamento = orcamentos.find((orcamento) => orcamento.id === id)
               updateOrcamentoStatus(id, status, motivoPerda, status === 'enviado' ? session.id : undefined).catch((exception) => {
-                setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o orcamento.')
+                setModuleError('orcamentos', exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o orcamento.')
               })
               if (status === 'ganho' && changedOrcamento) {
                 attributeCampanhaRevenueByOrcamento(id, changedOrcamento.valorTotal)
                   .catch((exception) => {
-                    setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel atribuir receita da campanha.')
+                    setModuleError('orcamentos', exception instanceof Error ? exception.message : 'Nao foi possivel atribuir receita da campanha.')
                   })
               }
               setOrcamentos((current) =>
@@ -1397,7 +1425,7 @@ function App() {
             orcamentos={orcamentos}
             onAssignClient={(clienteId, vendedorId) => {
               assignClienteVendedor(clienteId, vendedorId).catch((exception) => {
-                setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel atribuir vendedor.')
+                setModuleError('vendedores', exception instanceof Error ? exception.message : 'Nao foi possivel atribuir vendedor.')
               })
               setClientes((current) =>
                 current.map((cliente) => {
@@ -1420,9 +1448,11 @@ function App() {
           <Usuarios
             clientes={clientes}
             usuarios={usuarios}
+            resumo={dashboardResumo}
+            vendedoresResumo={vendedoresResumo}
             onAssignClient={(clienteId, vendedorId) => {
               assignClienteVendedor(clienteId, vendedorId).catch((exception) => {
-                setDataError(exception instanceof Error ? exception.message : 'Nao foi possivel atribuir vendedor.')
+                setModuleError('usuarios', exception instanceof Error ? exception.message : 'Nao foi possivel atribuir vendedor.')
               })
               setClientes((current) =>
                 current.map((cliente) => {
@@ -2028,8 +2058,23 @@ function FilterControl({
   )
 }
 
+function opportunityTypeLabel(type: string) {
+  const labels: Record<string, string> = {
+    sem_vendedor: 'Sem vendedor',
+    rodobens_primeiro_contato: 'Rodobens',
+    cliente_risco_180: 'Risco 180d',
+    recompra_90: 'Recompra 90d',
+    alto_valor_sem_contato: 'Alto valor',
+    orcamento_aberto: 'Orc. aberto',
+    orcamento_vencido: 'Orc. vencido',
+    sem_whatsapp: 'Sem WhatsApp',
+  }
+  return labels[type] ?? type.replaceAll('_', ' ')
+}
+
 function Oportunidades({
   oportunidades,
+  resumo,
   page,
   pageSize,
   total,
@@ -2040,6 +2085,7 @@ function Oportunidades({
   onCreateTask,
 }: {
   oportunidades: Oportunidade[]
+  resumo: OportunidadeResumo[]
   page: number
   pageSize: number
   total: number
@@ -2052,6 +2098,9 @@ function Oportunidades({
   const [createdTasks, setCreatedTasks] = useState<string[]>([])
   const [error, setError] = useState('')
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const totalAtivas = resumo.reduce((sum, item) => sum + item.ativas, 0)
+  const totalBloqueadas = resumo.reduce((sum, item) => sum + item.bloqueadas, 0)
+  const topResumo = resumo.slice(0, 6)
   const filtered = isSupabaseConfigured ? oportunidades : oportunidades.filter((oportunidade) => {
     if (filter === 'bloqueadas') return oportunidade.bloqueada
     if (filter === 'ativas') return !oportunidade.bloqueada
@@ -2072,7 +2121,26 @@ function Oportunidades({
         </div>
       </div>
       {error && <div className="alert">{error}</div>}
-      {isLoading && <div className="empty-state">Carregando oportunidades...</div>}
+      <div className="opportunity-summary-strip">
+        <div className="opportunity-summary-card">
+          <strong>{totalAtivas || total}</strong>
+          <span>Ativas</span>
+          <small>{totalBloqueadas} bloqueadas/com tarefa</small>
+        </div>
+        {topResumo.map((item) => (
+          <button
+            className="opportunity-summary-card"
+            type="button"
+            key={item.tipo}
+            onClick={() => onFilterChange(item.ativas > 0 ? 'ativas' : 'todas')}
+          >
+            <strong>{item.ativas}</strong>
+            <span>{opportunityTypeLabel(item.tipo)}</span>
+            <small>{item.total} totais · prioridade {Math.round(item.prioridadeMaxima)}</small>
+          </button>
+        ))}
+      </div>
+      {isLoading && filtered.length === 0 && <div className="empty-state">Carregando oportunidades...</div>}
       <div className="table">
         <div className="table-head opportunity">
           <span>Cliente</span>
@@ -6833,24 +6901,28 @@ function VendedoresCarteira({
 function Usuarios({
   clientes,
   usuarios,
+  resumo,
+  vendedoresResumo,
   onAssignClient,
 }: {
   clientes: Cliente[]
   usuarios: Vendedor[]
+  resumo?: DashboardResumo
+  vendedoresResumo: VendedorResumo[]
   onAssignClient: (clienteId: string, vendedorId: string) => void
 }) {
   const [activeUserId, setActiveUserId] = useState(usuarios[0]?.id ?? seedVendedores[0].id)
   const activeUser = usuarios.find((vendedor) => vendedor.id === activeUserId) ?? usuarios[0] ?? seedVendedores[0]
   const clientesSemVendedor = clientes.filter((cliente) => !cliente.vendedorId)
+  const clientesSemVendedorTotal = resumo?.clientesSemVendedor ?? clientesSemVendedor.length
   const vendedores = usuarios.filter((usuario) => usuario.role === 'vendedor')
   const cargaVendedores = vendedores
     .map((vendedor) => {
-      const carteira = clientes.filter((cliente) => cliente.vendedorId === vendedor.id)
-      const risco = carteira.filter((cliente) => daysSince(cliente.ultimaCompraEm) > 180).length
+      const resumoVendedor = vendedoresResumo.find((row) => row.vendedorId === vendedor.id)
       return {
         ...vendedor,
-        carteira: carteira.length,
-        risco,
+        carteira: resumoVendedor?.clientes ?? clientes.filter((cliente) => cliente.vendedorId === vendedor.id).length,
+        risco: resumoVendedor?.clientesRisco ?? clientes.filter((cliente) => cliente.vendedorId === vendedor.id && daysSince(cliente.ultimaCompraEm) > 180).length,
       }
     })
     .sort((a, b) => a.carteira - b.carteira || a.risco - b.risco)
@@ -6868,7 +6940,8 @@ function Usuarios({
         </div>
         <div className="user-grid">
           {usuarios.map((usuario) => {
-            const carteira = clientes.filter((cliente) => cliente.vendedorId === usuario.id)
+            const resumoUsuario = vendedoresResumo.find((row) => row.vendedorId === usuario.id)
+            const carteiraTotal = resumoUsuario?.clientes ?? clientes.filter((cliente) => cliente.vendedorId === usuario.id).length
 
             return (
               <button
@@ -6881,7 +6954,7 @@ function Usuarios({
                 <strong>{usuario.nome}</strong>
                 <small>{usuario.email}</small>
                 <span className="status-pill">{usuario.role}</span>
-                <span>{carteira.length} clientes na carteira</span>
+                <span>{carteiraTotal} clientes na carteira</span>
               </button>
             )
           })}
@@ -6913,7 +6986,7 @@ function Usuarios({
         <div className="panel-header">
           <div>
             <h2>Carteira atribuida</h2>
-            <p>Clientes visiveis para o usuario selecionado.</p>
+            <p>Amostra da pagina atual; totais completos aparecem nos cards.</p>
           </div>
           <UsersRound size={18} />
         </div>
@@ -6939,7 +7012,7 @@ function Usuarios({
         <div className="panel-header">
           <div>
             <h2>Distribuicao pendente</h2>
-            <p>{clientesSemVendedor.length} clientes sem responsavel comercial.</p>
+            <p>{clientesSemVendedorTotal} clientes sem responsavel comercial.</p>
           </div>
           <ClipboardList size={18} />
         </div>

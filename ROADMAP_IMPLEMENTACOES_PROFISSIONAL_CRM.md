@@ -1129,6 +1129,25 @@ Validacao:
 Proximo passo tecnico:
 - Implementar central de erros por modulo e substituir metricas calculadas sobre pagina atual por views agregadas.
 
+### 2026-05-28 - Erros por modulo e oportunidades resumidas
+
+Status: concluido.
+
+Entregue:
+- Substituido o erro global unico por mapa de erros por modulo.
+- Erros de Clientes, Orcamentos, Tarefas, Oportunidades, Catalogo, Rodobens, Ficha 360, Vendedores e Usuarios nao contaminam mais outras telas.
+- Tela de Usuarios passou a usar agregados reais de `vendedoresResumo` para total de carteira e risco.
+- Criada view `vw_oportunidades_resumo` com totais, ativas, bloqueadas e prioridade por tipo.
+- Tela de Oportunidades ganhou cards de resumo por tipo e usa contagem planejada na listagem paginada.
+
+Validacao:
+- SQL aplicado com `node scripts/run-sql-file.mjs supabase/queries/oportunidades_resumo.sql`.
+- Build passou com `npm run build`.
+- Playwright validou que erro de Orcamentos nao vaza para Catalogo, Usuarios mostra Mateus com 652 clientes e Oportunidades carrega 50 linhas com cards de resumo.
+
+Proximo passo tecnico:
+- Materializar ou otimizar a view de oportunidades para reduzir o tempo de primeira resposta e criar filtros por tipo de oportunidade.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

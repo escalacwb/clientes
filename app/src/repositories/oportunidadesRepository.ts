@@ -16,6 +16,24 @@ type OportunidadeRow = {
 
 export type OportunidadeFilter = 'ativas' | 'bloqueadas' | 'todas'
 
+export type OportunidadeResumo = {
+  tipo: string
+  total: number
+  ativas: number
+  bloqueadas: number
+  prioridadeMedia: number
+  prioridadeMaxima: number
+}
+
+type OportunidadeResumoRow = {
+  tipo: string
+  total: number
+  ativas: number
+  bloqueadas: number
+  prioridade_media: number
+  prioridade_maxima: number
+}
+
 export async function listOportunidades(clientes: Cliente[], orcamentos: Orcamento[]): Promise<Oportunidade[]> {
   const supabase = await getSupabase()
   if (!supabase) return buildOportunidades(clientes, orcamentos)
@@ -54,7 +72,7 @@ export async function listOportunidadesPage(input: {
   const to = from + input.pageSize - 1
   let query = supabase
     .from('oportunidades_clientes')
-    .select('*', { count: 'exact' })
+    .select('*', { count: 'planned' })
     .order('bloqueada', { ascending: true })
     .order('tarefa_existente', { ascending: true })
     .order('prioridade', { ascending: false })
@@ -73,6 +91,46 @@ export async function listOportunidadesPage(input: {
     oportunidades: (data as OportunidadeRow[] | null ?? []).map(mapOportunidade),
     total: count ?? 0,
   }
+}
+
+export async function listOportunidadesResumo(vendedorId?: string): Promise<OportunidadeResumo[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  let query = supabase
+    .from('vw_oportunidades_resumo')
+    .select('*')
+    .order('ativas', { ascending: false })
+    .order('prioridade_maxima', { ascending: false })
+
+  if (vendedorId) query = query.eq('vendedor_id', vendedorId)
+
+  const { data, error } = await query
+  if (error) throw error
+
+  const grouped = new Map<string, OportunidadeResumo>()
+  ;(data as Array<OportunidadeResumoRow & { vendedor_id?: string | null }> | null ?? []).forEach((row) => {
+    const current = grouped.get(row.tipo) ?? {
+      tipo: row.tipo,
+      total: 0,
+      ativas: 0,
+      bloqueadas: 0,
+      prioridadeMedia: 0,
+      prioridadeMaxima: 0,
+    }
+    const total = Number(row.total ?? 0)
+    const priority = Number(row.prioridade_media ?? 0)
+    grouped.set(row.tipo, {
+      tipo: row.tipo,
+      total: current.total + total,
+      ativas: current.ativas + Number(row.ativas ?? 0),
+      bloqueadas: current.bloqueadas + Number(row.bloqueadas ?? 0),
+      prioridadeMedia: current.total + total ? Math.round(((current.prioridadeMedia * current.total) + (priority * total)) / (current.total + total)) : 0,
+      prioridadeMaxima: Math.max(current.prioridadeMaxima, Number(row.prioridade_maxima ?? 0)),
+    })
+  })
+
+  return [...grouped.values()].sort((a, b) => b.ativas - a.ativas || b.prioridadeMaxima - a.prioridadeMaxima)
 }
 
 function mapOportunidade(row: OportunidadeRow): Oportunidade {

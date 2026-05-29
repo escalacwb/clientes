@@ -672,6 +672,40 @@ h3 {
   grid-template-columns: minmax(190px, 1fr) 150px minmax(220px, 1.2fr) minmax(190px, 1fr) 90px 130px;
 }
 
+.opportunity-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(118px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+}
+
+.opportunity-summary-card {
+  display: grid;
+  gap: 3px;
+  min-width: 118px;
+  border: 1px solid #dfe4de;
+  border-radius: 8px;
+  background: #f8faf7;
+  color: #1f2b28;
+  padding: 10px;
+  text-align: left;
+}
+
+.opportunity-summary-card strong {
+  font-size: 18px;
+}
+
+.opportunity-summary-card span {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.opportunity-summary-card small {
+  color: #66736f;
+  font-size: 11px;
+}
+
 .catalog-row {
   grid-template-columns: 120px minmax(240px, 1.6fr) 90px minmax(140px, 0.8fr) 100px 130px 94px;
 }
