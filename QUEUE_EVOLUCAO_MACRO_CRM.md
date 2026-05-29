@@ -118,10 +118,12 @@ Ja entregue:
 - Filtros por vendedor responsavel, vendedor historico, cidade, origem e status.
 - Clientes sem vendedor com sugestao de distribuicao.
 - Carteira por vendedor com risco, tarefas, pipeline, contatos e cobertura.
+- Clientes da tela `Vendedores` buscados por query paginada propria.
+- Vendedor historico do ERP separado de responsavel atual.
 
 Proximas entregas:
-- Buscar clientes da tela `Vendedores` direto por query paginada, em vez da pagina atual carregada.
-- Relatorio de vendedor historico vindo do ERP/importacao com campo dedicado.
+- Resumo agregado por vendedor historico do ERP.
+- Acoes em lote para redistribuir clientes filtrados.
 
 Pronto quando:
 - Gerente consegue redistribuir carteira com contexto.

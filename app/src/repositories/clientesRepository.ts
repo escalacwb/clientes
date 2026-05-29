@@ -16,6 +16,8 @@ type ClienteRow = {
   email: string | null
   responsavel_nome: string | null
   vendedor_id: string | null
+  vendedor_codigo_erp: string | null
+  vendedor_nome_erp: string | null
   status_comercial: string
   origem: string | null
   origem_base: Cliente['origemBase'] | null
@@ -67,8 +69,10 @@ export async function listClientesPage(input: {
   origemBase?: Cliente['origemBase'] | 'todos'
   filtro?: CarteiraFiltro
   vendedorId?: string
+  vendedorHistoricoNome?: string
   cidade?: string
   uf?: string
+  status?: Cliente['status'] | 'todos'
   clienteIds?: string[]
 }): Promise<{ clientes: Cliente[]; total: number }> {
   const supabase = await getSupabase()
@@ -90,8 +94,10 @@ export async function listClientesPage(input: {
   const origemBase = input.origemBase ?? origemBaseFromFiltro(input.filtro)
   if (origemBase && origemBase !== 'todos') query = query.eq('origem_base', origemBase)
   if (input.vendedorId) query = query.eq('vendedor_id', input.vendedorId)
+  if (input.vendedorHistoricoNome?.trim()) query = query.ilike('vendedor_nome_erp', `%${input.vendedorHistoricoNome.trim()}%`)
   if (input.cidade?.trim()) query = query.ilike('cidade', `%${input.cidade.trim()}%`)
   if (input.uf?.trim()) query = query.ilike('uf', input.uf.trim())
+  if (input.status && input.status !== 'todos') query = query.eq('status_comercial', toDbStatus(input.status))
   if (input.clienteIds) query = input.clienteIds.length > 0 ? query.in('id', input.clienteIds) : query.in('id', ['00000000-0000-0000-0000-000000000000'])
   query = applyClienteFiltro(query, input.filtro)
   if (input.query?.trim()) {
@@ -172,6 +178,19 @@ function toDbStatus(status: string) {
   return statuses[status] ?? status
 }
 
+function fromDbStatus(status: string): Cliente['status'] {
+  const statuses: Record<string, Cliente['status']> = {
+    novo: 'Novo',
+    ativo: 'Ativo',
+    em_acompanhamento: 'Em acompanhamento',
+    orcamento_aberto: 'Orcamento aberto',
+    reativar: 'Reativar',
+    inativo: 'Inativo',
+    nao_contatar: 'Nao contatar',
+  }
+  return statuses[status] ?? 'Novo'
+}
+
 function mapCliente(row: ClienteRow): Cliente {
   return {
     id: row.id,
@@ -188,7 +207,9 @@ function mapCliente(row: ClienteRow): Cliente {
     responsavel: row.responsavel_nome ?? undefined,
     vendedorId: row.vendedor_id ?? undefined,
     vendedorNome: row.users?.nome ?? undefined,
-    status: 'Novo',
+    vendedorHistoricoNome: row.vendedor_nome_erp ?? undefined,
+    vendedorHistoricoCodigo: row.vendedor_codigo_erp ?? undefined,
+    status: fromDbStatus(row.status_comercial),
     origem: row.origem ?? 'Supabase',
     origemBase: row.origem_base ?? 'desconhecida',
     origemDetalhe: row.origem_detalhe ?? undefined,
@@ -258,8 +279,10 @@ function filterMockClientes(
     origemBase?: Cliente['origemBase'] | 'todos'
     filtro?: CarteiraFiltro
     vendedorId?: string
+    vendedorHistoricoNome?: string
     cidade?: string
     uf?: string
+    status?: Cliente['status'] | 'todos'
     clienteIds?: string[]
   },
 ) {
@@ -270,8 +293,10 @@ function filterMockClientes(
     const origemBase = input.origemBase ?? origemBaseFromFiltro(input.filtro)
     if (origemBase && origemBase !== 'todos' && cliente.origemBase !== origemBase) return false
     if (input.vendedorId && cliente.vendedorId !== input.vendedorId) return false
+    if (input.vendedorHistoricoNome && cliente.vendedorHistoricoNome !== input.vendedorHistoricoNome) return false
     if (cidade && !cliente.cidade.toLowerCase().includes(cidade)) return false
     if (uf && cliente.uf.toLowerCase() !== uf) return false
+    if (input.status && input.status !== 'todos' && cliente.status !== input.status) return false
     if (input.clienteIds && !input.clienteIds.includes(cliente.id)) return false
     if (!term) return true
     return `${cliente.nome} ${cliente.cidade} ${cliente.cpfCnpj ?? ''} ${cliente.codigoErp}`.toLowerCase().includes(term)

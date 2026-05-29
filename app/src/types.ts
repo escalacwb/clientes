@@ -24,6 +24,8 @@ export type Cliente = {
   responsavel?: string
   vendedorId?: string
   vendedorNome?: string
+  vendedorHistoricoNome?: string
+  vendedorHistoricoCodigo?: string
   status: ClienteStatus
   origem: string
   origemBase?: 'capital_truck' | 'rodobens' | 'desconhecida'

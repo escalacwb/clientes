@@ -5457,8 +5457,14 @@ function VendedoresCarteira({
   const [cidadeFilter, setCidadeFilter] = useState('todas')
   const [origemFilter, setOrigemFilter] = useState<'todas' | NonNullable<Cliente['origemBase']>>('todas')
   const [statusFilter, setStatusFilter] = useState<ClienteStatus | 'todos'>('todos')
+  const [page, setPage] = useState(1)
+  const [carteiraClientes, setCarteiraClientes] = useState<Cliente[]>(clientes)
+  const [total, setTotal] = useState(clientes.length)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
+  const pageSize = 50
   const cidades = Array.from(new Set(clientes.map((cliente) => cliente.cidade).filter(Boolean))).sort()
-  const vendedoresHistoricos = Array.from(new Set(clientes.map((cliente) => cliente.vendedorNome).filter(Boolean))).sort()
+  const vendedoresHistoricos = Array.from(new Set(clientes.map((cliente) => cliente.vendedorHistoricoNome).filter(Boolean))).sort()
   const resumoRows = vendedoresResumo.length > 0
     ? vendedoresResumo
         .filter((row) => row.role === 'vendedor')
@@ -5485,18 +5491,59 @@ function VendedoresCarteira({
           cobertura: carteira.length ? Math.round((carteira.filter((cliente) => daysSince(cliente.ultimoContatoEm) <= 60).length / carteira.length) * 100) : 0,
         }
       })
-  const clientesFiltrados = clientes.filter((cliente) => {
-    if (responsavelFilter === 'sem-vendedor' && cliente.vendedorId) return false
-    if (responsavelFilter !== 'todos' && responsavelFilter !== 'sem-vendedor' && cliente.vendedorId !== responsavelFilter) return false
-    if (historicoFilter !== 'todos' && cliente.vendedorNome !== historicoFilter) return false
-    if (cidadeFilter !== 'todas' && cliente.cidade !== cidadeFilter) return false
-    if (origemFilter !== 'todas' && cliente.origemBase !== origemFilter) return false
-    if (statusFilter !== 'todos' && cliente.status !== statusFilter) return false
-    return true
-  })
   const clientesSemVendedor = clientes.filter((cliente) => !cliente.vendedorId)
   const vendedorSugerido = [...resumoRows].sort((a, b) => a.clientes - b.clientes || a.risco - b.risco)[0]
   const statusOptions = Array.from(new Set(clientes.map((cliente) => cliente.status))).sort()
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadCarteira() {
+      setIsLoading(true)
+      setError('')
+      try {
+        const result = await listClientesPage({
+          page,
+          pageSize,
+          filtro: responsavelFilter === 'sem-vendedor' ? 'sem-vendedor' : undefined,
+          vendedorId: responsavelFilter !== 'todos' && responsavelFilter !== 'sem-vendedor' ? responsavelFilter : undefined,
+          vendedorHistoricoNome: historicoFilter !== 'todos' ? historicoFilter : undefined,
+          cidade: cidadeFilter !== 'todas' ? cidadeFilter : undefined,
+          origemBase: origemFilter === 'todas' ? 'todos' : origemFilter,
+          status: statusFilter,
+        })
+        if (!isMounted) return
+        setCarteiraClientes(result.clientes)
+        setTotal(result.total)
+      } catch (exception) {
+        if (isMounted) setError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar a carteira.')
+      } finally {
+        if (isMounted) setIsLoading(false)
+      }
+    }
+
+    loadCarteira()
+
+    return () => {
+      isMounted = false
+    }
+  }, [cidadeFilter, historicoFilter, origemFilter, page, responsavelFilter, statusFilter])
+
+  function resetAndSet(setter: (value: string) => void, value: string) {
+    setter(value)
+    setPage(1)
+  }
+
+  function handleAssign(cliente: Cliente, vendedorId: string) {
+    onAssignClient(cliente.id, vendedorId)
+    const vendedor = vendedores.find((item) => item.id === vendedorId)
+    setCarteiraClientes((current) =>
+      responsavelFilter === 'sem-vendedor'
+        ? current.filter((item) => item.id !== cliente.id)
+        : current.map((item) => item.id === cliente.id ? { ...item, vendedorId, vendedorNome: vendedor?.nome } : item),
+    )
+  }
 
   return (
     <section className="grid-layout">
@@ -5543,7 +5590,7 @@ function VendedoresCarteira({
         <div className="campaign-filter-grid">
           <label>
             Responsavel atual
-            <select value={responsavelFilter} onChange={(event) => setResponsavelFilter(event.target.value)}>
+            <select value={responsavelFilter} onChange={(event) => resetAndSet(setResponsavelFilter, event.target.value)}>
               <option value="todos">Todos</option>
               <option value="sem-vendedor">Sem vendedor</option>
               {vendedores.map((vendedor) => <option key={vendedor.id} value={vendedor.id}>{vendedor.nome}</option>)}
@@ -5551,21 +5598,24 @@ function VendedoresCarteira({
           </label>
           <label>
             Vendedor historico
-            <select value={historicoFilter} onChange={(event) => setHistoricoFilter(event.target.value)}>
+            <select value={historicoFilter} onChange={(event) => resetAndSet(setHistoricoFilter, event.target.value)}>
               <option value="todos">Todos</option>
               {vendedoresHistoricos.map((nome) => <option key={nome} value={nome}>{nome}</option>)}
             </select>
           </label>
           <label>
             Cidade
-            <select value={cidadeFilter} onChange={(event) => setCidadeFilter(event.target.value)}>
+            <select value={cidadeFilter} onChange={(event) => resetAndSet(setCidadeFilter, event.target.value)}>
               <option value="todas">Todas</option>
               {cidades.map((cidade) => <option key={cidade} value={cidade}>{cidade}</option>)}
             </select>
           </label>
           <label>
             Origem
-            <select value={origemFilter} onChange={(event) => setOrigemFilter(event.target.value as typeof origemFilter)}>
+            <select value={origemFilter} onChange={(event) => {
+              setOrigemFilter(event.target.value as typeof origemFilter)
+              setPage(1)
+            }}>
               <option value="todas">Todas</option>
               <option value="capital_truck">Capital Truck</option>
               <option value="rodobens">Rodobens</option>
@@ -5574,18 +5624,22 @@ function VendedoresCarteira({
           </label>
           <label>
             Status
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
+            <select value={statusFilter} onChange={(event) => {
+              setStatusFilter(event.target.value as typeof statusFilter)
+              setPage(1)
+            }}>
               <option value="todos">Todos</option>
               {statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
             </select>
           </label>
         </div>
         <div className="info-grid campaign-summary">
-          <Info label="Filtrados" value={clientesFiltrados.length.toString()} />
+          <Info label="Filtrados" value={total.toString()} />
           <Info label="Sem vendedor" value={clientesSemVendedor.length.toString()} />
           <Info label="Sugestao" value={vendedorSugerido?.nome ?? 'Sem vendedor'} />
           <Info label="Menor carteira" value={vendedorSugerido ? `${vendedorSugerido.clientes} clientes` : '-'} />
         </div>
+        {error && <div className="alert">{error}</div>}
         <div className="table">
           <div className="table-head client360-sale">
             <span>Cliente</span>
@@ -5594,7 +5648,8 @@ function VendedoresCarteira({
             <span>Historico</span>
             <span>Atribuir</span>
           </div>
-          {clientesFiltrados.slice(0, 80).map((cliente) => (
+          {isLoading && <div className="empty-state compact">Carregando carteira filtrada...</div>}
+          {!isLoading && carteiraClientes.map((cliente) => (
             <div className="table-row client360-sale" key={cliente.id}>
               <span>
                 <strong>{cliente.nome}</strong>
@@ -5602,13 +5657,13 @@ function VendedoresCarteira({
               </span>
               <span>{cliente.cidade}/{cliente.uf}</span>
               <span>{vendedores.find((vendedor) => vendedor.id === cliente.vendedorId)?.nome ?? 'Sem vendedor'}</span>
-              <span>{cliente.vendedorNome ?? 'Nao informado'}</span>
+              <span>{cliente.vendedorHistoricoNome ?? 'Nao informado'}</span>
               <span>
                 <select
                   className="assign-select"
                   defaultValue={cliente.vendedorId ?? ''}
                   onChange={(event) => {
-                    if (event.target.value && event.target.value !== cliente.vendedorId) onAssignClient(cliente.id, event.target.value)
+                    if (event.target.value && event.target.value !== cliente.vendedorId) handleAssign(cliente, event.target.value)
                   }}
                 >
                   <option value="">Selecionar</option>
@@ -5617,7 +5672,18 @@ function VendedoresCarteira({
               </span>
             </div>
           ))}
-          {clientesFiltrados.length === 0 && <div className="empty-state">Nenhum cliente encontrado nestes filtros.</div>}
+          {!isLoading && carteiraClientes.length === 0 && <div className="empty-state">Nenhum cliente encontrado nestes filtros.</div>}
+        </div>
+        <div className="pagination-bar">
+          <span>Pagina {page} de {totalPages} - {total} clientes</span>
+          <div className="toolbar-actions">
+            <button className="button" type="button" disabled={page <= 1 || isLoading} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+              Anterior
+            </button>
+            <button className="button" type="button" disabled={page >= totalPages || isLoading} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>
+              Proxima
+            </button>
+          </div>
         </div>
       </section>
     </section>

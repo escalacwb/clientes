@@ -664,6 +664,23 @@ Validacao:
 Proximo passo tecnico:
 - Evoluir a tela para buscar clientes por query paginada propria e expor vendedor historico importado de forma dedicada.
 
+### 2026-05-28 - Carteira de vendedores paginada
+
+Status: concluido.
+
+Entregue:
+- Repository de clientes passou a mapear `vendedor_nome_erp` e `vendedor_codigo_erp`.
+- Status comercial agora e convertido do banco para labels reais do app, em vez de sempre `Novo`.
+- `listClientesPage` ganhou filtros por vendedor historico e status comercial.
+- Tela `Vendedores` passou a buscar clientes por query paginada propria, com 50 por pagina.
+- Lista diferencia responsavel atual (`users.nome`) de vendedor historico do ERP/importacao.
+
+Validacao:
+- Build passou com `npm run build`.
+
+Proximo passo tecnico:
+- Criar resumo agregado por vendedor historico do ERP e acoes em lote para redistribuir clientes filtrados.
+
 ### 2026-05-28 - Campanhas com construtor de publico
 
 Status: concluido.
