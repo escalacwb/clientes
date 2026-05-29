@@ -1211,6 +1211,28 @@ Validacao:
 Proximo passo tecnico:
 - Criar painel gerencial de acoes prioritarias: sem vendedor, Rodobens sem contato, orcamentos vencidos e campanhas paradas, cada uma com atalho para a tela operacional.
 
+### 2026-05-28 - Atalhos gerenciais de acoes prioritarias
+
+Status: concluido.
+
+Entregue:
+- Dashboard ganhou painel `Acoes prioritarias` com atalhos para os gargalos operacionais principais.
+- View `vw_dashboard_resumo` passou a expor contadores por tipo de oportunidade: sem vendedor, Rodobens e orcamento vencido.
+- Atalho `Distribuir carteira` abre a fila de oportunidades ja filtrada em `sem_vendedor`.
+- Atalho `Qualificar Rodobens` abre o Inbox Rodobens filtrado em novos.
+- Atalho `Retomar propostas` abre Orcamentos vencidos.
+- Atalho `Fila de campanhas` abre Campanhas.
+- Atalho `Tarefas atrasadas` abre Tarefas vencidas.
+
+Validacao:
+- SQL aplicado com `node scripts/run-sql-file.mjs supabase/queries/dashboard_summary_views.sql`.
+- Consulta direta retornou 20.921 oportunidades sem vendedor, 2 Rodobens e 0 orcamentos vencidos.
+- Build passou com `npm run build`.
+- Playwright local validou o painel no Dashboard e o clique em `Distribuir carteira` abrindo Oportunidades filtradas.
+
+Proximo passo tecnico:
+- Transformar cada atalho em fluxo de acao em lote: atribuir vendedor, gerar campanha, criar tarefas em massa ou abrir proposta conforme o gargalo.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

@@ -55,7 +55,28 @@ select
       and not oc.tarefa_existente
   ) as oportunidades_ativas,
   (select count(*) from public.oportunidades_cache oc) as oportunidades_total,
-  (select max(oc.gerado_em) from public.oportunidades_cache oc) as oportunidades_atualizado_em;
+  (select max(oc.gerado_em) from public.oportunidades_cache oc) as oportunidades_atualizado_em,
+  (
+    select count(*)
+    from public.oportunidades_cache oc
+    where oc.tipo = 'sem_vendedor'
+      and not oc.bloqueada
+      and not oc.tarefa_existente
+  ) as oportunidades_sem_vendedor,
+  (
+    select count(*)
+    from public.oportunidades_cache oc
+    where oc.tipo = 'rodobens_primeiro_contato'
+      and not oc.bloqueada
+      and not oc.tarefa_existente
+  ) as oportunidades_rodobens,
+  (
+    select count(*)
+    from public.oportunidades_cache oc
+    where oc.tipo = 'orcamento_vencido'
+      and not oc.bloqueada
+      and not oc.tarefa_existente
+  ) as oportunidades_orcamento_vencido;
 
 create or replace view public.vw_vendedores_resumo as
 select

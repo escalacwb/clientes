@@ -928,6 +928,32 @@ function App() {
             importacoes={importacoes}
             usuarios={usuarios}
             oportunidades={visibleOportunidades}
+            onOpenAction={(action) => {
+              if (action === 'sem-vendedor') {
+                setOportunidadesTipoFilter('sem_vendedor')
+                setOportunidadesFilter('ativas')
+                setOportunidadesPage(1)
+                setView('oportunidades')
+              }
+              if (action === 'rodobens') {
+                setRodobensStatusFilter('novo')
+                setRodobensPage(1)
+                setView('rodobens')
+              }
+              if (action === 'orcamentos-vencidos') {
+                setOrcamentosFilter('vencidos')
+                setOrcamentosPage(1)
+                setView('orcamentos')
+              }
+              if (action === 'campanhas-pendentes') {
+                setView('campanhas')
+              }
+              if (action === 'tarefas-vencidas') {
+                setTarefasStatusFilter('vencidas')
+                setTarefasPage(1)
+                setView('tarefas')
+              }
+            }}
           />
         )}
         {!canUseScopedClientViews && (
@@ -1592,6 +1618,7 @@ function Dashboard({
   importacoes,
   usuarios,
   oportunidades,
+  onOpenAction,
 }: {
   scoredClientes: Array<Cliente & { score: number; motivo: string }>
   resumo?: DashboardResumo
@@ -1601,6 +1628,7 @@ function Dashboard({
   importacoes: Importacao[]
   usuarios: Vendedor[]
   oportunidades: Oportunidade[]
+  onOpenAction: (action: 'sem-vendedor' | 'rodobens' | 'orcamentos-vencidos' | 'campanhas-pendentes' | 'tarefas-vencidas') => void
 }) {
   const ativos = resumo?.clientesAtivos90 ?? scoredClientes.filter((cliente) => daysSince(cliente.ultimaCompraEm) <= 90).length
   const inativos90 = resumo?.clientesInativos90 ?? scoredClientes.filter((cliente) => daysSince(cliente.ultimaCompraEm) > 90).length
@@ -1624,6 +1652,43 @@ function Dashboard({
             .reduce((total, cliente) => total + cliente.totalComprado, 0),
           contatos: interacoes.filter((interacao) => interacao.vendedorId === vendedor.id).length,
         }))
+  const actionItems = [
+    {
+      id: 'sem-vendedor' as const,
+      title: 'Distribuir carteira',
+      count: resumo?.oportunidadesSemVendedor ?? semVendedor,
+      detail: 'Clientes ativos sem responsavel comercial.',
+      action: 'Abrir fila',
+    },
+    {
+      id: 'rodobens' as const,
+      title: 'Qualificar Rodobens',
+      count: resumo?.oportunidadesRodobens ?? resumo?.clientesRodobens ?? 0,
+      detail: 'Leads para primeiro contato e triagem.',
+      action: 'Abrir inbox',
+    },
+    {
+      id: 'orcamentos-vencidos' as const,
+      title: 'Retomar propostas',
+      count: resumo?.oportunidadesOrcamentoVencido ?? 0,
+      detail: 'Orcamentos vencidos ainda sem ganho/perda.',
+      action: 'Ver vencidos',
+    },
+    {
+      id: 'campanhas-pendentes' as const,
+      title: 'Fila de campanhas',
+      count: resumo?.campanhasPendentes ?? 0,
+      detail: 'Envios aguardando acao comercial.',
+      action: 'Abrir campanhas',
+    },
+    {
+      id: 'tarefas-vencidas' as const,
+      title: 'Tarefas atrasadas',
+      count: resumo?.tarefasVencidas ?? 0,
+      detail: 'Compromissos comerciais fora do prazo.',
+      action: 'Abrir tarefas',
+    },
+  ]
 
   return (
     <section className="grid-layout">
@@ -1635,6 +1700,26 @@ function Dashboard({
         <Metric icon={AlertTriangle} label="Oportunidades" value={oportunidadesAtivas.toString()} tone="amber" />
         <Metric icon={Gauge} label="Fila total" value={(resumo?.oportunidadesTotal ?? oportunidades.length).toString()} tone="blue" />
       </div>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Acoes prioritarias</h2>
+            <p>Atalhos gerenciais para os principais gargalos operacionais.</p>
+          </div>
+          <Gauge size={18} />
+        </div>
+        <div className="action-grid">
+          {actionItems.map((item) => (
+            <button className="action-card" key={item.id} type="button" onClick={() => onOpenAction(item.id)}>
+              <strong>{item.count}</strong>
+              <span>{item.title}</span>
+              <small>{item.detail}</small>
+              <em>{item.action}</em>
+            </button>
+          ))}
+        </div>
+      </section>
 
       <section className="panel wide">
         <div className="panel-header">
