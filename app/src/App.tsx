@@ -1847,6 +1847,15 @@ function App() {
               setSelectedClientId(orcamento.clienteId)
               setView('orcamento-detalhe')
             }}
+            onCreateLooseBudget={(cliente) => {
+              setClientes((current) =>
+                current.some((item) => item.id === cliente.id) ? current : [cliente, ...current],
+              )
+              setSelectedClientId(cliente.id)
+              setQuoteSourceView('orcamentos')
+              setQuoteOriginContext({ kind: 'cliente', label: 'Orcamento avulso' })
+              setView('orcamento-editor')
+            }}
             onRevise={async (id, input) => {
               const revised = await reviseOrcamento(id, input, input.itens)
               setOrcamentos((current) => current.map((orcamento) => (orcamento.id === id ? revised : orcamento)))
@@ -8012,6 +8021,7 @@ function Orcamentos({
   onPageChange,
   onStatusFilterChange,
   onOpenDetail,
+  onCreateLooseBudget,
   onRevise,
   onStatusChange,
 }: {
@@ -8028,6 +8038,7 @@ function Orcamentos({
   onPageChange: (page: number) => void
   onStatusFilterChange: (filter: OrcamentoListFilter) => void
   onOpenDetail: (orcamento: Orcamento) => void
+  onCreateLooseBudget: (cliente: Cliente) => void
   onRevise: (id: string, orcamento: OrcamentoInput) => Promise<Orcamento>
   onStatusChange: (id: string, status: Orcamento['status'], motivoPerda?: string) => void
 }) {
@@ -8038,6 +8049,12 @@ function Orcamentos({
   const [versions, setVersions] = useState<OrcamentoVersao[]>([])
   const [versionsLoading, setVersionsLoading] = useState(false)
   const [versionsError, setVersionsError] = useState('')
+  const [showLooseBudgetSearch, setShowLooseBudgetSearch] = useState(false)
+  const [looseBudgetQuery, setLooseBudgetQuery] = useState('')
+  const [looseBudgetResults, setLooseBudgetResults] = useState<Cliente[]>([])
+  const [looseBudgetTotal, setLooseBudgetTotal] = useState(0)
+  const [isSearchingLooseBudget, setIsSearchingLooseBudget] = useState(false)
+  const [looseBudgetError, setLooseBudgetError] = useState('')
   const openStatuses: Orcamento['status'][] = ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando']
   const valorAberto = orcamentos
     .filter((orcamento) => openStatuses.includes(orcamento.status))
@@ -8053,6 +8070,40 @@ function Orcamentos({
   const latestVersion = versions[0]
   const firstVersion = versions[versions.length - 1]
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+
+  useEffect(() => {
+    let cancelled = false
+    if (!showLooseBudgetSearch) return
+
+    async function searchClientsForLooseBudget() {
+      setIsSearchingLooseBudget(true)
+      setLooseBudgetError('')
+      try {
+        const result = await listClientesPage({
+          page: 1,
+          pageSize: 20,
+          query: looseBudgetQuery,
+          vendedorId: currentUser.role === 'vendedor' ? currentUser.id : undefined,
+        })
+        if (cancelled) return
+        setLooseBudgetResults(result.clientes)
+        setLooseBudgetTotal(result.total)
+      } catch (exception) {
+        if (cancelled) return
+        setLooseBudgetResults([])
+        setLooseBudgetTotal(0)
+        setLooseBudgetError(exception instanceof Error ? exception.message : 'Nao foi possivel buscar clientes.')
+      } finally {
+        if (!cancelled) setIsSearchingLooseBudget(false)
+      }
+    }
+
+    const handle = window.setTimeout(searchClientsForLooseBudget, looseBudgetQuery.trim() ? 250 : 0)
+    return () => {
+      cancelled = true
+      window.clearTimeout(handle)
+    }
+  }, [currentUser.id, currentUser.role, looseBudgetQuery, showLooseBudgetSearch])
 
   async function openVersionHistory(orcamento: Orcamento) {
     setVersionTarget(orcamento)
@@ -8076,6 +8127,13 @@ function Orcamentos({
           <p>Status, validade, previsao de fechamento e motivo de perda ficam centralizados.</p>
         </div>
         <div className="toolbar-actions">
+          <button
+            className="button primary"
+            type="button"
+            onClick={() => setShowLooseBudgetSearch((current) => !current)}
+          >
+            <WalletCards size={16} /> Novo orcamento
+          </button>
           <label className="mini-select">
             <Filter size={15} />
             <select value={statusFilter} onChange={(event) => onStatusFilterChange(event.target.value as OrcamentoListFilter)}>
@@ -8092,6 +8150,50 @@ function Orcamentos({
           <WalletCards size={18} />
         </div>
       </div>
+      {showLooseBudgetSearch && (
+        <section className="quote-client-search">
+          <div className="panel-header">
+            <div>
+              <h3>Novo orcamento avulso</h3>
+              <p>Pesquise qualquer cliente por nome, cidade, CPF/CNPJ ou codigo e escolha para montar a proposta.</p>
+            </div>
+            <button className="button" type="button" onClick={() => setShowLooseBudgetSearch(false)}>Fechar</button>
+          </div>
+          <label className="search quote-client-search-input">
+            <Search size={18} />
+            <input
+              value={looseBudgetQuery}
+              onChange={(event) => setLooseBudgetQuery(event.target.value)}
+              placeholder="Buscar cliente para orcamento"
+              autoFocus
+            />
+          </label>
+          {looseBudgetError && <div className="alert">{looseBudgetError}</div>}
+          {isSearchingLooseBudget && <div className="empty-state compact">Buscando clientes...</div>}
+          {!isSearchingLooseBudget && (
+            <div className="quote-client-results">
+              <span>{looseBudgetTotal} clientes encontrados. Exibindo ate 20 resultados.</span>
+              {looseBudgetResults.map((cliente) => (
+                <button
+                  className="quote-client-result"
+                  key={cliente.id}
+                  type="button"
+                  onClick={() => onCreateLooseBudget(cliente)}
+                >
+                  <span>
+                    <strong>{cliente.nome}</strong>
+                    <small>{cliente.cidade}/{cliente.uf} · {cliente.whatsapp ?? 'sem WhatsApp'} · {origemLabel(cliente.origemBase)}</small>
+                  </span>
+                  <b>Criar proposta</b>
+                </button>
+              ))}
+              {looseBudgetResults.length === 0 && (
+                <div className="empty-state compact">Nenhum cliente encontrado para esta busca.</div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
       <div className="info-grid budget-summary">
         <Info label="Pipeline aberto" value={money(valorAberto)} />
         <Info label="Vencidos" value={vencidos.toString()} />
