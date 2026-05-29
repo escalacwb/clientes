@@ -5513,7 +5513,7 @@ function OrcamentoEditor({
         </div>
         <div className="toolbar-actions">
           <button className="button" type="button" onClick={onBack}>Voltar</button>
-          <button className="button" type="button" onClick={() => window.print()}>
+          <button className="button" type="button" onClick={() => printQuotePdf(cliente.nome)}>
             Imprimir/PDF
           </button>
           <a className={!waUrl ? 'button disabled' : 'button'} href={waUrl} target="_blank" rel="noreferrer">
@@ -6015,6 +6015,28 @@ function quoteOrdinalBlockLabel(index: number) {
 function quoteConditionLabel(label: string) {
   if (label.toLowerCase() === 'a vista') return 'À vista'
   return label
+}
+
+function quotePdfFileName(clienteNome: string, date?: string) {
+  const parsedDate = date ? new Date(date) : new Date()
+  const datePart = Number.isNaN(parsedDate.getTime())
+    ? new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')
+    : parsedDate.toLocaleDateString('pt-BR').replace(/\//g, '-')
+  const safeCliente = clienteNome
+    .replace(/[\\/:*?"<>|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return `Orçamento - ${safeCliente || 'Cliente'} - ${datePart}`
+}
+
+function printQuotePdf(clienteNome: string, date?: string) {
+  const previousTitle = document.title
+  document.title = quotePdfFileName(clienteNome, date)
+  const restoreTitle = () => {
+    document.title = previousTitle
+  }
+  window.addEventListener('afterprint', restoreTitle, { once: true })
+  window.print()
 }
 
 function groupQuoteItemsForMessage(itens: OrcamentoItemInput[]) {
@@ -9482,7 +9504,7 @@ function OrcamentoWorkspace({
         </div>
         <div className="toolbar-actions">
           <button className="button" type="button" onClick={onBack}>Voltar</button>
-          <button className="button" type="button" onClick={() => window.print()}>Imprimir/PDF</button>
+          <button className="button" type="button" onClick={() => printQuotePdf(cliente.nome, orcamento.data)}>Imprimir/PDF</button>
           <a className={!waUrl ? 'button disabled' : 'button primary'} href={waUrl} target="_blank" rel="noreferrer">
             <MessageCircle size={16} /> Enviar WA.ME
           </a>
