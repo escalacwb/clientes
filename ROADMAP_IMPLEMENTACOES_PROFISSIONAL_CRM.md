@@ -2,6 +2,8 @@
 
 Atualizado em: 2026-05-28
 
+Queue operacional atual: `QUEUE_EVOLUCAO_MACRO_CRM.md`.
+
 ## Objetivo
 
 Transformar o app em uma ferramenta comercial completa para carteira, pos-venda, orcamentos, campanhas e importacao diaria. O sistema deve ser mais pratico que um CRM generico porque nasce dos dados reais da Capital Truck: clientes, placas, KM, vendas de produtos, servicos, vendedores historicos e tabelas de preco.

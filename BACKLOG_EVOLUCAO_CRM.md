@@ -1,6 +1,7 @@
 # Backlog de evolucao do Capital Truck CRM
 
 > Roadmap profissional atualizado: `ROADMAP_IMPLEMENTACOES_PROFISSIONAL_CRM.md`.
+> Queue macro de execucao: `QUEUE_EVOLUCAO_MACRO_CRM.md`.
 > Este arquivo fica como backlog historico; a sequencia atual de produto deve seguir o roadmap novo.
 
 ## Diagnostico atual
