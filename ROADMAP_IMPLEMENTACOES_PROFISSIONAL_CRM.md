@@ -1417,6 +1417,24 @@ Validacao:
 Proximo passo tecnico:
 - Criar alertas gerenciais por vendedor com limite configuravel e/ou view agregada de SLA por responsavel.
 
+### 2026-05-29 - SLA global por vendedor
+
+Status: concluido.
+
+Entregue:
+- Criada view `vw_tarefas_sla_vendedor` com `security_invoker`.
+- A view agrega tarefas abertas, atrasadas, vencendo hoje, alta prioridade e atrasos por origem: campanha, orcamento, Rodobens e oportunidade.
+- Repository `listTarefasSlaVendedor` expoe o agregado para o frontend.
+- Cockpit admin passou a usar esse agregado global na tabela `Carga por vendedor`, evitando depender apenas dos poucos itens carregados na tela.
+
+Validacao:
+- SQL aplicado com `node scripts/run-sql-file.mjs supabase/queries/tarefas_sla_vendedor.sql`.
+- Build passou com `npm run build`.
+- Playwright local validou `SLA critico` e origem critica no Cockpit.
+
+Proximo passo tecnico:
+- Criar alertas gerenciais configuraveis sobre a view de SLA e comecar automacoes adicionais de follow-up.
+
 ## Criterio de qualidade
 
 Cada nova funcao so deve entrar como "pronta" se:

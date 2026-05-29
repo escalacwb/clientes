@@ -101,12 +101,14 @@ import {
   listMotivosPerda,
   listRankingMedidas,
   listRankingServicos,
+  listTarefasSlaVendedor,
   listVendedoresResumo,
   type DashboardResumo,
   type AtividadeDiaResumo,
   type FunilGerencialResumo,
   type MotivoPerdaResumo,
   type RankingResumo,
+  type TarefaSlaVendedorResumo,
   type VendedorResumo,
 } from './repositories/dashboardRepository'
 import { listClienteServicosItens, listClienteVeiculos, listClienteVendasItens } from './repositories/historicoRepository'
@@ -303,6 +305,7 @@ function App() {
   const [cockpitRodobens, setCockpitRodobens] = useState<Cliente[]>([])
   const [cockpitOportunidades, setCockpitOportunidades] = useState<Oportunidade[]>([])
   const [cockpitCampanhas, setCockpitCampanhas] = useState<CampanhaInboxItem[]>([])
+  const [cockpitSlaVendedores, setCockpitSlaVendedores] = useState<TarefaSlaVendedorResumo[]>([])
   const [isLoadingCockpit, setIsLoadingCockpit] = useState(false)
   const [quoteSourceView, setQuoteSourceView] = useState('clientes')
   const [quoteOriginContext, setQuoteOriginContext] = useState<QuoteOriginContext>({ kind: 'cliente', label: 'Ficha do cliente' })
@@ -501,6 +504,7 @@ function App() {
         setCockpitRodobens([])
         setCockpitOportunidades([])
         setCockpitCampanhas([])
+        setCockpitSlaVendedores([])
         return
       }
       if (view !== 'cockpit') return
@@ -516,6 +520,7 @@ function App() {
           rodobensNovos,
           oportunidadesAtivas,
           campanhasInbox,
+          slaVendedores,
         ] = await Promise.all([
           listTarefasPage({ page: 1, pageSize: 8, status: 'abertas', origem: 'todas', vendedorId }),
           listTarefasPage({ page: 1, pageSize: 5, status: 'vencidas', origem: 'todas', vendedorId }),
@@ -525,6 +530,7 @@ function App() {
             ? listOportunidadesPage({ page: 1, pageSize: 6, filter: 'ativas', tipo: 'todos' })
             : Promise.resolve({ oportunidades: [], total: 0 }),
           listCampanhaInbox({ statuses: ['respondeu', 'virou_orcamento'], vendedorId, limit: 8 }),
+          listTarefasSlaVendedor(),
         ])
 
         if (!isMounted) return
@@ -534,6 +540,7 @@ function App() {
         setCockpitRodobens(rodobensNovos.clientes)
         setCockpitOportunidades(oportunidadesAtivas.oportunidades)
         setCockpitCampanhas(campanhasInbox)
+        setCockpitSlaVendedores(slaVendedores)
       } catch (exception) {
         if (isMounted) setModuleError('cockpit', exception instanceof Error ? exception.message : 'Nao foi possivel carregar o cockpit.')
       } finally {
@@ -1025,6 +1032,7 @@ function App() {
             rodobens={cockpitRodobens}
             oportunidades={cockpitOportunidades}
             campanhas={cockpitCampanhas}
+            slaVendedores={cockpitSlaVendedores}
             isLoading={isLoadingCockpit}
             onOpenClient={openClientFromCockpit}
             onOpenBudget={openBudgetFromCockpit}
@@ -1809,6 +1817,7 @@ function Cockpit({
   rodobens,
   oportunidades,
   campanhas,
+  slaVendedores,
   isLoading,
   onOpenClient,
   onOpenBudget,
@@ -1824,6 +1833,7 @@ function Cockpit({
   rodobens: Cliente[]
   oportunidades: Oportunidade[]
   campanhas: CampanhaInboxItem[]
+  slaVendedores: TarefaSlaVendedorResumo[]
   isLoading: boolean
   onOpenClient: (clienteId: string) => Promise<void>
   onOpenBudget: (clienteId: string, originContext: QuoteOriginContext) => Promise<void>
@@ -1842,15 +1852,18 @@ function Cockpit({
     .slice(0, 4)
   const criticalTasks = [...tarefasVencidas, ...todayTasks, ...highPriorityTasks].slice(0, 10)
   const ownerLabel = currentUser.role === 'admin' ? 'Visao gerencial' : `Fila de ${currentUser.nome.split(' ')[0]}`
+  const slaBySeller = new Map(slaVendedores.map((item) => [item.vendedorId, item]))
   const workload = usuarios
     .filter((usuario) => usuario.role === 'vendedor')
     .map((usuario) => ({
       id: usuario.id,
       nome: usuario.nome,
-      tarefas: [...tarefas, ...tarefasVencidas].filter((tarefa) => tarefa.vendedorId === usuario.id).length,
-      atrasadas: tarefasVencidas.filter((tarefa) => tarefa.vendedorId === usuario.id).length,
+      tarefas: slaBySeller.get(usuario.id)?.tarefasAbertas ?? [...tarefas, ...tarefasVencidas].filter((tarefa) => tarefa.vendedorId === usuario.id).length,
+      atrasadas: slaBySeller.get(usuario.id)?.atrasadas ?? tarefasVencidas.filter((tarefa) => tarefa.vendedorId === usuario.id).length,
       campanhas: campanhas.filter((envio) => envio.vendedorId === usuario.id).length,
-      criticas: criticalTasks.filter((tarefa) => tarefa.vendedorId === usuario.id && taskSla(tarefa).tone === 'danger').length,
+      criticas: slaBySeller.get(usuario.id)?.altaPrioridade ?? criticalTasks.filter((tarefa) => tarefa.vendedorId === usuario.id && taskSla(tarefa).tone === 'danger').length,
+      vencemHoje: slaBySeller.get(usuario.id)?.vencemHoje ?? 0,
+      origemCritica: sellerCriticalOrigin(slaBySeller.get(usuario.id)),
     }))
     .sort((a, b) => b.atrasadas - a.atrasadas || b.tarefas - a.tarefas)
 
@@ -2066,9 +2079,15 @@ function Cockpit({
               <div className="table-row five" key={item.id}>
                 <span><strong>{item.nome}</strong></span>
                 <span>{item.tarefas}</span>
-                <span className={item.atrasadas > 0 ? 'score danger' : 'score'}>{item.atrasadas}</span>
+                <span>
+                  <strong className={item.atrasadas > 0 ? 'score danger' : 'score'}>{item.atrasadas}</strong>
+                  <small>{item.vencemHoje} vencem hoje</small>
+                </span>
                 <span>{item.campanhas}</span>
-                <span className={item.criticas > 0 ? 'score danger' : 'score'}>{item.criticas}</span>
+                <span>
+                  <strong className={item.criticas > 0 ? 'score danger' : 'score'}>{item.criticas}</strong>
+                  <small>{item.origemCritica}</small>
+                </span>
               </div>
             ))}
           </div>
@@ -6833,6 +6852,17 @@ function taskOriginSlaLabel(origin: string) {
   if (origin.startsWith('oportunidade')) return 'Oportunidade'
   if (origin.startsWith('interacao')) return 'Interacao'
   return 'SLA'
+}
+
+function sellerCriticalOrigin(row?: TarefaSlaVendedorResumo) {
+  if (!row) return 'Sem dados globais'
+  const origins = [
+    { label: 'Campanhas', value: row.campanhasAtrasadas },
+    { label: 'Orcamentos', value: row.orcamentosAtrasados },
+    { label: 'Rodobens', value: row.rodobensAtrasados },
+    { label: 'Oportunidades', value: row.oportunidadesAtrasadas },
+  ].sort((a, b) => b.value - a.value)
+  return origins[0]?.value > 0 ? `${origins[0].label}: ${origins[0].value}` : 'Sem origem critica'
 }
 
 function conversionRate(conversions: number, total: number) {

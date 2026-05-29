@@ -81,6 +81,20 @@ export type AtividadeDiaResumo = {
   tarefasVencidas: number
 }
 
+export type TarefaSlaVendedorResumo = {
+  vendedorId: string
+  vendedorNome: string
+  tarefasAbertas: number
+  atrasadas: number
+  vencemHoje: number
+  altaPrioridade: number
+  campanhasAtrasadas: number
+  orcamentosAtrasados: number
+  rodobensAtrasados: number
+  oportunidadesAtrasadas: number
+  ultimoVencimento?: string
+}
+
 type DashboardResumoRow = {
   clientes_total: number
   clientes_ativos_90: number
@@ -160,6 +174,20 @@ type AtividadeDiaRow = {
   orcamentos_hoje: number
   tarefas_concluidas_hoje: number
   tarefas_vencidas: number
+}
+
+type TarefaSlaVendedorRow = {
+  vendedor_id: string
+  vendedor_nome: string
+  tarefas_abertas: number
+  atrasadas: number
+  vencem_hoje: number
+  alta_prioridade: number
+  campanhas_atrasadas: number
+  orcamentos_atrasados: number
+  rodobens_atrasados: number
+  oportunidades_atrasadas: number
+  ultimo_vencimento: string | null
 }
 
 export async function getDashboardResumo(): Promise<DashboardResumo | undefined> {
@@ -256,6 +284,32 @@ export async function listAtividadesDia(): Promise<AtividadeDiaResumo[]> {
     orcamentosHoje: Number(row.orcamentos_hoje ?? 0),
     tarefasConcluidasHoje: Number(row.tarefas_concluidas_hoje ?? 0),
     tarefasVencidas: Number(row.tarefas_vencidas ?? 0),
+  }))
+}
+
+export async function listTarefasSlaVendedor(): Promise<TarefaSlaVendedorResumo[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('vw_tarefas_sla_vendedor')
+    .select('*')
+    .order('atrasadas', { ascending: false })
+    .order('alta_prioridade', { ascending: false })
+
+  if (error) throw error
+  return (data as TarefaSlaVendedorRow[] | null ?? []).map((row) => ({
+    vendedorId: row.vendedor_id,
+    vendedorNome: row.vendedor_nome,
+    tarefasAbertas: Number(row.tarefas_abertas ?? 0),
+    atrasadas: Number(row.atrasadas ?? 0),
+    vencemHoje: Number(row.vencem_hoje ?? 0),
+    altaPrioridade: Number(row.alta_prioridade ?? 0),
+    campanhasAtrasadas: Number(row.campanhas_atrasadas ?? 0),
+    orcamentosAtrasados: Number(row.orcamentos_atrasados ?? 0),
+    rodobensAtrasados: Number(row.rodobens_atrasados ?? 0),
+    oportunidadesAtrasadas: Number(row.oportunidades_atrasadas ?? 0),
+    ultimoVencimento: row.ultimo_vencimento ?? undefined,
   }))
 }
 

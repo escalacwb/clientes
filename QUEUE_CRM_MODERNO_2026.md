@@ -82,9 +82,11 @@ Ja entregue:
 - Ficha/lista de tarefas exibe o motivo do reagendamento quando existir.
 - SLA visual por origem aparece no Cockpit e na tela de Tarefas: no prazo, no limite, vence hoje ou atrasada.
 - Visao admin do Cockpit mostra tambem tarefas com SLA critico por vendedor.
+- Criada view `vw_tarefas_sla_vendedor` para SLA global por vendedor, com atrasadas, vencem hoje, alta prioridade e origem critica.
+- Cockpit admin passou a usar a visao global de SLA, nao apenas as tarefas carregadas na pagina.
 
 Proximas entregas:
-- Alertas gerenciais por vendedor com limite configuravel.
+- Alertas gerenciais com limite configuravel.
 - Automacoes adicionais para criar tarefas quando orcamento vencer ou campanha responder.
 
 Pronto quando:
