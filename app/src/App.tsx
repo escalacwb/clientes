@@ -11136,7 +11136,7 @@ function Campanhas({
           )}
         </div>
       </div>
-      <section className="campaign-builder-stage">
+      <section className="campaign-builder-stage campaign-objective-stage">
         <div className="campaign-stage-header">
           <span>Escolha um objetivo</span>
           <small>Use um ponto de partida pronto. Depois ajuste publico, texto e envio.</small>
