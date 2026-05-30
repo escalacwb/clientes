@@ -6884,7 +6884,7 @@ function OrcamentoEditor({
             <Info label="Catalogo" value={catalogo.length.toString()} />
             <Info label="Aprovacao" value={approvalWarnings.length > 0 ? 'Necessaria' : 'Dentro do limite'} />
           </div>
-          <div className="proposal-preview" ref={proposalPreviewRef}>
+          <div className={`proposal-preview ${quotePreviewDensityClass(validItems.length, paymentScenarios.length)}`} ref={proposalPreviewRef}>
             <QuoteProposalPreview
               cliente={cliente}
               itens={validItems}
@@ -7363,6 +7363,13 @@ function quoteForecastWeight(status: Orcamento['status']) {
   return weights[status] ?? 0
 }
 
+function quotePreviewDensityClass(itemCount: number, conditionCount: number) {
+  const weight = itemCount + Math.ceil(conditionCount / 2)
+  if (weight >= 18) return 'proposal-ultra-compact'
+  if (weight >= 10) return 'proposal-compact'
+  return ''
+}
+
 function forecastItemLabel(item: OrcamentoItem) {
   const normalized = item.descricao.replace(/\s+/g, ' ').trim()
   const medida = normalized.match(/\b\d{3}\/\d{2}\s*R?\s*\d{2}(?:[.,]\d)?\b/i)?.[0]
@@ -7451,7 +7458,8 @@ async function downloadElementPdf(element: HTMLElement | null, filename: string)
     while (sourceY < canvas.height) {
       const remaining = canvas.height - sourceY
       if (remaining < 24) break
-      const sliceHeight = Math.min(pageCanvasHeight, canvas.height - sourceY)
+      const maxSliceHeight = Math.min(pageCanvasHeight, canvas.height - sourceY)
+      const sliceHeight = findPdfSliceHeight(canvas, sourceY, maxSliceHeight)
       const pageCanvas = document.createElement('canvas')
       pageCanvas.width = canvas.width
       pageCanvas.height = sliceHeight
@@ -7469,6 +7477,37 @@ async function downloadElementPdf(element: HTMLElement | null, filename: string)
   } finally {
     exportStage.remove()
   }
+}
+
+function findPdfSliceHeight(canvas: HTMLCanvasElement, sourceY: number, maxSliceHeight: number) {
+  if (sourceY + maxSliceHeight >= canvas.height) return maxSliceHeight
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) return maxSliceHeight
+
+  const minSliceHeight = Math.floor(maxSliceHeight * 0.68)
+  const start = sourceY + maxSliceHeight - 1
+  const end = sourceY + minSliceHeight
+  const sampleStep = Math.max(12, Math.floor(canvas.width / 80))
+
+  for (let y = start; y >= end; y -= 3) {
+    const row = context.getImageData(0, y, canvas.width, 1).data
+    let whiteSamples = 0
+    let totalSamples = 0
+    for (let x = 0; x < canvas.width; x += sampleStep) {
+      const index = x * 4
+      const alpha = row[index + 3]
+      const red = row[index]
+      const green = row[index + 1]
+      const blue = row[index + 2]
+      totalSamples += 1
+      if (alpha < 16 || (red > 242 && green > 242 && blue > 242)) whiteSamples += 1
+    }
+    if (totalSamples > 0 && whiteSamples / totalSamples > 0.96) {
+      return Math.max(24, y - sourceY)
+    }
+  }
+
+  return maxSliceHeight
 }
 
 async function downloadQuotePdf(element: HTMLElement | null, clienteNome: string, date?: string) {
@@ -12668,7 +12707,7 @@ function OrcamentoWorkspace({
 
         {activeTab === 'resumo' && (
           <div className="quote-workspace-grid">
-            <div className="proposal-preview" ref={proposalPreviewRef}>
+            <div className={`proposal-preview ${quotePreviewDensityClass(validItems.length, scenarios.length)}`} ref={proposalPreviewRef}>
               <QuoteProposalPreview
                 cliente={cliente}
                 itens={validItems}

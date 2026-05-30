@@ -57,10 +57,11 @@ Entregue nesta rodada:
 - Segunda rodada mobile validada em sessao local: removido overflow horizontal, cards de clientes/propostas passaram a respeitar largura do celular, alerta administrativo foi ocultado no mobile e atalhos operacionais viraram barra inferior fixa.
 - Terceira rodada mobile mudou a estrategia para uso real de vendedor: menu mobile mostra apenas Minha rotina, Clientes, Campanhas e Orcar; Importacoes/Equipe/Usuarios/Catalogo saem da navegacao mobile; a barra inferior prioriza Orcar, Campanhas, Clientes e Rotina; descricoes tecnicas e resumos gerenciais foram removidos da primeira leitura mobile.
 - Propostas ganharam aceite manual de pedido: vendedor pode `Confirmar pedido`, registrar referencia/observacao, gravar usuario/data no Supabase e remover follow-up pendente do fluxo.
+- PDF da proposta ganhou densidade automatica para propostas longas e corte de paginas por faixa branca, reduzindo quebras no meio de linhas/blocos em documentos com muitos itens.
 
 Proximos pontos:
-- Continuar refinando proposta HTML imprimivel em casos extremos de muitos itens.
-- Controle de envio: enviado em, enviado por, proximo follow-up e aceite manual cobertos; ainda evoluir revisao final do documento em casos extremos.
+- Revisar visualmente PDFs reais grandes depois de novos exemplos de campo.
+- Controle de envio: enviado em, enviado por, proximo follow-up e aceite manual cobertos.
 
 ## Sprint B - Campanhas seguras e segmentacao forte
 
