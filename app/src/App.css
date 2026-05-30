@@ -2450,6 +2450,35 @@ h3 {
   gap: 8px;
 }
 
+.quote-bundle-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.quote-bundle-button {
+  display: grid;
+  gap: 4px;
+  min-height: 74px;
+  border: 1px solid #cddbd3;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #132421;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.quote-bundle-button:hover {
+  border-color: #123d37;
+  background: #eef7f2;
+}
+
+.quote-bundle-button strong,
+.quote-bundle-button small {
+  display: block;
+}
+
 .quote-suggestions small {
   display: block;
   color: #66736f;

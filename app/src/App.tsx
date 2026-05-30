@@ -6581,6 +6581,7 @@ function OrcamentoEditor({
     : undefined
   const approvalWarnings = quoteApprovalWarnings(validItems, catalogo, regrasDesconto)
   const commercialChecks = quoteCommercialChecks(validItems, catalogo, regrasDesconto)
+  const serviceBundles = useMemo(() => buildQuoteServiceBundles(catalogo, items), [catalogo, items])
   const generatedQuoteMessage = buildQuoteMessage(cliente, validItems, validade, observacao, paymentScenarios)
   const [manualQuoteMessage, setManualQuoteMessage] = useState('')
   const [isQuoteMessageEdited, setIsQuoteMessageEdited] = useState(false)
@@ -6625,6 +6626,23 @@ function OrcamentoEditor({
         valorUnitario: catalogoItem.preco,
         descontoPercentual: 0,
       },
+    ])
+  }
+
+  function addServiceBundle(bundle: QuoteServiceBundle) {
+    setItems((current) => [
+      ...current,
+      ...bundle.items.map((catalogoItem) => ({
+        catalogoItemId: catalogoItem.id,
+        codigo: catalogoItem.codigo,
+        tipo: catalogoItem.tipo,
+        descricao: catalogoItem.descricao,
+        apresentacao: 'complementar' as const,
+        quantidade: quoteBundleItemQuantity(catalogoItem, bundle.baseQuantity),
+        valorUnitario: catalogoItem.preco,
+        descontoPercentual: 0,
+        observacao: bundle.label,
+      })),
     ])
   }
 
@@ -6808,8 +6826,18 @@ function OrcamentoEditor({
           )}
           <div className="quote-suggestions">
             <strong>Complementares sugeridos</strong>
+            {serviceBundles.length > 0 && (
+              <div className="quote-bundle-grid">
+                {serviceBundles.map((bundle) => (
+                  <button className="quote-bundle-button" type="button" key={bundle.id} onClick={() => addServiceBundle(bundle)}>
+                    <strong>{bundle.label}</strong>
+                    <small>{bundle.detail}</small>
+                  </button>
+                ))}
+              </div>
+            )}
             {isLoadingSuggestions && <small>Buscando no historico de vendas...</small>}
-            {!isLoadingSuggestions && catalogSuggestions.length === 0 && <small>Selecione um item do catalogo para ver cross-sell baseado no historico.</small>}
+            {!isLoadingSuggestions && catalogSuggestions.length === 0 && serviceBundles.length === 0 && <small>Selecione um item do catalogo para ver complementares baseados no historico.</small>}
             <div>
               {catalogSuggestions.map((suggestion) => {
                 const catalogItem = catalogo.find((item) => item.id === suggestion.catalogoItemId)
@@ -7738,6 +7766,80 @@ function quoteItemFromCatalogo(item: CatalogoItem): OrcamentoItemInput {
     observacao: item.grupo || item.marca || undefined,
     apresentacao: item.tipo === 'servico' ? 'complementar' : 'normal',
   }
+}
+
+type QuoteServiceBundle = {
+  id: string
+  label: string
+  detail: string
+  baseQuantity: number
+  items: CatalogoItem[]
+}
+
+function buildQuoteServiceBundles(catalogo: CatalogoItem[], quoteItems: OrcamentoItemInput[]): QuoteServiceBundle[] {
+  const lastTire = [...quoteItems]
+    .reverse()
+    .find((item) => item.tipo === 'produto' && normalizeTextForMatch(`${item.descricao} ${item.codigo ?? ''}`).includes('pneu'))
+  if (!lastTire) return []
+
+  const services = catalogo.filter((item) => item.ativo && item.tipo === 'servico' && item.preco > 0)
+  const baseQuantity = Math.max(1, Math.round(Number(lastTire.quantidade || 1)))
+  const findService = (terms: string[]) => services.find((service) => {
+    const text = normalizeTextForMatch(`${service.codigo} ${service.descricao} ${service.grupo ?? ''}`)
+    return terms.some((term) => text.includes(term))
+  })
+  const bundleDefs = [
+    {
+      id: 'montagem-completa',
+      label: 'Pacote montagem completa',
+      terms: [['montagem', 'troca de pneu'], ['balanceamento'], ['alinhamento']],
+    },
+    {
+      id: 'alinhamento-balanceamento',
+      label: 'Alinhamento + balanceamento',
+      terms: [['alinhamento'], ['balanceamento']],
+    },
+    {
+      id: 'geometria',
+      label: 'Revisao de geometria',
+      terms: [['alinhamento'], ['cambagem']],
+    },
+  ]
+
+  return bundleDefs
+    .map((bundle) => {
+      const items = uniqueCatalogItems(bundle.terms.map(findService).filter((item): item is CatalogoItem => Boolean(item)))
+      return {
+        id: bundle.id,
+        label: bundle.label,
+        baseQuantity,
+        detail: items.length ? items.map((item) => item.descricao).join(' + ') : 'Servicos nao encontrados no catalogo',
+        items,
+      }
+    })
+    .filter((bundle) => bundle.items.length > 0)
+}
+
+function quoteBundleItemQuantity(item: CatalogoItem, baseQuantity: number) {
+  const text = normalizeTextForMatch(item.descricao)
+  if (text.includes('alinhamento') || text.includes('cambagem')) return 1
+  return baseQuantity
+}
+
+function uniqueCatalogItems(items: CatalogoItem[]) {
+  const seen = new Set<string>()
+  return items.filter((item) => {
+    if (seen.has(item.id)) return false
+    seen.add(item.id)
+    return true
+  })
+}
+
+function normalizeTextForMatch(text: string) {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
 }
 
 function origemLabel(origemBase?: Cliente['origemBase']) {

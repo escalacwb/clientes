@@ -36,9 +36,9 @@ Entregue nesta rodada:
 - Aprovacao gerencial ganhou parecer digitavel e historico de decisao no fluxo da proposta.
 - Ficha do cliente simplificou o bloco `Atendimento agora`: resultado, observacao e proxima acao ficam em primeiro plano; IA e ajustes avancados ficam recolhidos.
 - Navegacao principal ficou mais enxuta: tarefas, oportunidades, relatorios e auditoria deixam de competir com a rotina diaria no menu.
+- Orcamento ganhou atalhos de pacotes complementares, sugerindo montagem, balanceamento, alinhamento e cambagem quando ha pneu na proposta.
 
 Proximos pontos:
-- Bundles sugeridos: pneu + montagem + balanceamento + alinhamento.
 - Proposta HTML imprimivel com layout final e termos padrao.
 - Campo de prazo de entrega/execucao por item ou proposta.
 - Controle de envio: enviado em, enviado por, proximo follow-up, status de aceite manual. Parcial: acao `Registrar envio e abrir WA.ME` grava envio e follow-up antes de abrir WhatsApp.
