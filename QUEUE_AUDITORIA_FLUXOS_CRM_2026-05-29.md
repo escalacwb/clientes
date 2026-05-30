@@ -220,9 +220,9 @@ Execucao:
 ### Sprint C - Gestao e maturidade CRM
 
 9. P2 - Painel de atividade do dia por vendedor.
-10. P2 - Metas e gamificacao simples por vendedor.
-11. P2 - Regras de automacao configuraveis por admin.
-12. P2 - Relatorio de qualidade de uso: clientes sem proxima acao, tarefas vencidas, propostas sem follow-up.
+10. P2 - Metas e gamificacao simples por vendedor. Concluido: ranking comercial por score de meta, contatos, propostas e disciplina.
+11. P2 - Regras de automacao configuraveis por admin. Concluido: painel de regras em Relatorios com persistencia local.
+12. P2 - Relatorio de qualidade de uso: clientes sem proxima acao, tarefas vencidas, propostas sem follow-up. Concluido: painel `Qualidade de uso` com prioridade, area, responsavel, problema e acao sugerida.
 
 ## Criterio para considerar a proxima rodada pronta
 

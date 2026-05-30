@@ -12,7 +12,9 @@ import {
   RefreshCw,
   Search,
   Send,
+  Settings,
   ShieldCheck,
+  Trophy,
   Truck,
   UserCheck,
   UserRound,
@@ -12481,6 +12483,22 @@ function Relatorios({
   const [metaDrafts, setMetaDrafts] = useState<Record<string, { receita: string; contatos: string; orcamentos: string; observacao: string }>>({})
   const [savingMetaId, setSavingMetaId] = useState('')
   const [metaFeedback, setMetaFeedback] = useState('')
+  const [automationRules, setAutomationRules] = useState(() => {
+    const saved = localStorage.getItem('capital-crm:automation-rules')
+    if (saved) {
+      try {
+        return JSON.parse(saved) as Record<string, boolean>
+      } catch {
+        return {}
+      }
+    }
+    return {
+      propostaVencida: true,
+      campanhaRespondeu: true,
+      semProximaAcao: true,
+      clienteRisco: false,
+    }
+  })
   const orcamentosGanhos = resumo?.orcamentosGanhos ?? orcamentos.filter((orcamento) => orcamento.status === 'ganho').length
   const orcamentosTotal = resumo?.orcamentosTotal ?? orcamentos.length
   const taxaConversao = orcamentosTotal ? Math.round((orcamentosGanhos / orcamentosTotal) * 100) : 0
@@ -12602,6 +12620,69 @@ function Relatorios({
         vencem7d: 0,
         gargaloPrincipal: 'Sem forecast',
       }))
+  const gamificationRows = metaRows
+    .map((row) => {
+      const meta = metasBySeller.get(row.vendedorId)
+      const atividade = commercialDisciplineRows.find((item) => item.vendedorId === row.vendedorId)
+      const receitaScore = meta?.metaReceita ? Math.min(120, Math.round((row.ganhoMes / meta.metaReceita) * 100)) : 0
+      const contatosScore = meta?.metaContatos ? Math.min(120, Math.round(((atividade?.contatos30d ?? 0) / meta.metaContatos) * 100)) : 0
+      const propostasScore = meta?.metaOrcamentos ? Math.min(120, Math.round((row.propostasAbertas / meta.metaOrcamentos) * 100)) : 0
+      const disciplina = atividade?.disciplina ?? 0
+      const score = Math.round(receitaScore * 0.45 + contatosScore * 0.2 + propostasScore * 0.2 + disciplina * 0.15)
+      const badge = score >= 100 ? 'Meta batida' : score >= 75 ? 'Ritmo bom' : score >= 45 ? 'Acompanhar' : 'Precisa acao'
+      return {
+        vendedorId: row.vendedorId,
+        vendedorNome: row.vendedorNome,
+        score,
+        badge,
+        receitaScore,
+        contatosScore,
+        propostasScore,
+        disciplina,
+      }
+    })
+    .sort((a, b) => b.score - a.score)
+  type UsageQualityRow = { id: string; prioridade: number; area: string; responsavel: string; problema: string; acao: string }
+  const usageQualityRows: UsageQualityRow[] = commercialDisciplineRows
+    .flatMap((row) => [
+      row.followupsVencidos > 0
+        ? {
+            id: `${row.vendedorId}-followups`,
+            prioridade: row.followupsVencidos >= 5 ? 95 : 75,
+            area: 'Follow-up',
+            responsavel: row.vendedorNome,
+            problema: `${row.followupsVencidos} follow-ups vencidos`,
+            acao: 'Reagendar ou concluir pendencias antes de novas campanhas.',
+          }
+        : undefined,
+      row.semProximaAcao > 0
+        ? {
+            id: `${row.vendedorId}-sem-proxima`,
+            prioridade: row.semProximaAcao >= 20 ? 90 : 70,
+            area: 'Carteira',
+            responsavel: row.vendedorNome,
+            problema: `${row.semProximaAcao} clientes sem proxima acao`,
+            acao: 'Criar tarefas pela Minha rotina ou redistribuir carteira parada.',
+          }
+        : undefined,
+      row.contatos30d === 0 && row.orcamentos30d === 0
+        ? {
+            id: `${row.vendedorId}-sem-uso`,
+            prioridade: 85,
+            area: 'Uso do CRM',
+            responsavel: row.vendedorNome,
+            problema: 'Sem contatos ou propostas nos ultimos 30 dias',
+            acao: 'Validar carteira, acesso e rotina diaria do vendedor.',
+          }
+        : undefined,
+    ])
+    .filter((row): row is UsageQualityRow => Boolean(row))
+    .sort((a, b) => b.prioridade - a.prioridade)
+    .slice(0, 12)
+
+  useEffect(() => {
+    localStorage.setItem('capital-crm:automation-rules', JSON.stringify(automationRules))
+  }, [automationRules])
 
   function metaDraftFor(vendedorId: string) {
     const meta = metasBySeller.get(vendedorId)
@@ -12769,6 +12850,99 @@ function Relatorios({
               </div>
             )
           })}
+        </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Ranking comercial</h2>
+            <p>Gamificacao simples combinando meta de receita, contatos, propostas e disciplina operacional.</p>
+          </div>
+          <Trophy size={18} />
+        </div>
+        <div className="table">
+          <div className="table-head seller-goals">
+            <span>Pos.</span>
+            <span>Vendedor</span>
+            <span>Score</span>
+            <span>Receita</span>
+            <span>Contatos</span>
+            <span>Propostas</span>
+            <span>Disciplina</span>
+            <span>Status</span>
+          </div>
+          {gamificationRows.map((row, index) => (
+            <div className="table-row seller-goals" key={row.vendedorId}>
+              <span><strong>{index + 1}</strong></span>
+              <span><strong>{row.vendedorNome}</strong></span>
+              <span className={row.score >= 75 ? 'status-pill ok' : row.score >= 45 ? 'status-pill warn' : 'status-pill danger'}>{row.score}</span>
+              <span>{row.receitaScore}%</span>
+              <span>{row.contatosScore}%</span>
+              <span>{row.propostasScore}%</span>
+              <span>{row.disciplina}%</span>
+              <span>{row.badge}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Regras de automacao</h2>
+            <p>Controles gerenciais para ligar ou desligar automacoes operacionais antes de rodar campanhas e follow-ups.</p>
+          </div>
+          <Settings size={18} />
+        </div>
+        <div className="info-grid">
+          {[
+            ['propostaVencida', 'Proposta vencida gera follow-up', 'Cria tarefa para proposta aberta que passou da validade.'],
+            ['campanhaRespondeu', 'Resposta de campanha gera tarefa', 'Prioriza contatos que responderam ou pediram orcamento.'],
+            ['semProximaAcao', 'Cliente sem proxima acao entra na rotina', 'Sinaliza carteira parada sem tarefa ou proposta aberta.'],
+            ['clienteRisco', 'Cliente em risco vira oportunidade', 'Reativa clientes sem compra recente e alto historico.'],
+          ].map(([id, title, detail]) => (
+            <label className="checkbox-field" key={id}>
+              <input
+                type="checkbox"
+                checked={Boolean(automationRules[id])}
+                onChange={(event) => setAutomationRules((current) => ({ ...current, [id]: event.target.checked }))}
+              />
+              <span>
+                <strong>{title}</strong>
+                <small>{detail}</small>
+              </span>
+            </label>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Qualidade de uso</h2>
+            <p>Gargalos que mostram onde o CRM nao esta sendo alimentado ou acompanhado corretamente.</p>
+          </div>
+          <AlertTriangle size={18} />
+        </div>
+        <div className="table">
+          <div className="table-head five">
+            <span>Prioridade</span>
+            <span>Area</span>
+            <span>Responsavel</span>
+            <span>Problema</span>
+            <span>Acao sugerida</span>
+          </div>
+          {usageQualityRows.map((row) => (
+            <div className="table-row five" key={row.id}>
+              <span className={row.prioridade >= 90 ? 'status-pill danger' : 'status-pill warn'}>{row.prioridade}</span>
+              <span>{row.area}</span>
+              <span>{row.responsavel}</span>
+              <span>{row.problema}</span>
+              <span>{row.acao}</span>
+            </div>
+          ))}
+          {usageQualityRows.length === 0 && <div className="empty-state">Nenhum gargalo critico de uso encontrado agora.</div>}
         </div>
       </section>
 
