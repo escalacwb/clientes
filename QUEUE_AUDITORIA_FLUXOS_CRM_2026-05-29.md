@@ -39,7 +39,7 @@ Execucao:
 
 ### A02 - Erro 500 ao carregar servicos de cliente
 
-Status: Em execucao.
+Status: Concluido.
 
 Evidencia:
 - Durante fluxo admin de cliente/Ficha 360 houve HTTP 500 em `rest/v1/servicos_itens`.
@@ -55,7 +55,8 @@ Acao:
 Execucao:
 - Query inicial de vendas/servicos por cliente limitada a 500 linhas e colunas explicitas.
 - Revalidacao local nao reproduziu o HTTP 500.
-- Novo achado tecnico: lista de clientes emite warning React de keys duplicadas; tratar no A09.
+- Falhas de modulo seguem exibidas no banner contextual sem derrubar a navegacao.
+- Novo achado tecnico de keys duplicadas foi tratado no A09.
 
 ### A03 - Criacao de orcamento a partir de cliente nao ficou confiavel no teste
 
@@ -167,7 +168,7 @@ Execucao:
 
 ### A08 - Historico e atividade evoluiram, mas falta painel de produtividade por usuario
 
-Status: P2.
+Status: Concluido.
 
 Evidencia:
 - Tarefas, campanhas e pipeline agora registram interacoes, mas nao ha uma tela simples de "o que cada vendedor fez hoje".
@@ -177,6 +178,10 @@ Impacto:
 
 Acao:
 - Criar painel `Atividade do dia`: contatos registrados, tarefas concluidas, propostas criadas/enviadas, campanhas tratadas, pipeline movido.
+
+Execucao:
+- Painel `Atividades de hoje` ja esta disponivel em Relatorios com contatos, orcamentos, tarefas concluidas e atrasos por vendedor.
+- A secao `Disciplina comercial` complementa o dia com contatos, conversao em propostas, follow-ups e clientes sem proxima acao.
 
 ### A09 - Warning de keys duplicadas na lista de clientes
 
