@@ -96,13 +96,18 @@ Entregue nesta rodada:
 
 ## Sprint E - Qualidade de dados e governanca
 
-Status: Pendente.
+Status: Parcial.
+
+Entregue nesta rodada:
+- Fila acionavel de saneamento em Importacoes, com responsavel, abrir ficha e marcar resolvido.
+- Painel de saude da base com conflitos, sem vendedor, sem WhatsApp, origem desconhecida e fechamento pendente.
+- Reconciliacao visual da ultima importacao com linhas, clientes, itens, ignorados/repetidos, conflitos e arquivos vinculados.
+- Auditoria ganhou cobertura operacional e resumo de eventos sensiveis.
 
 Proximos pontos:
-- Filas acionaveis: sem WhatsApp, telefone invalido, sem vendedor, cidade/UF ausente, duplicados, origem desconhecida.
-- Atribuir correcao para usuario.
-- Marcar problema como resolvido.
-- Auditoria fina para aprovacao, opt-out, campanha, proposta e mesclagem.
+- Persistir responsavel/resolucao da fila de saneamento no Supabase, nao apenas na sessao da tela.
+- Expandir auditoria fina para aprovacao, opt-out, campanha, proposta e mesclagem em uma trilha unificada.
+- Destacar mudancas relevantes de preco entre importacoes de catalogo.
 - Reconciliação visual da importacao diaria: novos, alterados, ignorados, conflitos e precos alterados.
 
 ## Sprint F - Reuniao gerencial
