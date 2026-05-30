@@ -4272,17 +4272,33 @@ h3 {
   line-height: 1.35;
 }
 
-.campaign-intent-grid {
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
-}
-
-.campaign-filter-focus {
+.campaign-filter-sections {
+  display: grid;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
-.campaign-filter-focus label:first-child,
-.campaign-filter-focus label:nth-child(2) {
-  grid-column: span 2;
+.campaign-filter-section {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #d7e5dc;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.campaign-filter-section > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.campaign-filter-section strong {
+  color: #123d37;
+}
+
+.campaign-filter-section small {
+  color: #64736f;
+  font-size: 12px;
 }
 
 .campaign-filter-grid {
