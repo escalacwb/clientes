@@ -82,10 +82,8 @@ Entregue nesta rodada:
 Status: Parcial.
 
 Proximos pontos:
-- Tabela de regras de automacao.
-- Log de automacao executada.
-- Pausar sequencia quando cliente responde, vira orcamento ou marca nao contatar.
-- Criar tarefa gerente quando sequencia estagnar.
+- Exibir fila de sequencias ativas/pausadas em tela propria ou painel gerencial.
+- Permitir ajustar dias e mensagens da cadencia pelo app.
 
 Entregue nesta rodada:
 - Tabelas de sequencias comerciais, etapas e execucoes.
@@ -118,9 +116,9 @@ Status: Parcial.
 Entregue nesta rodada:
 - View `vw_forecast_vendedor`.
 - Painel `Forecast e gargalos`.
+- Metas mensais por vendedor com receita, contatos, propostas, observacao, ranking e score comercial.
 
 Proximos pontos:
-- Metas mensais por vendedor.
 - Previsto vs realizado.
 - Forecast por origem e por produto/medida.
 - Alertas: proposta sem follow-up, proposta parada 7 dias, alta probabilidade sem proxima tarefa.
