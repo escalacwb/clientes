@@ -118,11 +118,12 @@ Entregue nesta rodada:
 - Painel `Forecast e gargalos`.
 - Metas mensais por vendedor com receita, contatos, propostas, observacao, ranking e score comercial.
 - Exportacao CSV da reuniao gerencial com metas, forecast, disciplina, follow-ups e gargalos por vendedor.
+- Painel de alertas comerciais para propostas sem follow-up, propostas paradas e oportunidades sem tarefa.
 
 Proximos pontos:
 - Previsto vs realizado.
 - Forecast por origem e por produto/medida.
-- Alertas: proposta sem follow-up, proposta parada 7 dias, alta probabilidade sem proxima tarefa.
+- Transformar alertas em acoes diretas: criar tarefa, abrir proposta ou marcar perda pelo proprio painel.
 - Exportacao PDF da reuniao semanal.
 
 ## Ordem de execucao continua

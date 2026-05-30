@@ -12921,6 +12921,67 @@ function Relatorios({
     .filter((row): row is UsageQualityRow => Boolean(row))
     .sort((a, b) => b.prioridade - a.prioridade)
     .slice(0, 12)
+  type ManagementAlertRow = {
+    id: string
+    severidade: 'alta' | 'media' | 'baixa'
+    tipo: string
+    cliente: string
+    responsavel: string
+    valor?: number
+    problema: string
+    acao: string
+  }
+  const openQuoteStatuses: Orcamento['status'][] = ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando']
+  const managementAlertRows: ManagementAlertRow[] = [
+    ...orcamentos
+      .filter((orcamento) =>
+        ['enviado', 'negociando'].includes(orcamento.status) &&
+        !orcamento.proximoFollowupEm &&
+        orcamento.valorTotal > 0,
+      )
+      .map((orcamento) => ({
+        id: `orcamento-sem-followup-${orcamento.id}`,
+        severidade: 'alta' as const,
+        tipo: 'Proposta sem follow-up',
+        cliente: orcamento.clienteNome ?? clientes.find((cliente) => cliente.id === orcamento.clienteId)?.nome ?? 'Cliente',
+        responsavel: orcamento.vendedorNome ?? usuarios.find((usuario) => usuario.id === orcamento.vendedorId)?.nome ?? 'Sem responsavel',
+        valor: orcamento.valorTotal,
+        problema: `Proposta ${orcamento.status} sem proxima data registrada.`,
+        acao: 'Definir follow-up no orcamento ou criar tarefa comercial hoje.',
+      })),
+    ...orcamentos
+      .filter((orcamento) =>
+        openQuoteStatuses.includes(orcamento.status) &&
+        daysSince(orcamento.enviadoEm ?? orcamento.data) >= 7 &&
+        orcamento.valorTotal > 0,
+      )
+      .map((orcamento) => ({
+        id: `orcamento-parado-${orcamento.id}`,
+        severidade: orcamento.valorTotal >= 10000 ? 'alta' as const : 'media' as const,
+        tipo: 'Proposta parada',
+        cliente: orcamento.clienteNome ?? clientes.find((cliente) => cliente.id === orcamento.clienteId)?.nome ?? 'Cliente',
+        responsavel: orcamento.vendedorNome ?? usuarios.find((usuario) => usuario.id === orcamento.vendedorId)?.nome ?? 'Sem responsavel',
+        valor: orcamento.valorTotal,
+        problema: `Sem movimento ha ${daysSince(orcamento.enviadoEm ?? orcamento.data)} dias.`,
+        acao: 'Retomar contato, atualizar status ou registrar motivo de perda.',
+      })),
+    ...oportunidades
+      .filter((oportunidade) => !oportunidade.bloqueada && !oportunidade.tarefaExistente && oportunidade.prioridade >= 75)
+      .map((oportunidade) => ({
+        id: `oportunidade-sem-tarefa-${oportunidade.id}`,
+        severidade: oportunidade.prioridade >= 90 ? 'alta' as const : 'media' as const,
+        tipo: 'Oportunidade sem tarefa',
+        cliente: oportunidade.clienteNome,
+        responsavel: clientes.find((cliente) => cliente.id === oportunidade.clienteId)?.vendedorNome ?? 'Sem responsavel',
+        problema: `${oportunidade.tipo} com prioridade ${oportunidade.prioridade}.`,
+        acao: oportunidade.proximaAcao || 'Criar proxima acao comercial.',
+      })),
+  ]
+    .sort((a, b) => {
+      const order = { alta: 3, media: 2, baixa: 1 }
+      return order[b.severidade] - order[a.severidade]
+    })
+    .slice(0, 12)
 
   useEffect(() => {
     let isMounted = true
@@ -13096,6 +13157,34 @@ function Relatorios({
           ))}
           {forecastVendedor.length === 0 && <div className="empty-state">Sem dados de forecast ainda.</div>}
         </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Alertas comerciais</h2>
+            <p>Propostas e oportunidades que precisam de decisao antes da proxima reuniao.</p>
+          </div>
+          <AlertTriangle size={18} />
+        </div>
+        {managementAlertRows.length > 0 ? (
+          <div className="quality-issue-grid">
+            {managementAlertRows.map((alert) => (
+              <div className={`quality-issue ${alert.severidade}`} key={alert.id}>
+                <span className="status-pill warn">{alert.tipo}</span>
+                <strong>{alert.cliente}</strong>
+                <span>{alert.problema}</span>
+                <small>
+                  {alert.responsavel}
+                  {alert.valor ? ` · ${money(alert.valor)}` : ''}
+                </small>
+                <small>{alert.acao}</small>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">Sem alertas comerciais criticos agora.</div>
+        )}
       </section>
 
       <section className="panel wide">
