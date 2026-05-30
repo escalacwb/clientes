@@ -171,6 +171,7 @@ Entregas:
 Ja entregue:
 - Criada tabela `catalogo_regras_desconto` com escopo por tipo, grupo, subgrupo, marca e codigo.
 - Editor de orcamento passou a considerar a melhor regra ativa para exigir aprovacao quando desconto passa do limite.
+- Editor de proposta ganhou `Controle comercial dos itens`, validando por item se esta vinculado ao catalogo, se esta ativo, se tem preco vigente, se teve preco manual alterado, se exige aprovacao e se precisa confirmar estoque.
 
 Pronto quando:
 - O sistema sugere o que vender e bloqueia proposta comercialmente insegura.

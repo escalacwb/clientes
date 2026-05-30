@@ -6554,6 +6554,7 @@ function OrcamentoEditor({
     ? paymentScenarios.map((scenario) => quoteConditionLabel(scenario.label)).join(', ')
     : undefined
   const approvalWarnings = quoteApprovalWarnings(validItems, catalogo, regrasDesconto)
+  const commercialChecks = quoteCommercialChecks(validItems, catalogo, regrasDesconto)
   const generatedQuoteMessage = buildQuoteMessage(cliente, validItems, validade, observacao, paymentScenarios)
   const [manualQuoteMessage, setManualQuoteMessage] = useState('')
   const [isQuoteMessageEdited, setIsQuoteMessageEdited] = useState(false)
@@ -6762,6 +6763,23 @@ function OrcamentoEditor({
               </div>
             ))}
           </div>
+          {commercialChecks.length > 0 && (
+            <div className="quote-commercial-checks">
+              <div>
+                <strong>Controle comercial dos itens</strong>
+                <small>Validacao rapida de catalogo, preco, estoque e desconto antes de enviar.</small>
+              </div>
+              <div className="commercial-check-list">
+                {commercialChecks.map((check) => (
+                  <div className={`commercial-check ${check.tone}`} key={check.id}>
+                    <span className="status-pill">{check.status}</span>
+                    <strong>{check.label}</strong>
+                    <small>{check.detail}</small>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="quote-suggestions">
             <strong>Complementares sugeridos</strong>
             {isLoadingSuggestions && <small>Buscando no historico de vendas...</small>}
@@ -6896,6 +6914,83 @@ function quoteApprovalWarnings(items: OrcamentoItemInput[], catalogo: CatalogoIt
     const discount = item.descontoPercentual ?? 0
     if (discount <= maxDiscount) return []
     return [`${item.descricao}: desconto ${discount}% acima do limite ${maxDiscount}%${regra ? ` pela regra ${regra.nome}` : ''}.`]
+  })
+}
+
+function quoteCommercialChecks(items: OrcamentoItemInput[], catalogo: CatalogoItem[], regrasDesconto: CatalogoRegraDesconto[] = []) {
+  return items.map((item, index) => {
+    const catalogItem = item.catalogoItemId ? catalogo.find((entry) => entry.id === item.catalogoItemId) : undefined
+    const regra = catalogItem ? bestDiscountRule(catalogItem, regrasDesconto) : undefined
+    const approvalLimit = regra?.requerAprovacaoAcimaDe ?? catalogItem?.descontoMaximo
+    const discount = item.descontoPercentual ?? 0
+    const expectedPrice = catalogItem?.preco
+    const priceDiff = expectedPrice ? ((item.valorUnitario - expectedPrice) / expectedPrice) * 100 : 0
+    const id = `${item.catalogoItemId ?? item.descricao}-${index}`
+
+    if (!catalogItem) {
+      return {
+        id,
+        tone: 'warning',
+        status: 'Manual',
+        label: item.descricao || `Item ${index + 1}`,
+        detail: 'Item sem vinculo com catalogo. Confira codigo, preco vigente e margem antes de enviar.',
+      }
+    }
+    if (!catalogItem.ativo) {
+      return {
+        id,
+        tone: 'danger',
+        status: 'Inativo',
+        label: catalogItem.descricao,
+        detail: 'Item inativo no catalogo. Revise antes de manter na proposta.',
+      }
+    }
+    if (catalogItem.preco <= 0) {
+      return {
+        id,
+        tone: 'danger',
+        status: 'Sem preco',
+        label: catalogItem.descricao,
+        detail: 'Catalogo nao possui preco vigente valido para este item.',
+      }
+    }
+    if (approvalLimit !== undefined && discount > approvalLimit) {
+      return {
+        id,
+        tone: 'danger',
+        status: 'Aprovar',
+        label: catalogItem.descricao,
+        detail: `Desconto de ${discount}% acima do limite ${approvalLimit}%${regra ? ` da regra ${regra.nome}` : ''}.`,
+      }
+    }
+    if (Math.abs(priceDiff) >= 2) {
+      return {
+        id,
+        tone: 'warning',
+        status: 'Preco alterado',
+        label: catalogItem.descricao,
+        detail: `Preco usado ${money(item.valorUnitario)} difere do catalogo ${money(catalogItem.preco)}.`,
+      }
+    }
+    if (catalogItem.estoque !== undefined && catalogItem.estoque <= 0) {
+      return {
+        id,
+        tone: 'warning',
+        status: 'Estoque',
+        label: catalogItem.descricao,
+        detail: 'Sem estoque informado no catalogo. Confirmar disponibilidade antes da ordem de compra.',
+      }
+    }
+
+    return {
+      id,
+      tone: 'ok',
+      status: 'Dentro',
+      label: catalogItem.descricao,
+      detail: regra
+        ? `Preco e desconto dentro da regra ${regra.nome}.`
+        : 'Preco e desconto dentro dos limites cadastrados.',
+    }
   })
 }
 
