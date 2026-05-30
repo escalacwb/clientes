@@ -4546,6 +4546,24 @@ h3 {
   font-size: 11px;
 }
 
+.lead-flow-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  border: 1px solid #dce8df;
+  border-radius: 8px;
+  background: #f3faf6;
+  color: #28433d;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.lead-flow-note strong {
+  color: #123d37;
+}
+
 .user-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -4134,6 +4134,10 @@ function RodobensInbox({
           )
         })}
       </div>
+      <div className="lead-flow-note">
+        <strong>Fluxo simples:</strong>
+        <span>abra o WhatsApp, registre o resultado e deixe o follow-up criado para nao perder retorno.</span>
+      </div>
       {leads.length > 0 && (
         <div className="bulk-action-bar">
           <button
@@ -4149,7 +4153,7 @@ function RodobensInbox({
             disabled={selectedLeadIds.length === 0 || isCreatingBulkTasks}
             onClick={createBulkContactTasks}
           >
-            {isCreatingBulkTasks ? 'Criando...' : `Criar ${selectedLeadIds.length || ''} tarefas`}
+            {isCreatingBulkTasks ? 'Criando...' : `Criar ${selectedLeadIds.length || ''} contatos de hoje`}
           </button>
           <button
             className="button"
@@ -4157,7 +4161,7 @@ function RodobensInbox({
             disabled={selectedLeadIds.length === 0 || isCreatingCampaign}
             onClick={createCampaignFromSelectedLeads}
           >
-            {isCreatingCampaign ? 'Gerando...' : 'Gerar campanha'}
+            {isCreatingCampaign ? 'Gerando...' : 'Criar campanha com selecionados'}
           </button>
           <span className="status-pill">{selectedLeadIds.length} selecionados</span>
         </div>
@@ -4177,7 +4181,7 @@ function RodobensInbox({
             <span>Origem</span>
             <span>Status</span>
             <span>Contexto</span>
-            <span>Acoes</span>
+            <span>Proximo passo</span>
           </div>
           {leads.map((cliente) => {
             return (
@@ -4219,15 +4223,22 @@ function RodobensInbox({
                   <button className="button primary" type="button" disabled={!cliente.whatsapp} onClick={() => registerFirstContact(cliente)}>
                     <MessageCircle size={16} /> Abrir e registrar
                   </button>
-                  <button className="button" type="button" onClick={() => updateLead(cliente, 'qualificado')}>
-                    Qualificar
-                  </button>
-                  <button className="button" type="button" onClick={() => updateLead(cliente, 'virou_cliente')}>
-                    Virou cliente
-                  </button>
-                  <button className="button" type="button" onClick={() => updateLead(cliente, 'descartado')}>
-                    Descartar
-                  </button>
+                  <select
+                    className="assign-select"
+                    value=""
+                    aria-label={`Registrar resultado de ${cliente.nome}`}
+                    onChange={(event) => {
+                      const status = event.target.value as LeadQualificacaoStatus
+                      event.currentTarget.value = ''
+                      if (status) void updateLead(cliente, status)
+                    }}
+                  >
+                    <option value="">Registrar resultado</option>
+                    <option value="qualificado">Qualificado</option>
+                    <option value="virou_cliente">Virou cliente</option>
+                    <option value="descartado">Descartado</option>
+                    <option value="nao_contatar">Nao contatar</option>
+                  </select>
                 </span>
               </div>
             )
