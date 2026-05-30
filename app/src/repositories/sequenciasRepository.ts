@@ -6,6 +6,24 @@ type SequenciaRow = {
   nome: string
 }
 
+export type SequenciaEtapaConfig = {
+  id: string
+  sequenciaId: string
+  ordem: number
+  diasAposInicio: number
+  titulo: string
+  mensagem: string
+}
+
+type SequenciaEtapaRow = {
+  id: string
+  sequencia_id: string
+  ordem: number
+  dias_apos_inicio: number
+  titulo: string | null
+  mensagem: string | null
+}
+
 type SequenciaExecucaoEstagnadaRow = {
   id: string
   cliente_id: string
@@ -45,6 +63,40 @@ export async function listSequenciaExecucoes(limit = 80): Promise<SequenciaExecu
   if (error) throw error
 
   return ((data ?? []) as SequenciaExecucaoRow[]).map(mapSequenciaExecucao)
+}
+
+export async function listDefaultCommercialSequenceSteps(): Promise<SequenciaEtapaConfig[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const sequence = await ensureDefaultSequence()
+  const { data, error } = await supabase
+    .from('sequencia_etapas')
+    .select('id,sequencia_id,ordem,dias_apos_inicio,titulo,mensagem')
+    .eq('sequencia_id', sequence.id)
+    .order('ordem', { ascending: true })
+
+  if (error) throw error
+  return ((data ?? []) as SequenciaEtapaRow[]).map(mapSequenciaEtapa)
+}
+
+export async function updateSequenceStep(input: Pick<SequenciaEtapaConfig, 'id' | 'diasAposInicio' | 'titulo' | 'mensagem'>): Promise<SequenciaEtapaConfig> {
+  const supabase = await getSupabase()
+  if (!supabase) throw new Error('Supabase nao configurado.')
+
+  const { data, error } = await supabase
+    .from('sequencia_etapas')
+    .update({
+      dias_apos_inicio: input.diasAposInicio,
+      titulo: input.titulo,
+      mensagem: input.mensagem,
+    })
+    .eq('id', input.id)
+    .select('id,sequencia_id,ordem,dias_apos_inicio,titulo,mensagem')
+    .single()
+
+  if (error) throw error
+  return mapSequenciaEtapa(data as SequenciaEtapaRow)
 }
 
 export async function startDefaultCommercialSequence(clienteIds: string[], vendedorId?: string): Promise<number> {
@@ -238,5 +290,16 @@ function mapSequenciaExecucao(row: SequenciaExecucaoRow): SequenciaExecucao {
     proximaAcaoEm: row.proxima_acao_em ?? new Date().toISOString().slice(0, 10),
     criadoEm: row.criado_em ?? '',
     encerradaEm: row.encerrada_em ?? undefined,
+  }
+}
+
+function mapSequenciaEtapa(row: SequenciaEtapaRow): SequenciaEtapaConfig {
+  return {
+    id: row.id,
+    sequenciaId: row.sequencia_id,
+    ordem: row.ordem,
+    diasAposInicio: row.dias_apos_inicio,
+    titulo: row.titulo ?? `Etapa ${row.ordem}`,
+    mensagem: row.mensagem ?? '',
   }
 }

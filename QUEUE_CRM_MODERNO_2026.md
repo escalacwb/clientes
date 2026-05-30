@@ -299,6 +299,7 @@ Ja entregue:
 - Criadas tabelas `automacao_regras` e `automacao_logs` para rastrear automacoes executadas.
 - Relatorios permite escalar sequencias estagnadas para tarefa gerencial, pausando a cadencia e registrando log da automacao.
 - Relatorios exibe fila de sequencias ativas/pausadas com etapa, proxima acao e contadores gerenciais.
+- Relatorios permite editar dias, titulos e mensagens da cadencia padrao 0/2/7/15.
 
 Pronto quando:
 - A equipe consegue fazer cadencias consistentes sem lembrar manualmente cada passo.

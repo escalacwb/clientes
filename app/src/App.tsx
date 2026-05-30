@@ -153,7 +153,7 @@ import { reviseOrcamento } from './repositories/orcamentosRepository'
 import { updateOrcamentoStatus } from './repositories/orcamentosRepository'
 import { listOportunidadesPage, listOportunidadesResumo, markOportunidadeComTarefa, refreshOportunidadesCache, type OportunidadeFilter, type OportunidadeResumo } from './repositories/oportunidadesRepository'
 import { createPipelineFromSuggestion, listPipelineOportunidades, updatePipelineOportunidade, updatePipelineStage } from './repositories/pipelineRepository'
-import { escalateStaleCommercialSequences, listSequenciaExecucoes, startDefaultCommercialSequence } from './repositories/sequenciasRepository'
+import { escalateStaleCommercialSequences, listDefaultCommercialSequenceSteps, listSequenciaExecucoes, startDefaultCommercialSequence, updateSequenceStep, type SequenciaEtapaConfig } from './repositories/sequenciasRepository'
 import {
   completeTarefa,
   createTarefa,
@@ -12795,6 +12795,10 @@ function Relatorios({
   const [sequenceEscalationFeedback, setSequenceEscalationFeedback] = useState('')
   const [sequenceExecutions, setSequenceExecutions] = useState<SequenciaExecucao[]>([])
   const [sequenceExecutionsLoading, setSequenceExecutionsLoading] = useState(false)
+  const [sequenceSteps, setSequenceSteps] = useState<SequenciaEtapaConfig[]>([])
+  const [sequenceStepDrafts, setSequenceStepDrafts] = useState<Record<string, { dias: string; titulo: string; mensagem: string }>>({})
+  const [sequenceStepSavingId, setSequenceStepSavingId] = useState('')
+  const [sequenceStepFeedback, setSequenceStepFeedback] = useState('')
   const [managementTaskCreatingId, setManagementTaskCreatingId] = useState('')
   const [managementTaskCreatedIds, setManagementTaskCreatedIds] = useState<string[]>([])
   const [managementAlertFeedback, setManagementAlertFeedback] = useState('')
@@ -13130,9 +13134,15 @@ function Relatorios({
   useEffect(() => {
     let isMounted = true
     setSequenceExecutionsLoading(true)
-    listSequenciaExecucoes()
-      .then((rows) => {
-        if (isMounted) setSequenceExecutions(rows)
+    Promise.all([listSequenciaExecucoes(), listDefaultCommercialSequenceSteps()])
+      .then(([rows, steps]) => {
+        if (!isMounted) return
+        setSequenceExecutions(rows)
+        setSequenceSteps(steps)
+        setSequenceStepDrafts(Object.fromEntries(steps.map((step) => [
+          step.id,
+          { dias: step.diasAposInicio.toString(), titulo: step.titulo, mensagem: step.mensagem },
+        ])))
       })
       .catch((exception) => {
         if (isMounted) setAutomationRulesError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar sequencias comerciais.')
@@ -13175,6 +13185,43 @@ function Relatorios({
     } finally {
       setIsEscalatingSequences(false)
     }
+  }
+
+  async function saveSequenceStep(step: SequenciaEtapaConfig) {
+    const draft = sequenceStepDrafts[step.id]
+    if (!draft) return
+    setSequenceStepSavingId(step.id)
+    setSequenceStepFeedback('')
+    setAutomationRulesError('')
+    try {
+      const updated = await updateSequenceStep({
+        id: step.id,
+        diasAposInicio: Math.max(0, Math.round(numberFromInput(draft.dias))),
+        titulo: draft.titulo.trim() || `Etapa ${step.ordem}`,
+        mensagem: draft.mensagem.trim(),
+      })
+      setSequenceSteps((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+      setSequenceStepDrafts((current) => ({
+        ...current,
+        [updated.id]: {
+          dias: updated.diasAposInicio.toString(),
+          titulo: updated.titulo,
+          mensagem: updated.mensagem,
+        },
+      }))
+      setSequenceStepFeedback('Etapa da cadencia salva.')
+    } catch (exception) {
+      setAutomationRulesError(exception instanceof Error ? exception.message : 'Nao foi possivel salvar etapa da sequencia.')
+    } finally {
+      setSequenceStepSavingId('')
+    }
+  }
+
+  function updateSequenceStepDraft(stepId: string, patch: Partial<{ dias: string; titulo: string; mensagem: string }>) {
+    setSequenceStepDrafts((current) => ({
+      ...current,
+      [stepId]: { ...(current[stepId] ?? { dias: '', titulo: '', mensagem: '' }), ...patch },
+    }))
   }
 
   function metaDraftFor(vendedorId: string) {
@@ -13626,6 +13673,38 @@ function Relatorios({
             {sequenceExecutionRows.length === 0 && <div className="empty-state compact">Sem sequencias ativas ou pausadas agora.</div>}
           </div>
         )}
+        <div className="sequence-step-editor">
+          <div>
+            <h3>Cadencia padrao</h3>
+            <p>Ajuste dias, titulos e mensagens usadas nas proximas sequencias iniciadas pelo time.</p>
+          </div>
+          {sequenceStepFeedback && <div className="success-alert">{sequenceStepFeedback}</div>}
+          {sequenceSteps.map((step) => {
+            const draft = sequenceStepDrafts[step.id] ?? { dias: step.diasAposInicio.toString(), titulo: step.titulo, mensagem: step.mensagem }
+            return (
+              <div className="sequence-step-row" key={step.id}>
+                <label>
+                  Dia
+                  <input value={draft.dias} onChange={(event) => updateSequenceStepDraft(step.id, { dias: event.target.value })} />
+                </label>
+                <label>
+                  Titulo
+                  <input value={draft.titulo} onChange={(event) => updateSequenceStepDraft(step.id, { titulo: event.target.value })} />
+                </label>
+                <label className="span-2">
+                  Mensagem
+                  <textarea value={draft.mensagem} onChange={(event) => updateSequenceStepDraft(step.id, { mensagem: event.target.value })} />
+                </label>
+                <button className="button" type="button" disabled={sequenceStepSavingId === step.id} onClick={() => void saveSequenceStep(step)}>
+                  {sequenceStepSavingId === step.id ? 'Salvando...' : 'Salvar etapa'}
+                </button>
+              </div>
+            )
+          })}
+          {sequenceSteps.length === 0 && !sequenceExecutionsLoading && (
+            <div className="empty-state compact">Sem etapas de sequencia configuradas.</div>
+          )}
+        </div>
       </section>
 
       <section className="panel wide">

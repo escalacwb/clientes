@@ -82,7 +82,7 @@ Entregue nesta rodada:
 Status: Parcial.
 
 Proximos pontos:
-- Permitir ajustar dias e mensagens da cadencia pelo app.
+- Criar sequencias adicionais alem da cadencia padrao, com segmentacao por origem/campanha.
 
 Entregue nesta rodada:
 - Tabelas de sequencias comerciais, etapas e execucoes.
@@ -92,6 +92,7 @@ Entregue nesta rodada:
 - Tabelas de regras/logs de automacao para rastreabilidade.
 - Relatorios ganhou acao `Escalar sequencias`, que pausa cadencias estagnadas na ultima etapa e cria tarefas gerenciais deduplicadas.
 - Relatorios ganhou painel de sequencias comerciais com ativas, pausadas, vencidas/hoje e fila por cliente.
+- Relatorios permite ajustar dias, titulos e mensagens da cadencia padrao pelo app.
 
 ## Sprint E - Qualidade de dados e governanca
 
