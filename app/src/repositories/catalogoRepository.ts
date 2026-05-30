@@ -48,6 +48,23 @@ export type CatalogoSugestao = {
   clientes: number
 }
 
+export type CatalogoPriceChange = {
+  catalogoItemId: string
+  tipo: CatalogoItem['tipo']
+  codigo: string
+  descricao: string
+  marca?: string
+  grupo?: string
+  valorAnterior: number
+  valorNovo: number
+  diferenca: number
+  variacaoPercentual: number
+  estoqueAnterior?: number
+  estoqueNovo?: number
+  criadoEm?: string
+  arquivoNome?: string
+}
+
 type CatalogoSugestaoRow = {
   catalogo_item_id: string
   tipo: CatalogoItem['tipo']
@@ -69,6 +86,8 @@ type CatalogoRegraDescontoRow = {
   requer_aprovacao_acima_de: number
   ativo: boolean
 }
+
+type CatalogoPrecoChangeItemRow = CatalogoRow
 
 export async function listCatalogoItens(): Promise<CatalogoItem[]> {
   const supabase = await getSupabase()
@@ -226,6 +245,75 @@ export async function listCatalogoPrecos(catalogoItemId: string): Promise<Catalo
   }))
 }
 
+export async function listCatalogoPriceChanges(limit = 20): Promise<CatalogoPriceChange[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data: precos, error } = await supabase
+    .from('catalogo_precos')
+    .select('id,catalogo_item_id,valor,desconto_maximo,estoque,vigencia_inicio,criado_em,importacao_arquivo_id,importacao_arquivos(arquivo_nome)')
+    .order('criado_em', { ascending: false })
+    .order('vigencia_inicio', { ascending: false })
+    .limit(1500)
+
+  if (error) throw error
+
+  const grouped = new Map<string, PrecoRow[]>()
+  ;((precos as PrecoRow[] | null) ?? []).forEach((preco) => {
+    grouped.set(preco.catalogo_item_id, [...(grouped.get(preco.catalogo_item_id) ?? []), preco])
+  })
+
+  const changedGroups = [...grouped.entries()]
+    .map(([catalogoItemId, rows]) => ({ catalogoItemId, latest: rows[0], previous: rows[1] }))
+    .filter((item): item is { catalogoItemId: string; latest: PrecoRow; previous: PrecoRow } => {
+      if (!item.latest || !item.previous) return false
+      return Number(item.latest.valor ?? 0) !== Number(item.previous.valor ?? 0)
+        || nullableNumber(item.latest.estoque) !== nullableNumber(item.previous.estoque)
+    })
+
+  if (!changedGroups.length) return []
+  const itemIds = changedGroups.map((item) => item.catalogoItemId)
+  const { data: itens, error: itensError } = await supabase
+    .from('catalogo_itens')
+    .select('id,tipo,codigo,descricao,unidade,grupo,subgrupo,marca,ativo')
+    .in('id', itemIds)
+
+  if (itensError) throw itensError
+  const itemIndex = new Map(((itens as CatalogoPrecoChangeItemRow[] | null) ?? []).map((item) => [item.id, item]))
+
+  const changes = changedGroups
+    .map<CatalogoPriceChange | undefined>(({ catalogoItemId, latest, previous }) => {
+      const item = itemIndex.get(catalogoItemId)
+      if (!item) return undefined
+      const valorNovo = Number(latest.valor ?? 0)
+      const valorAnterior = Number(previous.valor ?? 0)
+      const diferenca = valorNovo - valorAnterior
+      return {
+        catalogoItemId,
+        tipo: item.tipo,
+        codigo: item.codigo,
+        descricao: item.descricao,
+        marca: item.marca ?? undefined,
+        grupo: item.grupo ?? undefined,
+        valorAnterior,
+        valorNovo,
+        diferenca,
+        variacaoPercentual: valorAnterior ? diferenca / valorAnterior : 0,
+        estoqueAnterior: previous.estoque ?? undefined,
+        estoqueNovo: latest.estoque ?? undefined,
+        criadoEm: latest.criado_em ?? undefined,
+        arquivoNome: Array.isArray(latest.importacao_arquivos)
+          ? latest.importacao_arquivos[0]?.arquivo_nome ?? undefined
+          : latest.importacao_arquivos?.arquivo_nome ?? undefined,
+      }
+    })
+
+  return changes
+    .filter((item): item is CatalogoPriceChange => Boolean(item))
+    .sort((a, b) => Math.abs(b.diferenca) - Math.abs(a.diferenca))
+    .slice(0, limit)
+}
+
 async function listLatestPrices(itemIds: string[]) {
   const supabase = await getSupabase()
   const priceIndex = new Map<string, PrecoRow>()
@@ -242,6 +330,10 @@ async function listLatestPrices(itemIds: string[]) {
     if (!priceIndex.has(preco.catalogo_item_id)) priceIndex.set(preco.catalogo_item_id, preco)
   })
   return priceIndex
+}
+
+function nullableNumber(value: number | null | undefined) {
+  return value === null || value === undefined ? null : Number(value)
 }
 
 function mapCatalogoItem(item: CatalogoRow, preco?: PrecoRow): CatalogoItem {

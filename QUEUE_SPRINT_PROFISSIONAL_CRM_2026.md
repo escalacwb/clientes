@@ -103,11 +103,11 @@ Entregue nesta rodada:
 - Fila de saneamento persiste responsavel e resolucao no Supabase em `importacao_saneamento_resolucoes`.
 - Painel de saude da base com conflitos, sem vendedor, sem WhatsApp, origem desconhecida e fechamento pendente.
 - Reconciliacao visual da ultima importacao com linhas, clientes, itens, ignorados/repetidos, conflitos e arquivos vinculados.
+- Reconciliacao de importacao destaca mudancas recentes de preco por item, com valor anterior, novo, variacao e arquivo de origem.
 - Auditoria ganhou cobertura operacional e resumo de eventos sensiveis.
 
 Proximos pontos:
 - Expandir auditoria fina para aprovacao, opt-out, campanha, proposta e mesclagem em uma trilha unificada.
-- Destacar mudancas relevantes de preco entre importacoes de catalogo.
 - Reconciliação visual da importacao diaria: novos, alterados, ignorados, conflitos e precos alterados.
 
 ## Sprint F - Reuniao gerencial

@@ -86,11 +86,13 @@ import {
 import {
   listCatalogoItens,
   listCatalogoPage,
+  listCatalogoPriceChanges,
   listCatalogoPrecos,
   listCatalogoRegrasDesconto,
   listCatalogoSugestoes,
   type CatalogoAtivoFilter,
   type CatalogoPrecoHistorico,
+  type CatalogoPriceChange,
   type CatalogoSugestao,
   type CatalogoTipoFilter,
 } from './repositories/catalogoRepository'
@@ -9072,6 +9074,7 @@ function Importacoes({
   const [registeredFiles, setRegisteredFiles] = useState<string[]>([])
   const [qualityAssignments, setQualityAssignments] = useState<Record<string, string>>({})
   const [saneamentoRegistros, setSaneamentoRegistros] = useState<ImportacaoSaneamentoRegistro[]>([])
+  const [catalogPriceChanges, setCatalogPriceChanges] = useState<CatalogoPriceChange[]>([])
   const [savingQualityIssueId, setSavingQualityIssueId] = useState('')
   const vendedores = usuarios.filter((usuario) => usuario.role === 'vendedor')
   const saneamentoByIssue = useMemo(() => new Map(saneamentoRegistros.map((registro) => [registro.issueId, registro])), [saneamentoRegistros])
@@ -9109,6 +9112,7 @@ function Importacoes({
     listImportacaoArquivos().then(setArquivosResumo).catch(() => setArquivosResumo([]))
     getImportacaoQualidadeResumo().then(setQualidadeResumo).catch(() => setQualidadeResumo(undefined))
     listImportacaoQualidadeIssues().then(setQualidadeIssues).catch(() => setQualidadeIssues([]))
+    listCatalogoPriceChanges().then(setCatalogPriceChanges).catch(() => setCatalogPriceChanges([]))
     listImportacaoSaneamentoRegistros()
       .then((registros) => {
         setSaneamentoRegistros(registros)
@@ -9127,6 +9131,7 @@ function Importacoes({
     setQualidadeIssues(issues)
     setSaneamentoRegistros(registros)
     setQualityAssignments(Object.fromEntries(registros.filter((registro) => registro.assignedTo).map((registro) => [registro.issueId, registro.assignedTo ?? ''])))
+    listCatalogoPriceChanges().then(setCatalogPriceChanges).catch(() => setCatalogPriceChanges([]))
   }
 
   async function assignQualityIssue(issue: ImportacaoQualidadeIssue, assignedTo: string) {
@@ -9322,6 +9327,7 @@ function Importacoes({
       const created = updated.find((item) => item.id === result.importacaoId)
       if (created) onAddImportacao(created)
       setArquivosResumo(await listImportacaoArquivos())
+      setCatalogPriceChanges(await listCatalogoPriceChanges())
       await refreshQuality()
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Nao foi possivel concluir a importacao diaria.')
@@ -9541,6 +9547,36 @@ function Importacoes({
                 </div>
               ))}
               {arquivosUltimaImportacao.length === 0 && <div className="empty-state compact">Sem arquivos detalhados para a ultima importacao.</div>}
+            </div>
+            <div className="panel-subsection">
+              <div>
+                <h3>Mudancas relevantes de preco</h3>
+                <p>Itens com variacao recente para validar antes de cotar ou enviar tabela ao cliente.</p>
+              </div>
+              <div className="table compact">
+                <div className="table-head price-change-row">
+                  <span>Item</span>
+                  <span>Anterior</span>
+                  <span>Novo</span>
+                  <span>Variacao</span>
+                  <span>Origem</span>
+                </div>
+                {catalogPriceChanges.map((change) => (
+                  <div className="table-row price-change-row" key={`${change.catalogoItemId}-${change.criadoEm ?? change.valorNovo}`}>
+                    <span>
+                      <strong>{change.codigo} - {change.descricao}</strong>
+                      <small>{[change.tipo, change.marca, change.grupo].filter(Boolean).join(' - ')}</small>
+                    </span>
+                    <span>{money(change.valorAnterior)}</span>
+                    <span>{money(change.valorNovo)}</span>
+                    <span className={change.diferenca >= 0 ? 'positive' : 'negative'}>
+                      {change.diferenca >= 0 ? '+' : ''}{money(change.diferenca)} ({formatPriceChangePercent(change.variacaoPercentual)})
+                    </span>
+                    <span>{change.arquivoNome || dateLabel(change.criadoEm)}</span>
+                  </div>
+                ))}
+                {catalogPriceChanges.length === 0 && <div className="empty-state compact">Nenhuma mudanca de preco recente com historico comparavel.</div>}
+              </div>
             </div>
           </>
         ) : (
@@ -9892,6 +9928,11 @@ function qualityIssueSeverityLabel(severidade: ImportacaoQualidadeIssue['severid
   if (severidade === 'alta') return 'Alta prioridade'
   if (severidade === 'media') return 'Media prioridade'
   return 'Baixa prioridade'
+}
+
+function formatPriceChangePercent(value: number) {
+  const signal = value >= 0 ? '+' : ''
+  return `${signal}${(value * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
 }
 
 function workbookReadiness(preview: WorkbookImportPreview) {

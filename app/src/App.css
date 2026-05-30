@@ -1225,6 +1225,39 @@ h3 {
   grid-template-columns: minmax(220px, 1.4fr) 120px 120px 120px 170px;
 }
 
+.price-change-row {
+  grid-template-columns: minmax(280px, 1.6fr) 110px 110px 150px minmax(150px, 0.8fr);
+}
+
+.panel-subsection {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #dfe7e2;
+}
+
+.panel-subsection h3 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.panel-subsection p {
+  color: #64736f;
+  font-size: 13px;
+  margin: 3px 0 0;
+}
+
+.positive {
+  color: #0b6b3a;
+  font-weight: 700;
+}
+
+.negative {
+  color: #a11d2a;
+  font-weight: 700;
+}
+
 .report {
   grid-template-columns: minmax(210px, 1fr) 85px 85px 80px 80px 130px 80px;
 }
