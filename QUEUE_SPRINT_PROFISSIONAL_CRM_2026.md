@@ -49,9 +49,10 @@ Entregue nesta rodada:
 - Campanhas ficaram mais orientadas ao uso diario: etapas viraram `Publico`, `Texto`, `Enviar` e `Retornos`, e filtros avancados foram recolhidos para nao assustar o vendedor.
 - Clientes sem cadastro virou uma fila mais operacional: acao principal `Abrir e registrar`, resultado em seletor unico e orientacao curta do fluxo de primeiro contato.
 - Lista de clientes passou a mostrar `Proxima acao` como coluna principal, deixando vendedor como detalhe do local e tornando a fila mais acionavel.
+- Proposta comercial ganhou termos padrao no WhatsApp e no PDF: disponibilidade antes da ordem de compra, prazo/agenda, validade das condicoes e garantia.
 
 Proximos pontos:
-- Proposta HTML imprimivel com layout final e termos padrao.
+- Refinar proposta HTML imprimivel com layout final em casos de muitos itens.
 - Campo de prazo de entrega/execucao por item ou proposta.
 - Controle de envio: enviado em, enviado por, proximo follow-up, status de aceite manual. Parcial: acao `Enviar pelo WhatsApp` grava envio e follow-up antes de abrir a conversa.
 

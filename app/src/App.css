@@ -2594,6 +2594,7 @@ h3 {
 .proposal-block-conditions,
 .proposal-condition-block,
 .proposal-notes,
+.proposal-terms,
 .proposal-footer {
   display: grid;
   gap: 6px;
@@ -2696,7 +2697,8 @@ h3 {
 .proposal-block-title span,
 .proposal-subtotal span,
 .proposal-breakdown,
-.proposal-notes p {
+.proposal-notes p,
+.proposal-terms li {
   color: #64736f;
 }
 
@@ -2765,6 +2767,24 @@ h3 {
   white-space: pre-line;
 }
 
+.proposal-terms {
+  border: 1px solid #edf1ee;
+  border-radius: 8px;
+  background: #f8faf7;
+  padding: 10px;
+}
+
+.proposal-terms strong {
+  color: #12312f;
+}
+
+.proposal-terms ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
 .proposal-footer {
   border-top: 1px solid #edf1ee;
   color: #64736f;
@@ -2826,6 +2846,7 @@ h3 {
 .pdf-export-stage .proposal-breakdown,
 .pdf-export-stage .proposal-condition-block,
 .pdf-export-stage .proposal-notes,
+.pdf-export-stage .proposal-terms,
 .pdf-export-stage .proposal-footer {
   display: grid;
   gap: 7px;
@@ -3005,9 +3026,20 @@ h3 {
 }
 
 .pdf-export-stage .proposal-notes,
+.pdf-export-stage .proposal-terms,
 .pdf-export-stage .proposal-footer {
   border-top: 1px solid #dfe7e1;
   padding-top: 10px;
+}
+
+.pdf-export-stage .proposal-terms {
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 0;
+  background: #ffffff;
+  padding-right: 0;
+  padding-left: 0;
 }
 
 .pdf-export-stage .proposal-footer {

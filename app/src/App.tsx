@@ -6970,6 +6970,13 @@ type QuoteConditionScenario = {
   enabled?: boolean
 }
 
+const quoteStandardTerms = [
+  'Valores sujeitos a confirmacao de disponibilidade antes da emissao da ordem de compra.',
+  'Prazos de entrega e execucao dependem de estoque, agenda e confirmacao comercial.',
+  'Condicoes de pagamento sao validas apenas para esta proposta.',
+  'Garantia conforme politica do fabricante e da Capital Truck Center.',
+]
+
 function quotePaymentScenarios(total: number, adjustments: Record<string, number>): QuoteConditionScenario[] {
   return Object.entries(adjustments).map(([label, adjustment]) => ({
     id: label,
@@ -7194,6 +7201,10 @@ function buildQuoteMessage(
   if (observacao?.trim()) lines.push('', '📝 *Observações*', observacao.trim())
   lines.push('', '⚠️ Antes da emissão da ordem de compra, solicite a confirmação de disponibilidade, prazo e condições.')
   lines.push('', 'Posso confirmar disponibilidade para você?')
+  const closingQuestion = lines.pop()
+  lines.push('', '📌 *Condições gerais*')
+  quoteStandardTerms.forEach((term) => lines.push(`- ${term}`))
+  if (closingQuestion) lines.push('', closingQuestion)
   return lines.join('\n')
 }
 
@@ -7605,9 +7616,15 @@ function QuoteProposalPreview({
           <p>{observacao.trim()}</p>
         </div>
       )}
+      <div className="proposal-terms">
+        <strong>Condicoes gerais</strong>
+        <ul>
+          {quoteStandardTerms.map((term) => <li key={term}>{term}</li>)}
+        </ul>
+      </div>
       <div className="proposal-footer">
         <strong>Capital Truck Center</strong>
-        <span>Antes da emissao da ordem de compra, solicite a confirmacao de disponibilidade, prazo e condicoes.</span>
+        <span>Confirme disponibilidade, prazo e condicoes antes da ordem de compra.</span>
       </div>
     </>
   )
