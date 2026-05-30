@@ -1400,7 +1400,7 @@ function App() {
         </div>
 
         {session.role === 'admin' && vendedoresSemCarteira.length > 0 && (
-          <section className="panel wide">
+          <section className="panel wide seller-wallet-alert">
             <div className="panel-header">
               <div>
                 <h2>Vendedores sem carteira</h2>

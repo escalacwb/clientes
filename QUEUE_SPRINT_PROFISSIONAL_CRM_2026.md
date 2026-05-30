@@ -54,6 +54,7 @@ Entregue nesta rodada:
 - Detalhe da proposta ganhou controle direto de follow-up com atalhos para hoje, 2 dias, 7 dias ou data manual, sem precisar revisar a proposta.
 - PDF da proposta ficou mais compacto e tenta ajustar propostas medias em uma pagina, reduzindo quebras ruins e paginas finais quase vazias.
 - Versao mobile ficou mais operacional: menu horizontal compacto, atalhos grandes, listas em cards e menos elementos de topo competindo com a acao principal.
+- Segunda rodada mobile validada em sessao local: removido overflow horizontal, cards de clientes/propostas passaram a respeitar largura do celular, alerta administrativo foi ocultado no mobile e atalhos operacionais viraram barra inferior fixa.
 
 Proximos pontos:
 - Continuar refinando proposta HTML imprimivel em casos extremos de muitos itens.
