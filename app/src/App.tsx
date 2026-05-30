@@ -286,6 +286,16 @@ function BrandLogo({ compact = false }: { compact?: boolean }) {
   )
 }
 
+function uniqueBy<T>(items: T[], getKey: (item: T) => string) {
+  const seen = new Set<string>()
+  return items.filter((item) => {
+    const key = getKey(item)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 type QuoteOriginContext =
   | { kind: 'campanha'; sourceId?: string; label: string; initialItems?: OrcamentoItemInput[] }
   | { kind: 'tarefa'; sourceId?: string; label: string; initialItems?: OrcamentoItemInput[] }
@@ -961,6 +971,25 @@ function App() {
     emptyClient
   const hasSelectedClient = selectedClient.id !== emptyClient.id
   const scopedClientIds = useMemo(() => new Set(scopedClientes.map((cliente) => cliente.id)), [scopedClientes])
+  const vendedorCarteiraCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    vendedoresResumo.forEach((row) => counts.set(row.vendedorId, row.clientes))
+    clientes.forEach((cliente) => {
+      if (!cliente.vendedorId || counts.has(cliente.vendedorId)) return
+      counts.set(cliente.vendedorId, (counts.get(cliente.vendedorId) ?? 0) + 1)
+    })
+    return counts
+  }, [clientes, vendedoresResumo])
+  const vendedoresSemCarteira = useMemo(() => {
+    if (session?.role !== 'admin') return []
+    return usuarios.filter((usuario) => usuario.role === 'vendedor' && (vendedorCarteiraCounts.get(usuario.id) ?? 0) === 0)
+  }, [session?.role, usuarios, vendedorCarteiraCounts])
+  const sellerHasNoCarteira =
+    session?.role === 'vendedor' &&
+    !isLoadingClientes &&
+    clientesTotal === 0 &&
+    clienteFiltro === 'todos' &&
+    query.trim().length === 0
   const scopedInteracoes = useMemo(() => {
     if (!session || session.role === 'admin') return interacoes
     return interacoes.filter((interacao) => scopedClientIds.has(interacao.clienteId) || interacao.vendedorId === session.id)
@@ -1180,7 +1209,7 @@ function App() {
       items: section.items.filter((item) => session.role === 'admin' || !adminOnlyViews.has(item.id)),
     }))
     .filter((section) => section.items.length > 0)
-  const canUseScopedClientViews = session.role === 'admin' || isSupabaseConfigured || scopedClientes.length > 0
+  const canUseScopedClientViews = session.role === 'admin' || !sellerHasNoCarteira
 
   return (
     <div className="app-shell">
@@ -1355,7 +1384,25 @@ function App() {
           {dataError && <strong>{dataError}</strong>}
         </div>
 
-        {view === 'cockpit' && (
+        {session.role === 'admin' && vendedoresSemCarteira.length > 0 && (
+          <section className="panel wide">
+            <div className="panel-header">
+              <div>
+                <h2>Vendedores sem carteira</h2>
+                <p>
+                  {vendedoresSemCarteira.map((vendedor) => vendedor.nome).join(', ')}
+                  {vendedoresSemCarteira.length === 1 ? ' ainda nao possui clientes atribuidos.' : ' ainda nao possuem clientes atribuidos.'}
+                  Distribua a carteira para liberar uma rotina comercial real.
+                </p>
+              </div>
+              <button className="button primary" type="button" onClick={() => setView('vendedores')}>
+                Distribuir carteira
+              </button>
+            </div>
+          </section>
+        )}
+
+        {view === 'cockpit' && !sellerHasNoCarteira && (
           <Cockpit
             currentUser={session}
             usuarios={usuarios}
@@ -1466,7 +1513,10 @@ function App() {
         )}
         {!canUseScopedClientViews && (
           <section className="panel wide">
-            <div className="empty-state">Sua carteira ainda nao possui clientes atribuidos.</div>
+            <div className="empty-state">
+              <strong>Sua carteira ainda nao possui clientes atribuidos.</strong>
+              <span>Peça para um administrador distribuir clientes para o seu usuario. Depois disso, clientes, tarefas, propostas e campanhas entram na sua rotina automaticamente.</span>
+            </div>
           </section>
         )}
         {canUseScopedClientViews && view === 'clientes' && (
@@ -2619,9 +2669,11 @@ function Cockpit({
   const [slaAlertLimit, setSlaAlertLimit] = useState(3)
   const [isRunningFollowups, setIsRunningFollowups] = useState(false)
   const [followupAutomationMessage, setFollowupAutomationMessage] = useState('')
-  const todayTasks = tarefas.filter((tarefa) => daysSince(tarefa.dataVencimento) >= 0)
-  const contactFollowups = tarefas
-    .filter((tarefa) => isCommercialFollowupTask(tarefa))
+  const todayTasks = uniqueBy(tarefas.filter((tarefa) => daysSince(tarefa.dataVencimento) >= 0), (tarefa) => tarefa.id)
+  const contactFollowups = uniqueBy(
+    tarefas.filter((tarefa) => isCommercialFollowupTask(tarefa)),
+    (tarefa) => tarefa.id,
+  )
     .sort((a, b) => b.prioridade - a.prioridade || a.dataVencimento.localeCompare(b.dataVencimento))
     .slice(0, 12)
   const openTaskClientIds = new Set([...tarefas, ...tarefasVencidas].filter((tarefa) => tarefa.status === 'aberta').map((tarefa) => tarefa.clienteId))
@@ -2644,7 +2696,7 @@ function Cockpit({
   const highPriorityTasks = tarefas
     .filter((tarefa) => tarefa.prioridade >= 80 && !todayTasks.some((item) => item.id === tarefa.id))
     .slice(0, 4)
-  const criticalTasks = [...tarefasVencidas, ...todayTasks, ...highPriorityTasks].slice(0, 10)
+  const criticalTasks = uniqueBy([...tarefasVencidas, ...todayTasks, ...highPriorityTasks], (tarefa) => tarefa.id).slice(0, 10)
   const ownerLabel = currentUser.role === 'admin' ? 'Visao gerencial' : `Fila de ${currentUser.nome.split(' ')[0]}`
   const slaBySeller = new Map(slaVendedores.map((item) => [item.vendedorId, item]))
   const workload = usuarios
@@ -2661,7 +2713,7 @@ function Cockpit({
     }))
     .sort((a, b) => b.atrasadas - a.atrasadas || b.tarefas - a.tarefas)
   const slaAlerts = workload.filter((item) => item.atrasadas >= slaAlertLimit || item.criticas >= slaAlertLimit)
-  const nextActions = [
+  const nextActionCandidates = [
     ...campanhas.map((envio) => ({
       id: `campanha-${envio.id}`,
       kind: 'campanha' as const,
@@ -2721,7 +2773,8 @@ function Cockpit({
       clienteId: oportunidade.clienteId,
       oportunidade,
     })),
-  ].sort((a, b) => b.priority - a.priority).slice(0, 14)
+  ].sort((a, b) => b.priority - a.priority)
+  const nextActions = uniqueBy(nextActionCandidates, (item) => item.id).slice(0, 14)
 
   async function complete(id: string) {
     setBusyTaskId(id)

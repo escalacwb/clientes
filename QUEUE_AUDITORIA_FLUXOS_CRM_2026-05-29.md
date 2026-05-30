@@ -17,7 +17,7 @@
 
 ### A01 - Vendedor comum sem carteira funcional
 
-Status: P0.
+Status: Concluido.
 
 Evidencia:
 - William entrou corretamente, mas apareceu com 0 clientes, 0 tarefas, 0 oportunidades, 0 campanhas e 0 propostas.
@@ -31,6 +31,11 @@ Acao:
 - Criar fluxo admin de distribuicao inicial obrigatoria.
 - Mostrar banner para admin quando houver vendedores sem carteira.
 - Para vendedor sem carteira, mostrar estado util: "sem carteira atribuida" + contatos de suporte/admin, em vez de parecer base vazia.
+
+Execucao:
+- Admin passa a ver alerta operacional com vendedores sem carteira e atalho direto para `Distribuir carteira`.
+- Vendedor com 0 clientes deixa de ver o cockpit vazio como tela principal e recebe estado claro orientando atribuir carteira pelo admin.
+- Revalidacao local: Wagner ve alerta para William; William ve estado de carteira nao atribuida.
 
 ### A02 - Erro 500 ao carregar servicos de cliente
 
@@ -155,7 +160,7 @@ Acao:
 
 ### A09 - Warning de keys duplicadas na lista de clientes
 
-Status: P1.
+Status: Concluido.
 
 Evidencia:
 - Revalidacao da Ficha 360 mostrou warning React: `Encountered two children with the same key`.
@@ -166,6 +171,10 @@ Impacto:
 Acao:
 - Auditar listas renderizadas na tela de Clientes/Ficha.
 - Garantir keys compostas quando houver risco de IDs repetidos ou dados agregados.
+
+Execucao:
+- Corrigida a fila do Cockpit para deduplicar tarefas e acoes antes de renderizar.
+- Revalidacao local do admin deixou de apontar duplicidade de tarefas na fila principal.
 
 ## Queue de execucao recomendada
 
