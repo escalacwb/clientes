@@ -25,20 +25,28 @@ export function daysSince(date?: string) {
 export function opportunityScore(cliente: Cliente, orcamentos: Orcamento[]) {
   if (cliente.status === 'Nao contatar') return 0
 
-  let score = 0
+  return opportunityScoreDetails(cliente, orcamentos).reduce((total, item) => total + item.points, 0)
+}
+
+export function opportunityScoreDetails(cliente: Cliente, orcamentos: Orcamento[]) {
+  if (cliente.status === 'Nao contatar') {
+    return [{ label: 'Nao contatar', points: 0 }]
+  }
+
   const diasSemCompra = daysSince(cliente.ultimaCompraEm)
   const diasSemContato = daysSince(cliente.ultimoContatoEm)
+  const details: Array<{ label: string; points: number }> = []
 
-  if (orcamentos.some((orcamento) => orcamento.clienteId === cliente.id && orcamento.status !== 'ganho')) score += 25
-  if (diasSemCompra <= 365) score += 10
-  if (diasSemCompra > 90) score += 15
-  if (cliente.totalComprado > 100000) score += 20
-  if (cliente.whatsapp) score += 10
-  if (diasSemContato > 60) score += 15
-  if (cliente.ultimoServicoEm && daysSince(cliente.ultimoServicoEm) < 60) score += 10
-  if (!cliente.vendedorId) score += 12
+  if (orcamentos.some((orcamento) => orcamento.clienteId === cliente.id && orcamento.status !== 'ganho')) details.push({ label: 'proposta aberta', points: 25 })
+  if (diasSemCompra <= 365) details.push({ label: 'compra recente no ciclo anual', points: 10 })
+  if (diasSemCompra > 90) details.push({ label: 'recompra possivel', points: 15 })
+  if (cliente.totalComprado > 100000) details.push({ label: 'alto valor historico', points: 20 })
+  if (cliente.whatsapp) details.push({ label: 'WhatsApp disponivel', points: 10 })
+  if (diasSemContato > 60) details.push({ label: 'sem contato recente', points: 15 })
+  if (cliente.ultimoServicoEm && daysSince(cliente.ultimoServicoEm) < 60) details.push({ label: 'servico recente', points: 10 })
+  if (!cliente.vendedorId) details.push({ label: 'sem vendedor atual', points: 12 })
 
-  return score
+  return details
 }
 
 export function opportunityReason(cliente: Cliente, score: number) {

@@ -47,6 +47,7 @@ import {
   money,
   opportunityReason,
   opportunityScore,
+  opportunityScoreDetails,
   smartSummary,
 } from './lib/crm'
 import { previewXmlFiles, type XmlImportPreview } from './lib/xmlImport'
@@ -3786,7 +3787,10 @@ function Clientes({
               </span>
               <span>{cliente.cidade}/{cliente.uf}</span>
               <span>{cliente.vendedorNome ?? 'Sem vendedor'}</span>
-              <span className="score">{cliente.score}</span>
+              <span className="score">
+                {cliente.score}
+                <small>{opportunityScoreDetails(cliente, orcamentos).slice(0, 2).map((item) => item.label).join(' + ') || cliente.motivo}</small>
+              </span>
             </button>
           ))}
         </div>

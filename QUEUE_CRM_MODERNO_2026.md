@@ -326,7 +326,7 @@ Pronto quando:
 
 ### M12 - Scoring comercial explicavel
 
-Status: Pendente.
+Status: Parcial.
 
 Objetivo:
 Pontuar clientes e oportunidades com explicacao clara.
@@ -336,6 +336,11 @@ Entregas:
 - Score por oportunidade.
 - Motivos visiveis: "comprou alto valor", "sem contato 180 dias", "respondeu campanha".
 - Filtro por score na carteira e campanhas.
+
+Ja entregue:
+- Score de cliente agora e calculado por componentes explicaveis.
+- Lista de Clientes mostra o score com os principais motivos que somaram pontos.
+- A carteira priorizada segue usando score para ordenar e filtros de potencial.
 
 Pronto quando:
 - Vendedor entende por que aquele cliente esta no topo da fila.
