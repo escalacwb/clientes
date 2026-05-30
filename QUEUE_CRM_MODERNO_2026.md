@@ -390,7 +390,7 @@ Pronto quando:
 
 ### M15 - Qualidade de dados acionavel
 
-Status: Pendente.
+Status: Parcial.
 
 Objetivo:
 Transformar problemas de cadastro em fila de correcao.
@@ -401,12 +401,17 @@ Entregas:
 - Marcar como resolvido.
 - Medir qualidade por importacao.
 
+Ja entregue:
+- Tela Importacoes exibe fila priorizada de saneamento com clientes sem WhatsApp, sem vendedor, origem desconhecida, servicos sem placa e conflitos.
+- Cada item da fila pode receber responsavel, abrir ficha do cliente quando houver vinculo e ser marcado como resolvido na fila operacional.
+- Saude da base mede ultima importacao, arquivos obrigatorios, conflitos, sem vendedor, sem WhatsApp, origem desconhecida e oportunidades desatualizadas.
+
 Pronto quando:
 - A base melhora toda semana, sem depender de auditoria manual em SQL.
 
 ### M16 - Importacao com reconciliacao visual
 
-Status: Pendente.
+Status: Parcial.
 
 Objetivo:
 Mostrar ao admin o que mudou na importacao diaria antes/depois.
@@ -418,12 +423,18 @@ Entregas:
 - Vendas/servicos novos por data.
 - Reprocessar pos-importacao com log.
 
+Ja entregue:
+- Tela Importacoes ganhou painel `Reconciliação da última importação`.
+- O painel mostra linhas processadas, clientes detectados, clientes novos, itens criados, ignorados/repetidos e conflitos.
+- Arquivos vinculados à última importação aparecem com tipo, obrigatoriedade, linhas e data de processamento.
+- O botão `Reprocessar fechamento` já recalcula clientes, oportunidades e follow-ups e atualiza a saúde da base.
+
 Pronto quando:
 - Importar arquivo diario vira rotina segura de poucos minutos.
 
 ### M17 - Permissoes e auditoria fina
 
-Status: Pendente.
+Status: Parcial.
 
 Objetivo:
 Garantir seguranca operacional conforme o app cresce.
@@ -434,6 +445,13 @@ Entregas:
 - Auditoria de aprovacao de desconto.
 - Auditoria de campanha e opt-out.
 - Relatorio de atividades por usuario.
+
+Ja entregue:
+- Tela `Usuarios` mostra perfis de acesso por role, permissões esperadas e distribuição de carteira.
+- Tela `Auditoria` lista alterações sensíveis com filtros por período, campo, cliente, usuário e valor.
+- Auditoria ganhou resumo executivo de eventos, campos sensíveis, clientes afetados, usuário mais ativo e última alteração.
+- Painel de cobertura indica as áreas críticas já rastreadas: cadastro, carteira/responsável, status comercial e importação/saneamento.
+- Eventos de envio/aprovação de proposta, regras de automação e saneamento já deixam trilhas operacionais nas telas correspondentes.
 
 Pronto quando:
 - Alteracoes sensiveis sempre mostram quem fez, quando e por que.

@@ -1,4 +1,5 @@
 import {
+  Activity,
   AlertTriangle,
   BarChart3,
   CalendarClock,
@@ -2076,7 +2077,9 @@ function App() {
         {session.role === 'admin' && view === 'importacoes' && (
           <Importacoes
             importacoes={importacoes}
+            usuarios={usuarios}
             onAddImportacao={(importacao) => setImportacoes((current) => [importacao, ...current.filter((item) => item.id !== importacao.id)])}
+            onOpenClient={openClientFromCockpit}
           />
         )}
         {session.role === 'admin' && view === 'conflitos' && (
@@ -8874,10 +8877,14 @@ function minDate(current: string | undefined, next: string) {
 
 function Importacoes({
   importacoes,
+  usuarios,
   onAddImportacao,
+  onOpenClient,
 }: {
   importacoes: Importacao[]
+  usuarios: Vendedor[]
   onAddImportacao: (importacao: Importacao) => void
+  onOpenClient: (clienteId: string) => Promise<void>
 }) {
   const [arquivosResumo, setArquivosResumo] = useState<ImportacaoArquivoResumo[]>([])
   const [qualidadeResumo, setQualidadeResumo] = useState<ImportacaoQualidadeResumo | undefined>()
@@ -8898,6 +8905,10 @@ function Importacoes({
   const [referenceImportResult, setReferenceImportResult] = useState('')
   const [error, setError] = useState('')
   const [registeredFiles, setRegisteredFiles] = useState<string[]>([])
+  const [qualityAssignments, setQualityAssignments] = useState<Record<string, string>>({})
+  const [resolvedQualityIssues, setResolvedQualityIssues] = useState<string[]>([])
+  const vendedores = usuarios.filter((usuario) => usuario.role === 'vendedor')
+  const activeQualityIssues = qualidadeIssues.filter((issue) => !resolvedQualityIssues.includes(issue.id))
   const arquivosPorImportacao = useMemo(() => {
     return arquivosResumo.reduce<Record<string, ImportacaoArquivoResumo[]>>((acc, arquivo) => {
       acc[arquivo.importacaoId] = [...(acc[arquivo.importacaoId] ?? []), arquivo]
@@ -8914,6 +8925,18 @@ function Importacoes({
     }
   }, [importacoes])
   const importacoesRecentes = useMemo(() => importacoes.slice(0, 8), [importacoes])
+  const ultimaImportacaoDetalhe = importacoesRecentes[0]
+  const arquivosUltimaImportacao = ultimaImportacaoDetalhe ? arquivosPorImportacao[ultimaImportacaoDetalhe.id] ?? [] : []
+  const reconciliacaoResumo = ultimaImportacaoDetalhe
+    ? [
+        { label: 'Linhas processadas', value: ultimaImportacaoDetalhe.totalItens },
+        { label: 'Clientes detectados', value: ultimaImportacaoDetalhe.clientesEncontrados },
+        { label: 'Clientes novos', value: ultimaImportacaoDetalhe.clientesCriados },
+        { label: 'Itens criados', value: ultimaImportacaoDetalhe.itensCriados ?? 0 },
+        { label: 'Ignorados/repetidos', value: ultimaImportacaoDetalhe.itensIgnorados ?? 0 },
+        { label: 'Conflitos', value: ultimaImportacaoDetalhe.conflitos },
+      ]
+    : []
 
   useEffect(() => {
     listImportacaoArquivos().then(setArquivosResumo).catch(() => setArquivosResumo([]))
@@ -8928,6 +8951,7 @@ function Importacoes({
     ])
     setQualidadeResumo(resumo)
     setQualidadeIssues(issues)
+    setResolvedQualityIssues([])
   }
 
   async function handleFiles(files: FileList | null) {
@@ -9226,7 +9250,7 @@ function Importacoes({
           </button>
         </div>
         <div className="quality-issue-grid">
-          {qualidadeIssues.map((issue) => (
+          {activeQualityIssues.map((issue) => (
             <article className={`quality-issue ${issue.severidade}`} key={issue.id}>
               <div>
                 <strong>{issue.titulo}</strong>
@@ -9234,10 +9258,79 @@ function Importacoes({
               </div>
               <small>{issue.acaoSugerida}</small>
               <span className="status-pill">{qualityIssueSeverityLabel(issue.severidade)}</span>
+              <label>
+                Responsavel
+                <select
+                  value={qualityAssignments[issue.id] ?? ''}
+                  onChange={(event) => setQualityAssignments((current) => ({ ...current, [issue.id]: event.target.value }))}
+                >
+                  <option value="">Nao atribuido</option>
+                  {vendedores.map((vendedor) => (
+                    <option key={vendedor.id} value={vendedor.id}>{vendedor.nome}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="row-actions">
+                {issue.clienteId && (
+                  <button className="button compact-button" type="button" onClick={() => void onOpenClient(issue.clienteId!)}>
+                    Abrir ficha
+                  </button>
+                )}
+                <button
+                  className="button compact-button"
+                  type="button"
+                  onClick={() => setResolvedQualityIssues((current) => [...new Set([...current, issue.id])])}
+                >
+                  Marcar resolvido
+                </button>
+              </div>
             </article>
           ))}
-          {qualidadeIssues.length === 0 && <div className="empty-state">Nenhum problema prioritario encontrado agora.</div>}
+          {activeQualityIssues.length === 0 && <div className="empty-state">Nenhum problema prioritario encontrado agora.</div>}
         </div>
+      </section>
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Reconciliação da última importação</h2>
+            <p>Resumo antes/depois para validar se o pacote diário mudou a base como esperado.</p>
+          </div>
+          <FileUp size={18} />
+        </div>
+        {ultimaImportacaoDetalhe ? (
+          <>
+            <div className="message-template">
+              <strong>{ultimaImportacaoDetalhe.arquivoNome}</strong>
+              <span>{ultimaImportacaoDetalhe.tipo} - {dateLabel(ultimaImportacaoDetalhe.dataImportacao)} - {ultimaImportacaoDetalhe.status}</span>
+            </div>
+            <div className="info-grid import-quality">
+              {reconciliacaoResumo.map((item) => (
+                <Info key={item.label} label={item.label} value={item.value.toString()} />
+              ))}
+            </div>
+            <div className="table">
+              <div className="table-head five">
+                <span>Arquivo</span>
+                <span>Tipo</span>
+                <span>Obrig.</span>
+                <span>Linhas</span>
+                <span>Processado</span>
+              </div>
+              {arquivosUltimaImportacao.map((arquivo) => (
+                <div className="table-row five" key={arquivo.id}>
+                  <span><strong>{arquivo.arquivoNome}</strong></span>
+                  <span>{arquivo.tipo}</span>
+                  <span>{arquivo.obrigatorio ? 'Sim' : 'Nao'}</span>
+                  <span>{arquivo.totalLinhas}</span>
+                  <span>{dateLabel(arquivo.processadoEm)}</span>
+                </div>
+              ))}
+              {arquivosUltimaImportacao.length === 0 && <div className="empty-state compact">Sem arquivos detalhados para a ultima importacao.</div>}
+            </div>
+          </>
+        ) : (
+          <div className="empty-state">Nenhuma importacao registrada ainda.</div>
+        )}
       </section>
       <section className="panel wide">
         <div className="panel-header">
@@ -13777,6 +13870,12 @@ function Auditoria({ alteracoes }: { alteracoes: ClienteAlteracao[] }) {
   const [field, setField] = useState('todos')
   const [query, setQuery] = useState('')
   const [period, setPeriod] = useState<'7d' | '30d' | 'todos'>('30d')
+  const auditCoverage = [
+    { label: 'Cadastro do cliente', description: 'Nome, telefone, WhatsApp, cidade, UF, origem e campos comerciais.' },
+    { label: 'Carteira e responsavel', description: 'Mudancas de vendedor e responsavel ficam rastreaveis por usuario.' },
+    { label: 'Status comercial', description: 'Qualificacao, nao contatar e andamento do lead aparecem na trilha.' },
+    { label: 'Importacao e saneamento', description: 'Fila de qualidade e conflitos mostram o que precisa ser corrigido.' },
+  ]
   const fields = ['todos', ...Array.from(new Set(alteracoes.map((alteracao) => alteracao.campo)))]
   const filtered = alteracoes.filter((alteracao) => {
     if (field !== 'todos' && alteracao.campo !== field) return false
@@ -13797,11 +13896,49 @@ function Auditoria({ alteracoes }: { alteracoes: ClienteAlteracao[] }) {
       sensitive,
       clientes: new Set(filtered.map((alteracao) => alteracao.clienteNome)).size,
       topUser: topUser ? `${topUser[0]} (${topUser[1]})` : 'Sem registro',
+      last: filtered[0]?.criadoEm ? dateLabel(filtered[0].criadoEm) : 'Sem registro',
     }
   }, [filtered])
 
   return (
     <section className="grid-layout">
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Cobertura de auditoria</h2>
+            <p>Controle operacional para saber se alteracoes criticas deixam rastro.</p>
+          </div>
+          <ShieldCheck size={18} />
+        </div>
+        <div className="permission-list">
+          {auditCoverage.map((item) => (
+            <div className="permission-row" key={item.label}>
+              <CheckCircle2 size={16} />
+              <span>
+                <strong>{item.label}</strong>
+                <small>{item.description}</small>
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Atividade recente</h2>
+            <p>Leitura rapida da movimentacao filtrada antes de abrir os detalhes.</p>
+          </div>
+          <Activity size={18} />
+        </div>
+        <div className="mini-metrics vertical">
+          <Info label="Eventos filtrados" value={auditSummary.total.toString()} />
+          <Info label="Campos sensiveis" value={auditSummary.sensitive.toString()} />
+          <Info label="Clientes afetados" value={auditSummary.clientes.toString()} />
+          <Info label="Ultima alteracao" value={auditSummary.last} />
+        </div>
+      </section>
+
       <section className="panel wide">
         <div className="panel-header">
           <div>
