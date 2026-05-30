@@ -2506,6 +2506,28 @@ h3 {
   gap: 8px;
 }
 
+.quote-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid #e1e9e4;
+  border-radius: 8px;
+  background: #f8faf7;
+  padding: 10px;
+}
+
+.quote-preset-row span {
+  color: #52625d;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.quote-preset-row .button {
+  min-height: 30px;
+  font-size: 12px;
+}
+
 .quote-suggestions {
   display: grid;
   gap: 8px;

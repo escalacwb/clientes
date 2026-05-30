@@ -6651,6 +6651,19 @@ function OrcamentoEditor({
               <input value={prazoExecucao} onChange={(event) => setPrazoExecucao(event.target.value)} placeholder="Ex.: montagem sob agendamento" />
             </label>
           </div>
+          <div className="quote-preset-row">
+            <span>Prazos rapidos</span>
+            {quoteDeliveryPresets.map((preset) => (
+              <button className="button" type="button" key={`entrega-${preset}`} onClick={() => setPrazoEntrega(preset)}>
+                Entrega: {preset}
+              </button>
+            ))}
+            {quoteExecutionPresets.map((preset) => (
+              <button className="button" type="button" key={`execucao-${preset}`} onClick={() => setPrazoExecucao(preset)}>
+                Execucao: {preset}
+              </button>
+            ))}
+          </div>
           <label className="quote-search">
             Adicionar produto ou servico
             <input value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Codigo, medida, produto, servico ou marca" />
@@ -6976,6 +6989,9 @@ const quoteStandardTerms = [
   'Condicoes de pagamento sao validas apenas para esta proposta.',
   'Garantia conforme politica do fabricante e da Capital Truck Center.',
 ]
+
+const quoteDeliveryPresets = ['Confirmar disponibilidade', '2 dias apos confirmacao', 'Entrega sob consulta']
+const quoteExecutionPresets = ['Sob agendamento', 'Montagem no ato da entrega', 'Execucao na loja']
 
 function quotePaymentScenarios(total: number, adjustments: Record<string, number>): QuoteConditionScenario[] {
   return Object.entries(adjustments).map(([label, adjustment]) => ({
@@ -12775,6 +12791,19 @@ function OrcamentoRevisionEditor({
               Prazo execucao
               <input value={prazoExecucao} onChange={(event) => setPrazoExecucao(event.target.value)} placeholder="Ex.: montagem sob agendamento" />
             </label>
+          </div>
+          <div className="quote-preset-row">
+            <span>Prazos rapidos</span>
+            {quoteDeliveryPresets.map((preset) => (
+              <button className="button" type="button" key={`revisao-entrega-${preset}`} onClick={() => setPrazoEntrega(preset)}>
+                Entrega: {preset}
+              </button>
+            ))}
+            {quoteExecutionPresets.map((preset) => (
+              <button className="button" type="button" key={`revisao-execucao-${preset}`} onClick={() => setPrazoExecucao(preset)}>
+                Execucao: {preset}
+              </button>
+            ))}
           </div>
           <label className="quote-search">
             Buscar catalogo
