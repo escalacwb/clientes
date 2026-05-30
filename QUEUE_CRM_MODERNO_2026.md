@@ -365,6 +365,7 @@ Entregas:
 Ja entregue:
 - Criada view `vw_forecast_vendedor` com pipeline aberto, forecast ponderado, ganho do mes, propostas vencidas, propostas vencendo em 7 dias e gargalo principal.
 - Tela de Relatorios ganhou painel `Forecast e gargalos` com resumo executivo e ranking por vendedor.
+- Relatorios agora exporta CSV da reuniao gerencial com metas, forecast, disciplina comercial, follow-ups e gargalos.
 
 Pronto quando:
 - Gerente consegue conduzir reuniao semanal pelo forecast do CRM.

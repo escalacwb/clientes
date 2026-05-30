@@ -117,12 +117,13 @@ Entregue nesta rodada:
 - View `vw_forecast_vendedor`.
 - Painel `Forecast e gargalos`.
 - Metas mensais por vendedor com receita, contatos, propostas, observacao, ranking e score comercial.
+- Exportacao CSV da reuniao gerencial com metas, forecast, disciplina, follow-ups e gargalos por vendedor.
 
 Proximos pontos:
 - Previsto vs realizado.
 - Forecast por origem e por produto/medida.
 - Alertas: proposta sem follow-up, proposta parada 7 dias, alta probabilidade sem proxima tarefa.
-- Exportacao CSV/PDF da reuniao semanal.
+- Exportacao PDF da reuniao semanal.
 
 ## Ordem de execucao continua
 

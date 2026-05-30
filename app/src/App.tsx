@@ -7327,6 +7327,27 @@ function quotePdfDatePart(date?: string) {
   return new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')
 }
 
+function csvEscape(value: unknown) {
+  const text = value === null || value === undefined ? '' : String(value)
+  return `"${text.replace(/"/g, '""')}"`
+}
+
+function downloadCsv(filename: string, rows: Array<Record<string, unknown>>) {
+  if (rows.length === 0) return
+  const headers = Object.keys(rows[0])
+  const content = [
+    headers.map(csvEscape).join(';'),
+    ...rows.map((row) => headers.map((header) => csvEscape(row[header])).join(';')),
+  ].join('\r\n')
+  const blob = new Blob([`\uFEFF${content}`], { type: 'text/csv;charset=utf-8' })
+  const url = window.URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  anchor.click()
+  window.URL.revokeObjectURL(url)
+}
+
 async function downloadQuotePdf(element: HTMLElement | null, clienteNome: string, date?: string) {
   if (!element) return
   const exportStage = document.createElement('div')
@@ -12839,6 +12860,7 @@ function Relatorios({
         vencidas: 0,
         vencem7d: 0,
         gargaloPrincipal: 'Sem forecast',
+        ultimoMovimento: null,
       }))
   const gamificationRows = metaRows
     .map((row) => {
@@ -12984,6 +13006,44 @@ function Relatorios({
     }
   }
 
+  function exportWeeklyMeetingCsv() {
+    const today = new Date().toISOString().slice(0, 10)
+    const rows = metaRows.map((row) => {
+      const meta = metasBySeller.get(row.vendedorId)
+      const atividade = commercialDisciplineRows.find((item) => item.vendedorId === row.vendedorId)
+      const atingimentoReceita = meta?.metaReceita ? Math.round((row.ganhoMes / meta.metaReceita) * 100) : 0
+      const atingimentoContatos = meta?.metaContatos ? Math.round(((atividade?.contatos30d ?? 0) / meta.metaContatos) * 100) : 0
+      const atingimentoPropostas = meta?.metaOrcamentos ? Math.round((row.propostasAbertas / meta.metaOrcamentos) * 100) : 0
+
+      return {
+        vendedor: row.vendedorNome,
+        meta_receita: meta?.metaReceita ?? 0,
+        ganho_mes: row.ganhoMes,
+        atingimento_receita_pct: atingimentoReceita,
+        pipeline_aberto: row.pipelineAberto,
+        forecast_ponderado: row.forecastPonderado,
+        propostas_abertas: row.propostasAbertas,
+        propostas_vencidas: row.vencidas,
+        propostas_vencem_7d: row.vencem7d,
+        contatos_30d: atividade?.contatos30d ?? 0,
+        meta_contatos: meta?.metaContatos ?? 0,
+        atingimento_contatos_pct: atingimentoContatos,
+        orcamentos_30d: atividade?.orcamentos30d ?? 0,
+        meta_orcamentos: meta?.metaOrcamentos ?? 0,
+        atingimento_orcamentos_pct: atingimentoPropostas,
+        followups_abertos: atividade?.followupsAbertos ?? 0,
+        followups_vencidos: atividade?.followupsVencidos ?? 0,
+        clientes_sem_proxima_acao: atividade?.semProximaAcao ?? 0,
+        disciplina_pct: atividade?.disciplina ?? 0,
+        gargalo_principal: row.gargaloPrincipal,
+        ultimo_movimento: row.ultimoMovimento ?? '',
+        observacao_meta: meta?.observacao ?? '',
+      }
+    })
+
+    downloadCsv(`reuniao-gerencial-${today}.csv`, rows)
+  }
+
   return (
     <section className="grid-layout">
       <div className="metric-grid">
@@ -13002,7 +13062,10 @@ function Relatorios({
             <h2>Forecast e gargalos</h2>
             <p>Pipeline ponderado por etapa, propostas vencidas e proxima acao gerencial.</p>
           </div>
-          <Gauge size={18} />
+          <button className="button ghost" type="button" onClick={exportWeeklyMeetingCsv} disabled={metaRows.length === 0}>
+            <FileUp size={16} />
+            Exportar CSV
+          </button>
         </div>
         <div className="info-grid forecast-summary">
           <Info label="Pipeline aberto" value={money(pipelineForecast)} />
