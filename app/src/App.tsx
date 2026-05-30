@@ -56,6 +56,7 @@ import { isSupabaseConfigured } from './lib/supabase'
 import { buildOportunidades } from './lib/oportunidades'
 import { carteiraFiltros, filterClientes } from './lib/filtros'
 import { getCurrentSession, signInWithPassword, signOut } from './repositories/authRepository'
+import { listAutomacaoRegras, setAutomacaoRegraAtiva, type AutomacaoRegra } from './repositories/automacoesRepository'
 import { analyzeWhatsAppContact, type WhatsAppContactAnalysis } from './repositories/aiRepository'
 import { listClienteAlteracoes } from './repositories/auditoriaRepository'
 import {
@@ -12508,22 +12509,10 @@ function Relatorios({
   const [metaDrafts, setMetaDrafts] = useState<Record<string, { receita: string; contatos: string; orcamentos: string; observacao: string }>>({})
   const [savingMetaId, setSavingMetaId] = useState('')
   const [metaFeedback, setMetaFeedback] = useState('')
-  const [automationRules, setAutomationRules] = useState(() => {
-    const saved = localStorage.getItem('capital-crm:automation-rules')
-    if (saved) {
-      try {
-        return JSON.parse(saved) as Record<string, boolean>
-      } catch {
-        return {}
-      }
-    }
-    return {
-      propostaVencida: true,
-      campanhaRespondeu: true,
-      semProximaAcao: true,
-      clienteRisco: false,
-    }
-  })
+  const [automationRules, setAutomationRules] = useState<AutomacaoRegra[]>([])
+  const [automationRulesLoading, setAutomationRulesLoading] = useState(false)
+  const [automationRulesError, setAutomationRulesError] = useState('')
+  const [automationRuleSavingCode, setAutomationRuleSavingCode] = useState('')
   const orcamentosGanhos = resumo?.orcamentosGanhos ?? orcamentos.filter((orcamento) => orcamento.status === 'ganho').length
   const orcamentosTotal = resumo?.orcamentosTotal ?? orcamentos.length
   const taxaConversao = orcamentosTotal ? Math.round((orcamentosGanhos / orcamentosTotal) * 100) : 0
@@ -12706,8 +12695,37 @@ function Relatorios({
     .slice(0, 12)
 
   useEffect(() => {
-    localStorage.setItem('capital-crm:automation-rules', JSON.stringify(automationRules))
-  }, [automationRules])
+    let isMounted = true
+    setAutomationRulesLoading(true)
+    setAutomationRulesError('')
+    listAutomacaoRegras()
+      .then((rules) => {
+        if (isMounted) setAutomationRules(rules)
+      })
+      .catch((exception) => {
+        if (isMounted) setAutomationRulesError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar regras de automacao.')
+      })
+      .finally(() => {
+        if (isMounted) setAutomationRulesLoading(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  async function toggleAutomationRule(rule: AutomacaoRegra, ativo: boolean) {
+    setAutomationRuleSavingCode(rule.codigo)
+    setAutomationRulesError('')
+    try {
+      const updated = await setAutomacaoRegraAtiva(rule.codigo, ativo)
+      setAutomationRules((current) => current.map((item) => (item.codigo === updated.codigo ? updated : item)))
+    } catch (exception) {
+      setAutomationRulesError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar regra de automacao.')
+    } finally {
+      setAutomationRuleSavingCode('')
+    }
+  }
 
   function metaDraftFor(vendedorId: string) {
     const meta = metasBySeller.get(vendedorId)
@@ -12916,29 +12934,30 @@ function Relatorios({
         <div className="panel-header">
           <div>
             <h2>Regras de automacao</h2>
-            <p>Controles gerenciais para ligar ou desligar automacoes operacionais antes de rodar campanhas e follow-ups.</p>
+            <p>Controles gerenciais salvos no Supabase para ligar ou desligar automacoes operacionais.</p>
           </div>
           <Settings size={18} />
         </div>
+        {automationRulesError && <div className="alert">{automationRulesError}</div>}
+        {automationRulesLoading && <div className="empty-state compact">Carregando regras de automacao...</div>}
         <div className="info-grid">
-          {[
-            ['propostaVencida', 'Proposta vencida gera follow-up', 'Cria tarefa para proposta aberta que passou da validade.'],
-            ['campanhaRespondeu', 'Resposta de campanha gera tarefa', 'Prioriza contatos que responderam ou pediram orcamento.'],
-            ['semProximaAcao', 'Cliente sem proxima acao entra na rotina', 'Sinaliza carteira parada sem tarefa ou proposta aberta.'],
-            ['clienteRisco', 'Cliente em risco vira oportunidade', 'Reativa clientes sem compra recente e alto historico.'],
-          ].map(([id, title, detail]) => (
-            <label className="checkbox-field" key={id}>
+          {automationRules.map((rule) => (
+            <label className="checkbox-field" key={rule.codigo}>
               <input
                 type="checkbox"
-                checked={Boolean(automationRules[id])}
-                onChange={(event) => setAutomationRules((current) => ({ ...current, [id]: event.target.checked }))}
+                checked={rule.ativo}
+                disabled={automationRuleSavingCode === rule.codigo}
+                onChange={(event) => void toggleAutomationRule(rule, event.target.checked)}
               />
               <span>
-                <strong>{title}</strong>
-                <small>{detail}</small>
+                <strong>{rule.nome}</strong>
+                <small>{rule.descricao ?? `${rule.evento} -> ${rule.acao}`}</small>
               </span>
             </label>
           ))}
+          {!automationRulesLoading && automationRules.length === 0 && (
+            <div className="empty-state compact">Nenhuma regra de automacao cadastrada.</div>
+          )}
         </div>
       </section>
 

@@ -301,7 +301,7 @@ Pronto quando:
 
 ### M11 - Motor de automacoes simples
 
-Status: Pendente.
+Status: Parcial.
 
 Objetivo:
 Permitir regras internas sem reprogramar tudo.
@@ -312,6 +312,12 @@ Entregas:
 - Quando Rodobens virar qualificado, criar oportunidade.
 - Quando campanha virar ganho, encerrar tarefas abertas da campanha.
 - Log de automacao executada.
+
+Ja entregue:
+- Tabelas `automacao_regras` e `automacao_logs` existem no Supabase.
+- Repositório de automacoes lista regras e atualiza `ativo` por `codigo`.
+- Painel `Regras de automacao` em Relatorios passou a carregar/salvar regras no Supabase, com log de ativacao/desativacao.
+- Modo local mantém fallback das regras principais para desenvolvimento.
 
 Pronto quando:
 - Novos processos comerciais podem ser criados como regra configurada.
