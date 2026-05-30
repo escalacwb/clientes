@@ -34,7 +34,7 @@ Acao:
 
 ### A02 - Erro 500 ao carregar servicos de cliente
 
-Status: P0.
+Status: Em execucao.
 
 Evidencia:
 - Durante fluxo admin de cliente/Ficha 360 houve HTTP 500 em `rest/v1/servicos_itens`.
@@ -46,6 +46,11 @@ Acao:
 - Limitar queries de historico por cliente com paginacao/limite inicial.
 - Trocar `select('*')` por colunas necessarias.
 - Adicionar tratamento visual quando uma aba falha, sem derrubar a ficha inteira.
+
+Execucao:
+- Query inicial de vendas/servicos por cliente limitada a 500 linhas e colunas explicitas.
+- Revalidacao local nao reproduziu o HTTP 500.
+- Novo achado tecnico: lista de clientes emite warning React de keys duplicadas; tratar no A09.
 
 ### A03 - Criacao de orcamento a partir de cliente nao ficou confiavel no teste
 
@@ -141,6 +146,20 @@ Impacto:
 
 Acao:
 - Criar painel `Atividade do dia`: contatos registrados, tarefas concluidas, propostas criadas/enviadas, campanhas tratadas, pipeline movido.
+
+### A09 - Warning de keys duplicadas na lista de clientes
+
+Status: P1.
+
+Evidencia:
+- Revalidacao da Ficha 360 mostrou warning React: `Encountered two children with the same key`.
+
+Impacto:
+- Pode causar duplicacao visual, perda de estado de linha e comportamento instavel em listas.
+
+Acao:
+- Auditar listas renderizadas na tela de Clientes/Ficha.
+- Garantir keys compostas quando houver risco de IDs repetidos ou dados agregados.
 
 ## Queue de execucao recomendada
 

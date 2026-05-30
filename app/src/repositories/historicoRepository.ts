@@ -78,16 +78,15 @@ export async function listClienteVendasItens(clienteId: string): Promise<VendaIt
   const supabase = await getSupabase()
   if (!supabase) return mockVendas.filter((venda) => venda.clienteId === clienteId)
 
-  const data = await fetchAllPages<VendaRow>((from, to) =>
-    supabase
-      .from('vendas_itens')
-      .select('*')
-      .eq('cliente_id', clienteId)
-      .order('data_venda', { ascending: false })
-      .range(from, to),
-  )
+  const { data, error } = await supabase
+    .from('vendas_itens')
+    .select('id,cliente_id,veiculo_id,ordem_id,data_venda,nota,pedido,produto_codigo,produto_nome,marca,modelo,medida,quantidade,valor_unitario,valor_total,km_extraido,veiculo_observacao,vendedor_nome,unidade')
+    .eq('cliente_id', clienteId)
+    .order('data_venda', { ascending: false })
+    .limit(500)
 
-  return data.map(mapVenda)
+  if (error) throw error
+  return ((data ?? []) as VendaRow[]).map(mapVenda)
 }
 
 export async function listServicosItens(): Promise<ServicoItem[]> {
@@ -109,16 +108,15 @@ export async function listClienteServicosItens(clienteId: string): Promise<Servi
   const supabase = await getSupabase()
   if (!supabase) return mockServicos.filter((servico) => servico.clienteId === clienteId)
 
-  const data = await fetchAllPages<ServicoRow>((from, to) =>
-    supabase
-      .from('servicos_itens')
-      .select('*')
-      .eq('cliente_id', clienteId)
-      .order('data_servico', { ascending: false })
-      .range(from, to),
-  )
+  const { data, error } = await supabase
+    .from('servicos_itens')
+    .select('id,cliente_id,veiculo_id,ordem_id,data_servico,pedido,servico_codigo,servico_nome,quantidade,valor_unitario,valor_total,placa,km_extraido,veiculo_observacao,observacao,vendedor_nome,unidade')
+    .eq('cliente_id', clienteId)
+    .order('data_servico', { ascending: false })
+    .limit(500)
 
-  return data.map(mapServico)
+  if (error) throw error
+  return ((data ?? []) as ServicoRow[]).map(mapServico)
 }
 
 export async function listClienteVeiculos(clienteId: string): Promise<ClienteVeiculoResumo[]> {
