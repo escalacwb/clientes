@@ -37,6 +37,7 @@ Entregue nesta rodada:
 - Ficha do cliente simplificou o bloco `Atendimento agora`: resultado, observacao e proxima acao ficam em primeiro plano; IA e ajustes avancados ficam recolhidos.
 - Navegacao principal ficou mais enxuta: tarefas, oportunidades, relatorios e auditoria deixam de competir com a rotina diaria no menu.
 - Orcamento ganhou atalhos de pacotes complementares, sugerindo montagem, balanceamento, alinhamento e cambagem quando ha pneu na proposta.
+- Botoes de resultado do atendimento agora preenchem proxima acao e data automaticamente para orcamento, sem resposta e comprar depois.
 
 Proximos pontos:
 - Proposta HTML imprimivel com layout final e termos padrao.

@@ -8304,10 +8304,27 @@ function Cliente360({
                   if (value === 'pediu orcamento') {
                     setContactReason('orcamento')
                     setContactTemperature('quente')
+                    setNextActionDate(new Date().toISOString().slice(0, 10))
+                    setContactNextActionText('Montar e enviar proposta')
                   }
                   if (value === 'nao respondeu' && !nextActionDate) {
                     setNextActionDate(addDays(new Date().toISOString().slice(0, 10), 1))
                     setContactNextActionText('Tentar novo contato')
+                  }
+                  if (value === 'comprar depois') {
+                    setContactTemperature('morno')
+                    setNextActionDate(addDays(new Date().toISOString().slice(0, 10), 30))
+                    setContactNextActionText('Retomar oportunidade')
+                  }
+                  if (value === 'sem interesse') {
+                    setContactTemperature('frio')
+                    setNextActionDate('')
+                    setContactNextActionText('')
+                  }
+                  if (value === 'fechou pedido') {
+                    setContactTemperature('quente')
+                    setNextActionDate('')
+                    setContactNextActionText('')
                   }
                 }}
               >
