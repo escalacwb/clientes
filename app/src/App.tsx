@@ -11890,6 +11890,23 @@ function OrcamentoWorkspace({
     setFeedback('Mensagem copiada.')
   }
 
+  async function registerSendAndOpenWhatsapp() {
+    if (!waUrl) return
+    setIsUpdatingStatus(true)
+    setError('')
+    setFeedback('')
+    try {
+      await onStatusChange('enviado')
+      await refreshApprovals()
+      window.open(waUrl, '_blank', 'noopener,noreferrer')
+      setFeedback('Envio registrado. WhatsApp aberto e follow-up programado.')
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel registrar o envio da proposta.')
+    } finally {
+      setIsUpdatingStatus(false)
+    }
+  }
+
   async function deleteCurrentBudget() {
     const confirmed = window.confirm(`Excluir a proposta ${orcamento.id.slice(0, 8)} de ${cliente.nome}? Esta acao remove itens, versoes e controles vinculados.`)
     if (!confirmed) return
@@ -11929,9 +11946,9 @@ function OrcamentoWorkspace({
           <button className="button danger" type="button" disabled={isDeletingBudget} onClick={() => void deleteCurrentBudget()}>
             {isDeletingBudget ? 'Excluindo...' : 'Excluir'}
           </button>
-          <a className={!waUrl ? 'button disabled' : 'button primary'} href={waUrl} target="_blank" rel="noreferrer">
-            <MessageCircle size={16} /> Enviar WA.ME
-          </a>
+          <button className="button primary" type="button" disabled={!waUrl || isUpdatingStatus} onClick={() => void registerSendAndOpenWhatsapp()}>
+            <MessageCircle size={16} /> Registrar envio e abrir WA.ME
+          </button>
         </div>
       </section>
 
@@ -11946,6 +11963,14 @@ function OrcamentoWorkspace({
           <Info label="Previsao" value={dateLabel(orcamento.previsaoFechamento)} />
           <Info label="Follow-up" value={dateLabel(orcamento.proximoFollowupEm)} />
           <Info label="Enviado em" value={dateLabel(orcamento.enviadoEm)} />
+        </div>
+        <div className="readiness ok">
+          <strong>Controle de envio</strong>
+          <span>
+            {orcamento.enviadoEm
+              ? `Proposta enviada em ${dateLabel(orcamento.enviadoEm)}. Proximo follow-up: ${dateLabel(orcamento.proximoFollowupEm)}.`
+              : 'Use "Registrar envio e abrir WA.ME" para abrir o WhatsApp e gravar o envio na proposta.'}
+          </span>
         </div>
         <div className="quote-workspace-actions">
           {orcamento.status === 'aguardando_aprovacao' && canApprove && (

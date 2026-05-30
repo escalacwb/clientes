@@ -38,7 +38,7 @@ Proximos pontos:
 - Bundles sugeridos: pneu + montagem + balanceamento + alinhamento.
 - Proposta HTML imprimivel com layout final e termos padrao.
 - Campo de prazo de entrega/execucao por item ou proposta.
-- Controle de envio: enviado em, enviado por, proximo follow-up, status de aceite manual.
+- Controle de envio: enviado em, enviado por, proximo follow-up, status de aceite manual. Parcial: acao `Registrar envio e abrir WA.ME` grava envio e follow-up antes de abrir WhatsApp.
 
 ## Sprint B - Campanhas seguras e segmentacao forte
 

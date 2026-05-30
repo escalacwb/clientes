@@ -177,7 +177,7 @@ Pronto quando:
 
 ### M06 - Documento de proposta e envio
 
-Status: Pendente.
+Status: Parcial.
 
 Objetivo:
 Gerar proposta pronta para cliente, sem retrabalho manual.
@@ -188,6 +188,13 @@ Entregas:
 - Mensagem WA.ME curta com resumo e chamada para resposta.
 - Controle de enviado, visualizado manualmente e follow-up.
 - Versionamento do documento enviado.
+
+Ja entregue:
+- PDF baixavel com nome padronizado da proposta.
+- Preview profissional da proposta com logo, cliente, vendedor, itens, totais, condicoes e termos.
+- Mensagem WA.ME gerada pela proposta.
+- Acao `Registrar envio e abrir WA.ME` registra status enviado antes de abrir WhatsApp.
+- Ao registrar envio, o backend grava `enviado_em`, `enviado_por`, proximo follow-up e evento de aprovacao/envio.
 
 Pronto quando:
 - A proposta pode ser enviada diretamente pelo sistema com padrao profissional.
