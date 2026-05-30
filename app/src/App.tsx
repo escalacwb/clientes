@@ -10054,6 +10054,17 @@ function Campanhas({
     setPublicoFiltros({ valorMin: 5000, diasSemCompraMin: 90, somenteComWhatsapp: true })
   }
 
+  function startAssistedCampaign(
+    preset: 'sem-cadastro' | 'compradores-produto' | 'regiao' | 'alto-valor',
+    name: string,
+    objective: string,
+  ) {
+    applyCampaignPreset(preset)
+    setSaveName(name)
+    setCampaignObjective(objective)
+    setCampaignTab('publico')
+  }
+
   function resetCampaignAudience() {
     setPublicoFiltros({})
     setQuery('')
@@ -10388,6 +10399,46 @@ function Campanhas({
           )}
         </div>
       </div>
+      <section className="campaign-builder-stage">
+        <div className="campaign-stage-header">
+          <span>Campanha assistida</span>
+          <small>Escolha o objetivo comercial primeiro. Depois refine publico, mensagem e execucao.</small>
+        </div>
+        <div className="campaign-preset-grid">
+          <button
+            className="campaign-preset"
+            type="button"
+            onClick={() => startAssistedCampaign('alto-valor', 'Reativacao 90 dias', 'Reativar clientes de alto valor sem compra recente.')}
+          >
+            <strong>Reativacao 90 dias</strong>
+            <small>Clientes com historico relevante e janela de recompra vencida.</small>
+          </button>
+          <button
+            className="campaign-preset"
+            type="button"
+            onClick={() => startAssistedCampaign('compradores-produto', 'Recompra por produto', 'Ofertar reposicao por medida, produto ou servico comprado.')}
+          >
+            <strong>Recompra por produto</strong>
+            <small>Comece por medida, marca, produto ou servico e refine a audiencia.</small>
+          </button>
+          <button
+            className="campaign-preset"
+            type="button"
+            onClick={() => startAssistedCampaign('sem-cadastro', 'Lista externa', 'Converter clientes de listas externas em primeiros contatos qualificados.')}
+          >
+            <strong>Lista externa</strong>
+            <small>Clientes sem cadastro, com WhatsApp e pendentes de qualificacao.</small>
+          </button>
+          <button
+            className="campaign-preset"
+            type="button"
+            onClick={() => startAssistedCampaign('regiao', 'Acao por regiao', 'Trabalhar clientes de uma cidade, UF ou carteira regional.')}
+          >
+            <strong>Acao por regiao</strong>
+            <small>Ideal para rotas, estoque local, feiroes ou campanhas por vendedor.</small>
+          </button>
+        </div>
+      </section>
       <div className="message-template">
         <strong>{segmento.nome}</strong>
         <span>{segmento.descricao}</span>

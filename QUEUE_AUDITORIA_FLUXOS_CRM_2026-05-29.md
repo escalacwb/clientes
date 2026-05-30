@@ -100,7 +100,7 @@ Execucao:
 
 ### A05 - Campanhas existem, mas sem campanha ativa a tela parece vazia/confusa
 
-Status: P1.
+Status: Concluido.
 
 Evidencia:
 - Tela abre com 0 clientes no publico atual em varios cenarios.
@@ -113,6 +113,11 @@ Acao:
 - Criar modo `Campanha assistida`: escolher objetivo -> publico sugerido -> mensagem -> revisar -> executar.
 - Separar `Campanhas salvas` de `Criar campanha`.
 - Mostrar exemplos prontos: reativacao 90d, recompra medida, lista externa, sem contato 60d.
+
+Execucao:
+- Adicionado bloco `Campanha assistida` com objetivos comerciais prontos: reativacao 90 dias, recompra por produto, lista externa e acao por regiao.
+- Cada objetivo preenche nome, objetivo e filtros iniciais, levando o usuario para validar publico antes da mensagem/execucao.
+- A tela mantém campanhas salvas no seletor e preserva o fluxo por etapas.
 
 ### A06 - Pipeline tem estrutura, mas poucos dados reais abertos
 
