@@ -2812,6 +2812,7 @@ function Cockpit({
     })),
   ].sort((a, b) => b.priority - a.priority)
   const nextActions = uniqueBy(nextActionCandidates, (item) => item.id).slice(0, 14)
+  const primaryAction = nextActions[0]
 
   async function complete(id: string) {
     setBusyTaskId(id)
@@ -2904,6 +2905,70 @@ function Cockpit({
       </section>
 
       {isLoading && <div className="empty-state compact">Carregando rotina comercial...</div>}
+
+      {primaryAction && (
+        <section className={`panel wide cockpit-focus-card ${primaryAction.kind}`}>
+          <div>
+            <span className="next-action-label">Comece por aqui</span>
+            <h2>{primaryAction.title}</h2>
+            <p>{primaryAction.label} - {primaryAction.subtitle}</p>
+            <small>{primaryAction.detail}</small>
+          </div>
+          <div className="toolbar-actions">
+            <button className="button" type="button" onClick={() => onOpenClient(primaryAction.clienteId)}>Abrir ficha</button>
+            {primaryAction.kind === 'campanha' && (
+              <>
+                {primaryAction.envio.telefone && (
+                  <a
+                    className="button"
+                    href={`https://wa.me/${primaryAction.envio.telefone}?text=${encodeURIComponent(primaryAction.envio.mensagemFinal)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    WhatsApp
+                  </a>
+                )}
+                <button
+                  className="button primary"
+                  type="button"
+                  onClick={() => onOpenBudget(primaryAction.clienteId, { kind: 'campanha', sourceId: primaryAction.envio.campanhaId, label: primaryAction.envio.campanhaNome ?? 'Campanha' })}
+                >
+                  Criar proposta
+                </button>
+              </>
+            )}
+            {primaryAction.kind === 'tarefa' && (
+              <>
+                <button className="button" type="button" onClick={() => openReschedule(primaryAction.tarefa)}>Reagendar</button>
+                <button className="button primary" type="button" disabled={busyTaskId === primaryAction.tarefa.id} onClick={() => complete(primaryAction.tarefa.id)}>
+                  {busyTaskId === primaryAction.tarefa.id ? 'Concluindo...' : 'Concluir'}
+                </button>
+              </>
+            )}
+            {primaryAction.kind === 'orcamento' && (
+              <button
+                className="button primary"
+                type="button"
+                onClick={() => onOpenBudget(primaryAction.clienteId, { kind: 'cliente', sourceId: primaryAction.orcamento.id, label: 'Retomada de proposta vencida' })}
+              >
+                Revisar proposta
+              </button>
+            )}
+            {primaryAction.kind === 'lead' && (
+              <button className="button primary" type="button" onClick={() => onOpenClient(primaryAction.clienteId)}>Qualificar</button>
+            )}
+            {primaryAction.kind === 'oportunidade' && (
+              <button
+                className="button primary"
+                type="button"
+                onClick={() => onOpenBudget(primaryAction.clienteId, { kind: 'cliente', sourceId: primaryAction.oportunidade.id, label: primaryAction.oportunidade.proximaAcao || 'Oportunidade' })}
+              >
+                Criar proposta
+              </button>
+            )}
+          </div>
+        </section>
+      )}
 
       <section className="panel wide cockpit-next-actions">
         <div className="panel-header">

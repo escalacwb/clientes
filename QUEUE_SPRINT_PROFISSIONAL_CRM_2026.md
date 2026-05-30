@@ -40,6 +40,7 @@ Entregue nesta rodada:
 - Botoes de resultado do atendimento agora preenchem proxima acao e data automaticamente para orcamento, sem resposta e comprar depois.
 - Ficha do cliente prioriza abrir proposta em andamento antes de criar uma nova, reduzindo duplicidade e confusao no atendimento.
 - Clientes sem cadastro ganharam acao unica `Abrir e registrar`, que abre WhatsApp, registra interacao, cria follow-up e muda status para contatado.
+- Minha rotina ganhou bloco `Comece por aqui`, mostrando uma unica acao recomendada com botoes diretos para reduzir paralisia e abandono.
 
 Proximos pontos:
 - Proposta HTML imprimivel com layout final e termos padrao.

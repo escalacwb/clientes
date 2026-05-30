@@ -767,6 +767,45 @@ h3 {
   gap: 10px;
 }
 
+.cockpit-focus-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  border-left: 5px solid #123d37;
+  background: #fbfdfa;
+}
+
+.cockpit-focus-card h2 {
+  margin: 4px 0;
+}
+
+.cockpit-focus-card p,
+.cockpit-focus-card small {
+  color: #52625d;
+  line-height: 1.4;
+}
+
+.cockpit-focus-card.campanha {
+  border-left-color: #2f7d75;
+}
+
+.cockpit-focus-card.tarefa {
+  border-left-color: #c2410c;
+}
+
+.cockpit-focus-card.orcamento {
+  border-left-color: #9a5b00;
+}
+
+.cockpit-focus-card.lead {
+  border-left-color: #315c9a;
+}
+
+.cockpit-focus-card.oportunidade {
+  border-left-color: #7c3aed;
+}
+
 .cockpit-section {
   display: flex;
   flex-direction: column;
