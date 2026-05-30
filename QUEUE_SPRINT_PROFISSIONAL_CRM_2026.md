@@ -35,6 +35,7 @@ Entregue nesta rodada:
 - Tabela `catalogo_regras_desconto` criada e integrada ao calculo de aprovacao de orcamentos por tipo/grupo/subgrupo/marca/codigo.
 - Aprovacao gerencial ganhou parecer digitavel e historico de decisao no fluxo da proposta.
 - Ficha do cliente simplificou o bloco `Atendimento agora`: resultado, observacao e proxima acao ficam em primeiro plano; IA e ajustes avancados ficam recolhidos.
+- Navegacao principal ficou mais enxuta: tarefas, oportunidades, relatorios e auditoria deixam de competir com a rotina diaria no menu.
 
 Proximos pontos:
 - Bundles sugeridos: pneu + montagem + balanceamento + alinhamento.

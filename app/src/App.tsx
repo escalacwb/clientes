@@ -213,8 +213,6 @@ const navSections = [
       { id: 'cockpit', label: 'Minha rotina', icon: Gauge },
       { id: 'clientes', label: 'Clientes', icon: UsersRound },
       { id: 'rodobens', label: 'Clientes sem cadastro', icon: UserCheck },
-      { id: 'tarefas', label: 'Tarefas', icon: CalendarClock },
-      { id: 'oportunidades', label: 'Oportunidades', icon: AlertTriangle },
     ],
   },
   {
@@ -229,10 +227,8 @@ const navSections = [
     title: 'Gestao',
     items: [
       { id: 'importacoes', label: 'Importacoes', icon: FileUp },
-      { id: 'relatorios', label: 'Relatorios', icon: BarChart3 },
-      { id: 'vendedores', label: 'Vendedores', icon: UserRound },
+      { id: 'vendedores', label: 'Equipe', icon: UserRound },
       { id: 'usuarios', label: 'Usuarios', icon: ShieldCheck },
-      { id: 'auditoria', label: 'Auditoria', icon: CheckCircle2 },
     ],
   },
 ]
