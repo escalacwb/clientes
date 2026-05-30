@@ -51,10 +51,11 @@ Entregue nesta rodada:
 - Lista de clientes passou a mostrar `Proxima acao` como coluna principal, deixando vendedor como detalhe do local e tornando a fila mais acionavel.
 - Proposta comercial ganhou termos padrao no WhatsApp e no PDF: disponibilidade antes da ordem de compra, prazo/agenda, validade das condicoes e garantia.
 - Prazos de entrega e execucao ganharam atalhos rapidos no editor e na revisao da proposta, evitando digitacao repetitiva.
+- Detalhe da proposta ganhou controle direto de follow-up com atalhos para hoje, 2 dias, 7 dias ou data manual, sem precisar revisar a proposta.
 
 Proximos pontos:
 - Refinar proposta HTML imprimivel com layout final em casos de muitos itens.
-- Controle de envio: enviado em, enviado por, proximo follow-up, status de aceite manual. Parcial: acao `Enviar pelo WhatsApp` grava envio e follow-up antes de abrir a conversa.
+- Controle de envio: enviado em, enviado por e proximo follow-up cobertos; ainda evoluir aceite manual quando houver fluxo de pedido confirmado.
 
 ## Sprint B - Campanhas seguras e segmentacao forte
 

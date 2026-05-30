@@ -426,6 +426,22 @@ export async function updateOrcamentoStatus(
   }
 }
 
+export async function updateOrcamentoFollowup(id: string, followupDate: string): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase) return
+
+  const { error } = await supabase
+    .from('orcamentos')
+    .update({ proximo_followup_em: followupDate || null })
+    .eq('id', id)
+
+  if (error) throw error
+
+  await createOrcamentoAprovacao(id, 'enviada', `Follow-up ajustado para ${followupDate}.`, undefined, {
+    proximo_followup_em: followupDate,
+  })
+}
+
 export async function deleteOrcamento(id: string): Promise<void> {
   const supabase = await getSupabase()
   if (!supabase) return

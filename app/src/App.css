@@ -2187,6 +2187,44 @@ h3 {
   margin-top: 14px;
 }
 
+.quote-followup-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dce8df;
+  border-radius: 8px;
+  background: #f6fbf8;
+  padding: 12px;
+  margin-top: 10px;
+}
+
+.quote-followup-panel > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.quote-followup-panel strong {
+  color: #123d37;
+}
+
+.quote-followup-panel span {
+  color: #5f6d69;
+  font-size: 13px;
+}
+
+.quote-followup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.quote-followup-actions input {
+  min-height: 34px;
+  border: 1px solid #cad4d0;
+  border-radius: 8px;
+  padding: 0 8px;
+}
+
 .quote-workspace-actions .button,
 .quote-workspace-actions .assign-select {
   min-height: 34px;

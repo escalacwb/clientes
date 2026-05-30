@@ -153,6 +153,7 @@ import { listOrcamentosPage, type OrcamentoListFilter } from './repositories/orc
 import { listOrcamentoAprovacoes } from './repositories/orcamentosRepository'
 import { listOrcamentoVersoes } from './repositories/orcamentosRepository'
 import { reviseOrcamento } from './repositories/orcamentosRepository'
+import { updateOrcamentoFollowup } from './repositories/orcamentosRepository'
 import { updateOrcamentoStatus } from './repositories/orcamentosRepository'
 import { listOportunidadesPage, listOportunidadesResumo, markOportunidadeComTarefa, refreshOportunidadesCache, type OportunidadeFilter, type OportunidadeResumo } from './repositories/oportunidadesRepository'
 import { createPipelineFromSuggestion, listPipelineOportunidades, updatePipelineOportunidade, updatePipelineStage } from './repositories/pipelineRepository'
@@ -2392,6 +2393,16 @@ function App() {
                         aprovadoPor: status === 'enviado' ? session.id : orcamento.aprovadoPor,
                         aprovadoEm: status === 'enviado' ? new Date().toISOString() : orcamento.aprovadoEm,
                       }
+                    : orcamento,
+                ),
+              )
+            }}
+            onUpdateFollowup={async (followupDate) => {
+              await updateOrcamentoFollowup(selectedOrcamento.id, followupDate)
+              setOrcamentos((current) =>
+                current.map((orcamento) =>
+                  orcamento.id === selectedOrcamento.id
+                    ? { ...orcamento, proximoFollowupEm: followupDate || undefined }
                     : orcamento,
                 ),
               )
@@ -12204,6 +12215,7 @@ function OrcamentoWorkspace({
   onBack,
   onRevise,
   onStatusChange,
+  onUpdateFollowup,
   onDelete,
 }: {
   orcamento: Orcamento
@@ -12214,6 +12226,7 @@ function OrcamentoWorkspace({
   onBack: () => void
   onRevise: (id: string, orcamento: OrcamentoInput) => Promise<Orcamento>
   onStatusChange: (status: Orcamento['status'], motivoPerda?: string) => Promise<void>
+  onUpdateFollowup: (followupDate: string) => Promise<void>
   onDelete: () => Promise<void>
 }) {
   const [activeTab, setActiveTab] = useState<'resumo' | 'itens' | 'mensagem' | 'aprovacao' | 'versoes'>('resumo')
@@ -12225,6 +12238,8 @@ function OrcamentoWorkspace({
   const [lossReason, setLossReason] = useState('')
   const [approvalRejectReason, setApprovalRejectReason] = useState('')
   const [approvalNote, setApprovalNote] = useState('')
+  const [followupDraft, setFollowupDraft] = useState(orcamento.proximoFollowupEm ?? '')
+  const [isUpdatingFollowup, setIsUpdatingFollowup] = useState(false)
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
   const [isDeletingBudget, setIsDeletingBudget] = useState(false)
   const [feedback, setFeedback] = useState('')
@@ -12238,6 +12253,10 @@ function OrcamentoWorkspace({
     : undefined
   const isExpired = ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando'].includes(orcamento.status) && daysSince(orcamento.validade) > 0
   const canApprove = currentUser.role === 'admin'
+
+  useEffect(() => {
+    setFollowupDraft(orcamento.proximoFollowupEm ?? '')
+  }, [orcamento.id, orcamento.proximoFollowupEm])
 
   useEffect(() => {
     let isMounted = true
@@ -12340,6 +12359,22 @@ function OrcamentoWorkspace({
     }
   }
 
+  async function saveFollowup(date: string) {
+    setIsUpdatingFollowup(true)
+    setError('')
+    setFeedback('')
+    try {
+      await onUpdateFollowup(date)
+      setFollowupDraft(date)
+      setFeedback(`Follow-up ajustado para ${dateLabel(date)}.`)
+      await refreshApprovals()
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o follow-up.')
+    } finally {
+      setIsUpdatingFollowup(false)
+    }
+  }
+
   async function deleteCurrentBudget() {
     const confirmed = window.confirm(`Excluir a proposta ${orcamento.id.slice(0, 8)} de ${cliente.nome}? Esta acao remove itens, versoes e controles vinculados.`)
     if (!confirmed) return
@@ -12404,6 +12439,21 @@ function OrcamentoWorkspace({
               ? `Proposta enviada em ${dateLabel(orcamento.enviadoEm)}. Proximo follow-up: ${dateLabel(orcamento.proximoFollowupEm)}.`
               : 'Clique em Enviar pelo WhatsApp para abrir a conversa e deixar o follow-up programado.'}
           </span>
+        </div>
+        <div className="quote-followup-panel">
+          <div>
+            <strong>Proximo retorno</strong>
+            <span>{orcamento.proximoFollowupEm ? `Agendado para ${dateLabel(orcamento.proximoFollowupEm)}` : 'Sem follow-up definido'}</span>
+          </div>
+          <div className="quote-followup-actions">
+            <button className="button" type="button" disabled={isUpdatingFollowup} onClick={() => void saveFollowup(new Date().toISOString().slice(0, 10))}>Hoje</button>
+            <button className="button" type="button" disabled={isUpdatingFollowup} onClick={() => void saveFollowup(addDays(new Date().toISOString().slice(0, 10), 2))}>2 dias</button>
+            <button className="button" type="button" disabled={isUpdatingFollowup} onClick={() => void saveFollowup(addDays(new Date().toISOString().slice(0, 10), 7))}>7 dias</button>
+            <input type="date" value={followupDraft} onChange={(event) => setFollowupDraft(event.target.value)} />
+            <button className="button primary" type="button" disabled={!followupDraft || isUpdatingFollowup} onClick={() => void saveFollowup(followupDraft)}>
+              {isUpdatingFollowup ? 'Salvando...' : 'Salvar follow-up'}
+            </button>
+          </div>
         </div>
         <div className="quote-workspace-actions">
           {orcamento.status === 'aguardando_aprovacao' && canApprove && (
