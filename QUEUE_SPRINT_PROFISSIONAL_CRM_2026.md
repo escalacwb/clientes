@@ -73,9 +73,11 @@ Entregue nesta rodada:
 - Opt-out de WhatsApp passou a registrar motivo, data e usuario no cliente.
 - Criado `Inbox Campanhas` como fila dedicada de respostas/status para abrir ficha, criar tarefa, iniciar orcamento e marcar ganho/perda.
 - Criado relatorio de campanha por vendedor com enviados, respostas, orcamentos, ganhos, tarefas abertas, receita e ROI.
+- Inbox de campanhas foi simplificado para tres acoes por cliente: ficha, proposta/tarefa e seletor unico de resultado.
+- Inbox de campanhas agora ordena retornos por prioridade e destaca `Comece por este retorno`, para reduzir escolha manual do vendedor.
 
 Proximos pontos:
-- Avancar CPQ: regras de desconto, aprovacao formal, bundles e documento final.
+- Refinar campanhas com fila ainda mais guiada por prioridade e proximo retorno.
 
 ## Sprint C - Pipeline real e oportunidades persistidas
 

@@ -3446,6 +3446,8 @@ function CampanhasInbox({
     dataProximaAcao: '',
   })
   const actionable = items.filter((item) => ['respondeu', 'virou_orcamento', 'enviado', 'nao_respondeu'].includes(item.status))
+  const orderedItems = [...items].sort((a, b) => campaignInboxPriority(b) - campaignInboxPriority(a))
+  const nextInboxItem = orderedItems.find((item) => campaignInboxPriority(item) > 0)
   const counts = items.reduce<Record<string, number>>((acc, item) => {
     acc[item.status] = (acc[item.status] ?? 0) + 1
     return acc
@@ -3522,6 +3524,20 @@ function CampanhasInbox({
         <Info label="Perdidos" value={(counts.perdido ?? 0).toString()} />
       </div>
 
+      {nextInboxItem && (
+        <div className="next-campaign-target">
+          <div>
+            <strong>Comece por este retorno</strong>
+            <span>{nextInboxItem.clienteNome}</span>
+            <small>{campaignStatusLabel(nextInboxItem.status)} - {nextInboxItem.campanhaNome ?? 'Campanha'}</small>
+          </div>
+          <div className="toolbar-actions">
+            <button className="button" type="button" onClick={() => onOpenClient(nextInboxItem.clienteId)}>Ficha</button>
+            <button className="button primary" type="button" onClick={() => run(nextInboxItem.id, () => onOpenBudget(nextInboxItem))}>Proposta</button>
+          </div>
+        </div>
+      )}
+
       {isLoading && <div className="empty-state">Carregando inbox de campanhas...</div>}
       {!isLoading && (
         <div className="table">
@@ -3530,9 +3546,9 @@ function CampanhasInbox({
             <span>Campanha</span>
             <span>Status</span>
             <span>Mensagem</span>
-            <span>Acoes</span>
+            <span>Proximo passo</span>
           </div>
-          {items.map((item) => (
+          {orderedItems.map((item) => (
             <div className="table-row campaign-inbox-row" key={item.id}>
               <span>
                 <strong>{item.clienteNome}</strong>
@@ -3549,23 +3565,30 @@ function CampanhasInbox({
                   Ficha
                 </button>
                 <button className="button primary" type="button" disabled={busyId === item.id} onClick={() => run(item.id, () => onOpenBudget(item))}>
-                  Orcamento
+                  Proposta
                 </button>
                 <button className="button" type="button" disabled={busyId === item.id} onClick={() => run(item.id, async () => { await onCreateTask(item) })}>
                   Criar tarefa
                 </button>
-                <button className="button" type="button" disabled={busyId === item.id} onClick={() => openCampaignResult(item, item.status)}>
-                  Resultado
-                </button>
-                <button className="button" type="button" disabled={busyId === item.id} onClick={() => openCampaignResult(item, 'ganhou')}>
-                  Ganhou
-                </button>
-                <button className="button" type="button" disabled={busyId === item.id} onClick={() => openCampaignResult(item, 'perdido')}>
-                  Perdido
-                </button>
-                <button className="button" type="button" disabled={busyId === item.id} onClick={() => openCampaignResult(item, 'nao_respondeu')}>
-                  Sem resposta
-                </button>
+                <select
+                  className="assign-select"
+                  value=""
+                  disabled={busyId === item.id}
+                  aria-label={`Registrar resultado de ${item.clienteNome}`}
+                  onChange={(event) => {
+                    const status = event.target.value as CampanhaEnvioStatus
+                    event.currentTarget.value = ''
+                    if (status) openCampaignResult(item, status)
+                  }}
+                >
+                  <option value="">Registrar resultado</option>
+                  <option value="respondeu">Respondeu</option>
+                  <option value="virou_orcamento">Virou proposta</option>
+                  <option value="nao_respondeu">Sem resposta</option>
+                  <option value="ganhou">Ganhou</option>
+                  <option value="perdido">Perdido</option>
+                  <option value="nao_contatar">Nao contatar</option>
+                </select>
               </span>
             </div>
           ))}
@@ -3627,6 +3650,17 @@ type CampaignInboxResultForm = {
   resumo: string
   proximaAcao: string
   dataProximaAcao: string
+}
+
+function campaignInboxPriority(item: CampanhaInboxItem) {
+  const weights: Partial<Record<CampanhaEnvioStatus, number>> = {
+    respondeu: 100,
+    virou_orcamento: 95,
+    enviado: 70,
+    nao_respondeu: 55,
+    pendente: 25,
+  }
+  return weights[item.status] ?? 0
 }
 
 function Dashboard({
