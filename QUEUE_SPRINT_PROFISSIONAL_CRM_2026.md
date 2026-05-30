@@ -41,6 +41,7 @@ Entregue nesta rodada:
 - Ficha do cliente prioriza abrir proposta em andamento antes de criar uma nova, reduzindo duplicidade e confusao no atendimento.
 - Clientes sem cadastro ganharam acao unica `Abrir e registrar`, que abre WhatsApp, registra interacao, cria follow-up e muda status para contatado.
 - Minha rotina ganhou bloco `Comece por aqui`, mostrando uma unica acao recomendada com botoes diretos para reduzir paralisia e abandono.
+- Lista de clientes trocou score tecnico por prioridade comercial e mostra a proxima acao ja na linha do cliente.
 
 Proximos pontos:
 - Proposta HTML imprimivel com layout final e termos padrao.

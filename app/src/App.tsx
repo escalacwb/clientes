@@ -3066,6 +3066,7 @@ function Cockpit({
             <article className="cockpit-card" key={cliente.id}>
               <div>
                 <strong>{cliente.nome}</strong>
+                <small>{cliente.proximaMelhorAcao ?? bestNextAction(cliente)}</small>
                 <small>
                   {cliente.cidade}/{cliente.uf} - {cliente.status} - score {Math.round(Number(cliente.score ?? opportunityScore(cliente, [])))}
                 </small>
@@ -3871,7 +3872,7 @@ function Clientes({
             <span>Cliente</span>
             <span>Cidade</span>
             <span>Vendedor</span>
-            <span>Score</span>
+            <span>Prioridade</span>
           </div>
           {visibleClientes.map((cliente) => (
             <button className="table-row four clickable" key={cliente.id} onClick={() => onSelect(cliente)} type="button">
@@ -3882,7 +3883,7 @@ function Clientes({
               <span>{cliente.cidade}/{cliente.uf}</span>
               <span>{cliente.vendedorNome ?? 'Sem vendedor'}</span>
               <span className="score">
-                {cliente.score}
+                {cliente.score >= 75 ? 'Alta' : cliente.score >= 55 ? 'Media' : 'Baixa'}
                 <small>{opportunityScoreDetails(cliente, orcamentos).slice(0, 2).map((item) => item.label).join(' + ') || cliente.motivo}</small>
               </span>
             </button>
