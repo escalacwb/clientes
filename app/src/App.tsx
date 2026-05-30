@@ -10761,7 +10761,11 @@ function Campanhas({
     }
     if (preset === 'compradores-produto') {
       setSegmentoId('selecionados')
-      setPublicoFiltros({ somenteComWhatsapp: true })
+      setPublicoFiltros((current) => ({
+        produtoTerm: current.produtoTerm,
+        medidaTerm: current.medidaTerm,
+        somenteComWhatsapp: true,
+      }))
       return
     }
     if (preset === 'regiao') {

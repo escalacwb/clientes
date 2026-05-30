@@ -283,7 +283,7 @@ export async function listCampanhaSegmento(input: {
   }
   const result =
     segmento.id === 'selecionados'
-      ? await listClientesPage({
+      ? await listClientesCampaignPage({
           page: input.page,
           pageSize: input.pageSize,
           query: input.query,
@@ -291,14 +291,14 @@ export async function listCampanhaSegmento(input: {
           ...commonFilters,
         })
       : segmento.id === 'rodobens-pendentes'
-      ? await listClientesPage({
+      ? await listClientesCampaignPage({
           page: input.page,
           pageSize: input.pageSize,
           query: input.query,
           origemBase: input.filtros?.origemBase && input.filtros.origemBase !== 'todos' ? input.filtros.origemBase : 'rodobens',
           ...commonFilters,
         })
-      : await listClientesPage({
+      : await listClientesCampaignPage({
           page: input.page,
           pageSize: input.pageSize,
           query: input.query,
@@ -316,6 +316,32 @@ export async function listCampanhaSegmento(input: {
   ])
 
   return { ...result, statuses, elegibilidade }
+}
+
+async function listClientesCampaignPage(input: Parameters<typeof listClientesPage>[0]) {
+  if (!input.clienteIds || input.clienteIds.length <= 80) return listClientesPage(input)
+
+  const chunks = chunkArray(input.clienteIds, 80)
+  const pages = await Promise.all(
+    chunks.map((clienteIds) =>
+      listClientesPage({
+        ...input,
+        page: 1,
+        pageSize: 1000,
+        clienteIds,
+      }),
+    ),
+  )
+  const uniqueClientes = new Map<string, Cliente>()
+  pages.forEach((page) => {
+    page.clientes.forEach((cliente) => uniqueClientes.set(cliente.id, cliente))
+  })
+  const clientes = Array.from(uniqueClientes.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+  const from = (input.page - 1) * input.pageSize
+  return {
+    clientes: clientes.slice(from, from + input.pageSize),
+    total: clientes.length,
+  }
 }
 
 export async function listCampanhasSalvas(): Promise<CampanhaSalva[]> {
@@ -554,35 +580,79 @@ async function findClientesByProdutoOuServico(term: string): Promise<string[]> {
   const supabase = await getSupabase()
   if (!supabase) return []
   const terms = term
-    .split(/[;,]/)
+    .split(/[;,\n]/)
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 6)
 
   const clienteIds = new Set<string>()
   for (const item of terms) {
-    const pattern = `%${item}%`
-    const [vendas, servicos] = await Promise.all([
-      supabase
-        .from('vendas_itens')
-        .select('cliente_id')
-        .or(`produto_nome.ilike.${pattern},produto_codigo.ilike.${pattern},marca.ilike.${pattern},modelo.ilike.${pattern},medida.ilike.${pattern}`)
-        .limit(5000),
-      supabase
-        .from('servicos_itens')
-        .select('cliente_id')
-        .or(`servico_nome.ilike.${pattern},servico_codigo.ilike.${pattern},observacao.ilike.${pattern},placa.ilike.${pattern}`)
-        .limit(5000),
-    ])
+    const searchTerms = expandProductSearchTerm(item)
+    for (const searchTerm of searchTerms) {
+      const pattern = `%${searchTerm}%`
+      const searchServices = shouldSearchServicesForCampaignTerm(searchTerm)
+      const [vendas, servicos] = await Promise.all([
+        supabase
+          .from('vendas_itens')
+          .select('cliente_id')
+          .or(`produto_nome.ilike.${pattern},produto_codigo.ilike.${pattern},marca.ilike.${pattern},modelo.ilike.${pattern},medida.ilike.${pattern}`)
+          .limit(5000),
+        searchServices
+          ? supabase
+              .from('servicos_itens')
+              .select('cliente_id')
+              .or(`servico_nome.ilike.${pattern},servico_codigo.ilike.${pattern},observacao.ilike.${pattern},placa.ilike.${pattern}`)
+              .limit(5000)
+          : Promise.resolve({ data: [], error: null }),
+      ])
 
-    if (vendas.error) throw vendas.error
-    if (servicos.error) throw servicos.error
+      if (vendas.error && servicos.error) throw vendas.error
 
-    for (const row of vendas.data ?? []) clienteIds.add(row.cliente_id as string)
-    for (const row of servicos.data ?? []) clienteIds.add(row.cliente_id as string)
+      if (!vendas.error) {
+        for (const row of vendas.data ?? []) clienteIds.add(row.cliente_id as string)
+      }
+      if (!servicos.error) {
+        for (const row of servicos.data ?? []) clienteIds.add(row.cliente_id as string)
+      }
+    }
   }
 
   return Array.from(clienteIds)
+}
+
+function shouldSearchServicesForCampaignTerm(term: string) {
+  const normalized = removeAccentsLocal(term).toLowerCase()
+  if (/\d/.test(normalized)) return false
+  return !['michelin', 'multi', 'multiway', 'x multi', 'xze', 'bfg', 'bfgoodrich', 'bf goodrich', 'samson'].includes(normalized)
+}
+
+function expandProductSearchTerm(term: string) {
+  const normalized = removeAccentsLocal(term).toLowerCase()
+  const terms = new Set([term])
+
+  if (normalized.includes('michelin')) {
+    ;['MULTI', 'MULTIWAY', 'X MULTI', 'XZE'].forEach((item) => terms.add(item))
+  }
+  if (normalized.includes('bf') || normalized.includes('bfg') || normalized.includes('goodrich')) {
+    ;['BFG', 'BFGOODRICH', 'BF GOODRICH'].forEach((item) => terms.add(item))
+  }
+  if (normalized.includes('samson')) {
+    terms.add('SAMSON')
+  }
+
+  return Array.from(terms)
+}
+
+function removeAccentsLocal(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+}
+
+function chunkArray<T>(items: T[], size: number) {
+  const chunks: T[][] = []
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size))
+  }
+  return chunks
 }
 
 async function resolveCampaignClienteIds(filtros?: CampanhaPublicoFiltros, baseClienteIds?: string[]): Promise<string[] | undefined> {
