@@ -153,7 +153,7 @@ import { reviseOrcamento } from './repositories/orcamentosRepository'
 import { updateOrcamentoStatus } from './repositories/orcamentosRepository'
 import { listOportunidadesPage, listOportunidadesResumo, markOportunidadeComTarefa, refreshOportunidadesCache, type OportunidadeFilter, type OportunidadeResumo } from './repositories/oportunidadesRepository'
 import { createPipelineFromSuggestion, listPipelineOportunidades, updatePipelineOportunidade, updatePipelineStage } from './repositories/pipelineRepository'
-import { startDefaultCommercialSequence } from './repositories/sequenciasRepository'
+import { escalateStaleCommercialSequences, startDefaultCommercialSequence } from './repositories/sequenciasRepository'
 import {
   completeTarefa,
   createTarefa,
@@ -12717,6 +12717,8 @@ function Relatorios({
   const [automationRulesLoading, setAutomationRulesLoading] = useState(false)
   const [automationRulesError, setAutomationRulesError] = useState('')
   const [automationRuleSavingCode, setAutomationRuleSavingCode] = useState('')
+  const [isEscalatingSequences, setIsEscalatingSequences] = useState(false)
+  const [sequenceEscalationFeedback, setSequenceEscalationFeedback] = useState('')
   const orcamentosGanhos = resumo?.orcamentosGanhos ?? orcamentos.filter((orcamento) => orcamento.status === 'ganho').length
   const orcamentosTotal = resumo?.orcamentosTotal ?? orcamentos.length
   const taxaConversao = orcamentosTotal ? Math.round((orcamentosGanhos / orcamentosTotal) * 100) : 0
@@ -12931,6 +12933,22 @@ function Relatorios({
     }
   }
 
+  async function runSequenceEscalation() {
+    setIsEscalatingSequences(true)
+    setAutomationRulesError('')
+    setSequenceEscalationFeedback('')
+    try {
+      const created = await escalateStaleCommercialSequences()
+      setSequenceEscalationFeedback(created > 0
+        ? `${created} tarefas gerenciais criadas para sequencias estagnadas.`
+        : 'Nenhuma sequencia estagnada encontrada agora.')
+    } catch (exception) {
+      setAutomationRulesError(exception instanceof Error ? exception.message : 'Nao foi possivel escalar sequencias estagnadas.')
+    } finally {
+      setIsEscalatingSequences(false)
+    }
+  }
+
   function metaDraftFor(vendedorId: string) {
     const meta = metasBySeller.get(vendedorId)
     return metaDrafts[vendedorId] ?? {
@@ -13140,9 +13158,16 @@ function Relatorios({
             <h2>Regras de automacao</h2>
             <p>Controles gerenciais salvos no Supabase para ligar ou desligar automacoes operacionais.</p>
           </div>
-          <Settings size={18} />
+          <div className="toolbar-actions">
+            <button className="button" type="button" disabled={isEscalatingSequences} onClick={() => void runSequenceEscalation()}>
+              <RefreshCw size={15} />
+              {isEscalatingSequences ? 'Escalando...' : 'Escalar sequencias'}
+            </button>
+            <Settings size={18} />
+          </div>
         </div>
         {automationRulesError && <div className="alert">{automationRulesError}</div>}
+        {sequenceEscalationFeedback && <div className="success-alert">{sequenceEscalationFeedback}</div>}
         {automationRulesLoading && <div className="empty-state compact">Carregando regras de automacao...</div>}
         <div className="info-grid">
           {automationRules.map((rule) => (

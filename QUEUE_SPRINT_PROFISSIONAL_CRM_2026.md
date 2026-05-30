@@ -93,6 +93,7 @@ Entregue nesta rodada:
 - Acao em lote no motor de oportunidades para iniciar a cadencia.
 - Pausa automatica de sequencias quando cliente responde, vira orcamento, ganha/perde ou recebe orcamento.
 - Tabelas de regras/logs de automacao para rastreabilidade.
+- Relatorios ganhou acao `Escalar sequencias`, que pausa cadencias estagnadas na ultima etapa e cria tarefas gerenciais deduplicadas.
 
 ## Sprint E - Qualidade de dados e governanca
 

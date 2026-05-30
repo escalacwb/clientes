@@ -297,6 +297,7 @@ Ja entregue:
 - Sequencia padrao de WhatsApp comercial cria etapas de dia 0, dia 2, dia 7 e dia 15.
 - Sequencias ativas pausam automaticamente quando o cliente responde campanha, vira orcamento, ganha, perde, marca nao contatar ou recebe/revisa orcamento.
 - Criadas tabelas `automacao_regras` e `automacao_logs` para rastrear automacoes executadas.
+- Relatorios permite escalar sequencias estagnadas para tarefa gerencial, pausando a cadencia e registrando log da automacao.
 
 Pronto quando:
 - A equipe consegue fazer cadencias consistentes sem lembrar manualmente cada passo.
