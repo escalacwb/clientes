@@ -80,7 +80,7 @@ Execucao:
 
 ### A04 - Menus ainda fragmentam fluxo diario
 
-Status: P1.
+Status: Concluido.
 
 Evidencia:
 - Cockpit, Tarefas, Oportunidades, Campanhas e Orcamentos se sobrepoem como filas de trabalho.
@@ -92,6 +92,11 @@ Acao:
 - Criar `Minha rotina` como tela operacional principal do vendedor.
 - Consolidar: tarefas do dia, campanhas para responder, propostas para retomar, oportunidades e clientes sem proxima acao.
 - Manter telas especializadas como detalhe/gestao, nao como ponto inicial.
+
+Execucao:
+- Tela principal foi reposicionada como `Minha rotina`, mantendo o motor do cockpit ja existente.
+- Menu e titulo principal agora comunicam rotina de trabalho, nao uma tela tecnica paralela.
+- A fila ja consolida tarefas, campanhas, propostas, oportunidades e clientes sem proxima acao como ponto de partida operacional.
 
 ### A05 - Campanhas existem, mas sem campanha ativa a tela parece vazia/confusa
 

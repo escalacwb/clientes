@@ -200,7 +200,7 @@ const navSections = [
   {
     title: 'Operacao',
     items: [
-      { id: 'cockpit', label: 'Cockpit', icon: Gauge },
+      { id: 'cockpit', label: 'Minha rotina', icon: Gauge },
       { id: 'clientes', label: 'Clientes', icon: UsersRound },
       { id: 'rodobens', label: 'Clientes sem cadastro', icon: UserCheck },
       { id: 'tarefas', label: 'Tarefas', icon: CalendarClock },
@@ -2524,8 +2524,8 @@ function App() {
 
 function titleFor(view: string) {
   const titles: Record<string, string> = {
-    cockpit: 'Cockpit diario',
-    dashboard: 'Cockpit diario',
+    cockpit: 'Minha rotina',
+    dashboard: 'Minha rotina',
     clientes: 'Base unica de clientes',
     rodobens: 'Clientes sem cadastro',
     'orcamento-editor': 'Editor de proposta',
@@ -2852,7 +2852,7 @@ function Cockpit({
     <section className="cockpit-layout">
       <section className="panel wide cockpit-hero">
         <div>
-          <p className="eyebrow">Cockpit diario</p>
+          <p className="eyebrow">Minha rotina</p>
           <h2>{ownerLabel}</h2>
           <p>Priorize respostas, propostas vencidas, tarefas e leads sem precisar procurar modulo por modulo.</p>
         </div>
@@ -2866,7 +2866,7 @@ function Cockpit({
         </div>
       </section>
 
-      {isLoading && <div className="empty-state compact">Carregando cockpit comercial...</div>}
+      {isLoading && <div className="empty-state compact">Carregando rotina comercial...</div>}
 
       <section className="panel wide cockpit-next-actions">
         <div className="panel-header">
