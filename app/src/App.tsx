@@ -1279,7 +1279,7 @@ function App() {
           <div className="topbar-title">
             <BrandLogo compact />
             <div>
-              <p className="eyebrow">MVP operacional</p>
+              <p className="eyebrow">Rotina comercial</p>
               <h1>{titleFor(view)}</h1>
             </div>
           </div>
