@@ -53,6 +53,7 @@ Entregue nesta rodada:
 - Prazos de entrega e execucao ganharam atalhos rapidos no editor e na revisao da proposta, evitando digitacao repetitiva.
 - Detalhe da proposta ganhou controle direto de follow-up com atalhos para hoje, 2 dias, 7 dias ou data manual, sem precisar revisar a proposta.
 - PDF da proposta ficou mais compacto e tenta ajustar propostas medias em uma pagina, reduzindo quebras ruins e paginas finais quase vazias.
+- Versao mobile ficou mais operacional: menu horizontal compacto, atalhos grandes, listas em cards e menos elementos de topo competindo com a acao principal.
 
 Proximos pontos:
 - Continuar refinando proposta HTML imprimivel em casos extremos de muitos itens.
@@ -75,6 +76,7 @@ Entregue nesta rodada:
 - Criado relatorio de campanha por vendedor com enviados, respostas, orcamentos, ganhos, tarefas abertas, receita e ROI.
 - Inbox de campanhas foi simplificado para tres acoes por cliente: ficha, proposta/tarefa e seletor unico de resultado.
 - Inbox de campanhas agora ordena retornos por prioridade e destaca `Comece por este retorno`, para reduzir escolha manual do vendedor.
+- Campanhas no mobile ganharam bloco de envio rapido: escolher campanha salva, ver proximo cliente elegivel e abrir WhatsApp sem percorrer toda a tela.
 
 Proximos pontos:
 - Refinar campanhas com fila ainda mais guiada por prioridade e proximo retorno.

@@ -10854,6 +10854,47 @@ function Campanhas({
           <Send size={18} />
         </div>
       </div>
+      <section className="mobile-campaign-quick">
+        <div className="mobile-campaign-quick-header">
+          <span>
+            <strong>Envio rapido</strong>
+            <small>{activeCampanhaId ? 'Campanha salva pronta para WhatsApp' : 'Use o texto atual ou escolha uma campanha salva'}</small>
+          </span>
+          <b>{campaignReadyCount}</b>
+        </div>
+        <label className="mobile-campaign-select">
+          Campanha
+          <select value={activeCampanhaId} onChange={(event) => applySavedCampaign(event.target.value)}>
+            <option value="">Modelo atual</option>
+            {campanhasSalvas.map((campanha) => (
+              <option value={campanha.id} key={campanha.id}>{campanha.nome}</option>
+            ))}
+          </select>
+        </label>
+        {nextClient ? (
+          <div className="mobile-campaign-next">
+            <span>
+              <strong>{nextClient.nome}</strong>
+              <small>{nextClient.cidade || 'Cidade nao informada'} / {nextClient.uf || '--'} Â· {nextClient.whatsapp || 'sem WhatsApp'}</small>
+            </span>
+            <button
+              className="button primary"
+              type="button"
+              disabled={!nextClient.whatsapp}
+              onClick={() => openCampaignWhatsapp(nextClient, messageFor(nextClient))}
+            >
+              <MessageCircle size={16} /> Enviar WhatsApp
+            </button>
+          </div>
+        ) : (
+          <div className="empty-state compact">Nenhum contato pendente elegivel nessa campanha.</div>
+        )}
+        <div className="mobile-campaign-actions">
+          <button className="button" type="button" onClick={() => setCampaignTab('publico')}>Ajustar publico</button>
+          <button className="button" type="button" onClick={() => setCampaignTab('mensagem')}>Editar texto</button>
+          <button className="button" type="button" onClick={() => setCampaignTab('execucao')}>Ver fila</button>
+        </div>
+      </section>
       <div className="campaign-workflow-tabs">
         <button className={campaignTab === 'publico' ? 'active' : ''} type="button" onClick={() => setCampaignTab('publico')}>
           1. Publico <span>{total}</span>

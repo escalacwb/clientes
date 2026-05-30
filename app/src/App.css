@@ -3989,6 +3989,77 @@ h3 {
   margin-top: 3px;
 }
 
+.mobile-campaign-quick {
+  display: none;
+}
+
+.mobile-campaign-quick-header,
+.mobile-campaign-next,
+.mobile-campaign-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobile-campaign-quick-header {
+  justify-content: space-between;
+}
+
+.mobile-campaign-quick-header strong,
+.mobile-campaign-quick-header small,
+.mobile-campaign-next strong,
+.mobile-campaign-next small,
+.mobile-campaign-select {
+  display: block;
+}
+
+.mobile-campaign-quick-header b {
+  min-width: 36px;
+  border-radius: 999px;
+  background: #12312f;
+  color: #ffffff;
+  padding: 5px 9px;
+  text-align: center;
+}
+
+.mobile-campaign-quick small,
+.mobile-campaign-select {
+  color: #64736f;
+  font-size: 12px;
+}
+
+.mobile-campaign-select {
+  font-weight: 800;
+}
+
+.mobile-campaign-select select {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #cfd8d3;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #17211f;
+  font: inherit;
+  margin-top: 5px;
+  padding: 0 10px;
+}
+
+.mobile-campaign-next {
+  justify-content: space-between;
+  border: 1px solid #d7e5dc;
+  border-radius: 8px;
+  background: #f7fbf8;
+  padding: 10px;
+}
+
+.mobile-campaign-next span {
+  min-width: 0;
+}
+
+.mobile-campaign-actions {
+  flex-wrap: wrap;
+}
+
 .campaign-view-publico > .message-template,
 .campaign-view-publico > .campaign-builder-stage:not(.campaign-audience-stage),
 .campaign-view-publico > .campaign-image-panel,
@@ -5193,13 +5264,81 @@ h3 {
 }
 
 @media (max-width: 720px) {
-  .workspace,
+  .app-shell {
+    display: block;
+  }
+
   .sidebar {
-    padding: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    gap: 10px;
+    padding: 10px 12px;
+    box-shadow: 0 10px 28px rgba(18, 49, 47, 0.16);
+  }
+
+  .workspace {
+    padding: 12px;
+  }
+
+  .sidebar .brand {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .sidebar .brand-logo {
+    width: 116px;
+    max-height: 42px;
+    object-fit: contain;
+    object-position: left center;
+  }
+
+  .sidebar .brand span,
+  .sidebar-footer,
+  .nav-section-title {
+    display: none;
+  }
+
+  .nav,
+  .nav-section {
+    display: flex;
+    gap: 8px;
+  }
+
+  .nav {
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-section {
+    min-width: max-content;
+  }
+
+  .nav-item {
+    min-width: max-content;
+    padding: 9px 10px;
+    white-space: nowrap;
   }
 
   .topbar {
     flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .topbar-title .brand-logo,
+  .topbar-title .eyebrow {
+    display: none;
+  }
+
+  .topbar h1 {
+    font-size: 24px;
   }
 
   .topbar-actions {
@@ -5208,7 +5347,22 @@ h3 {
   }
 
   .quick-jump-bar {
+    display: flex;
+    flex-wrap: nowrap;
     justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .quick-jump-bar button {
+    justify-content: center;
+    min-height: 38px;
+    min-width: max-content;
+    padding: 0 8px;
+  }
+
+  .quick-jump-bar::-webkit-scrollbar {
+    display: none;
   }
 
   .global-search-results {
@@ -5222,10 +5376,104 @@ h3 {
   }
 
   .nav {
-    grid-template-columns: 1fr;
+    grid-template-columns: none;
+  }
+
+  .table-head {
+    display: none;
+  }
+
+  .table-row,
+  .table-row.five,
+  .table-row.four,
+  .table-row.three,
+  .table-row.two,
+  .table-row.campaign,
+  .table-row.campaign-inbox-row,
+  .table-row.task,
+  .table-row.catalog-row,
+  .table-row.client360-sale,
+  .table-row.client360-service,
+  .table-row.client360-vehicle,
+  .table-row.client360-task,
+  .table-row.client360-campaign {
+    grid-template-columns: 1fr !important;
+    align-items: stretch;
+    gap: 8px;
+    padding: 12px;
+    text-align: left;
   }
 
   .next-campaign-target {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .campaign-workflow-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 3px;
+    scrollbar-width: none;
+  }
+
+  .campaign-workflow-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .campaign-workflow-tabs button {
+    min-width: max-content;
+  }
+
+  .campaign-guide-summary {
+    display: none;
+  }
+
+  .campaign-workspace > .panel-header .toolbar-actions {
+    display: none;
+  }
+
+  .mobile-campaign-quick {
+    display: grid;
+    gap: 8px;
+    border: 1px solid #d7e5dc;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 10px 24px rgba(31, 41, 55, 0.07);
+    padding: 10px;
+    margin-bottom: 14px;
+  }
+
+  .mobile-campaign-next {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mobile-campaign-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .mobile-campaign-actions .button {
+    min-height: 34px;
+    padding: 0 6px;
+    font-size: 12px;
+  }
+
+  .mobile-campaign-actions .button,
+  .mobile-campaign-next .button,
+  .campaign .button,
+  .campaign-inbox-row .button,
+  .row-actions .button,
+  .toolbar-actions .button {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .campaign-stage-header,
+  .campaign-audience-toolbar,
+  .toolbar-actions,
+  .row-actions {
     align-items: stretch;
     flex-direction: column;
   }
