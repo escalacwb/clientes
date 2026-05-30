@@ -48,6 +48,7 @@ Entregue nesta rodada:
 - Lista de propostas ficou menos poluida: exclusao foi movida para `Mais acoes` e perda fica recolhida em `Marcar perda`, mantendo foco em abrir, enviar, negociar e ganhar.
 - Campanhas ficaram mais orientadas ao uso diario: etapas viraram `Publico`, `Texto`, `Enviar` e `Retornos`, e filtros avancados foram recolhidos para nao assustar o vendedor.
 - Clientes sem cadastro virou uma fila mais operacional: acao principal `Abrir e registrar`, resultado em seletor unico e orientacao curta do fluxo de primeiro contato.
+- Lista de clientes passou a mostrar `Proxima acao` como coluna principal, deixando vendedor como detalhe do local e tornando a fila mais acionavel.
 
 Proximos pontos:
 - Proposta HTML imprimivel com layout final e termos padrao.

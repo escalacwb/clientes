@@ -3860,8 +3860,8 @@ function Clientes({
         <div className="table">
           <div className="table-head four">
             <span>Cliente</span>
-            <span>Cidade</span>
-            <span>Vendedor</span>
+            <span>Local</span>
+            <span>Proxima acao</span>
             <span>Prioridade</span>
           </div>
           {visibleClientes.map((cliente) => (
@@ -3870,8 +3870,14 @@ function Clientes({
                 <strong>{cliente.nome}</strong>
                 <small>{cliente.tipoCliente} · {origemLabel(cliente.origemBase)}</small>
               </span>
-              <span>{cliente.cidade}/{cliente.uf}</span>
-              <span>{cliente.vendedorNome ?? 'Sem vendedor'}</span>
+              <span>
+                {cliente.cidade}/{cliente.uf}
+                <small>{cliente.vendedorNome ?? 'Sem vendedor'}</small>
+              </span>
+              <span>
+                <strong>{cliente.proximaMelhorAcao || bestNextAction(cliente)}</strong>
+                <small>{cliente.proximaAcaoEm ? `Agendada: ${dateLabel(cliente.proximaAcaoEm)}` : 'Sem data definida'}</small>
+              </span>
               <span className="score">
                 {cliente.score >= 75 ? 'Alta' : cliente.score >= 55 ? 'Media' : 'Baixa'}
                 <small>{opportunityScoreDetails(cliente, orcamentos).slice(0, 2).map((item) => item.label).join(' + ') || cliente.motivo}</small>
