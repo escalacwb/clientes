@@ -54,7 +54,7 @@ Execucao:
 
 ### A03 - Criacao de orcamento a partir de cliente nao ficou confiavel no teste
 
-Status: P0.
+Status: Concluido.
 
 Evidencia:
 - Botao de orcar existia, mas o teste automatizado nao chegou ao editor com confianca.
@@ -66,6 +66,12 @@ Acao:
 - Padronizar CTA unico: `Nova proposta`.
 - Em qualquer cliente/ficha/lista, esse CTA deve abrir o editor com cliente selecionado.
 - Se nao houver cliente selecionado, abrir busca de cliente antes do editor.
+
+Execucao:
+- Criado fluxo unico para abrir proposta garantindo cliente em memoria antes do editor.
+- CTA global `Nova proposta` agora abre busca de cliente quando nao ha cliente selecionado.
+- Lista de clientes, Ficha 360, Tarefas, Campanhas, Cockpit e Orcamentos passam pelo mesmo fluxo.
+- Revalidacao local: admin abriu `Nova proposta`, buscou `energia`, selecionou cliente e entrou no editor com `Proposta para...` sem erro de console/rede no fluxo.
 
 ### A04 - Menus ainda fragmentam fluxo diario
 

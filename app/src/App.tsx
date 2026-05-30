@@ -376,6 +376,7 @@ function App() {
   const [cockpitRefreshKey, setCockpitRefreshKey] = useState(0)
   const [quoteSourceView, setQuoteSourceView] = useState('clientes')
   const [quoteOriginContext, setQuoteOriginContext] = useState<QuoteOriginContext>({ kind: 'cliente', label: 'Ficha do cliente' })
+  const [quoteSearchRequestKey, setQuoteSearchRequestKey] = useState(0)
   const [campaignToOpenId, setCampaignToOpenId] = useState('')
   const [campanhaInboxItems, setCampanhaInboxItems] = useState<CampanhaInboxItem[]>([])
   const [campanhaInboxStatusFilter, setCampanhaInboxStatusFilter] = useState<CampanhaEnvioStatus | 'todos'>('respondeu')
@@ -1060,12 +1061,36 @@ function App() {
     setView('cliente360')
   }
 
-  async function openBudgetFromCockpit(clienteId: string, originContext: QuoteOriginContext) {
-    await ensureClientInMemory(clienteId)
+  async function openQuoteForClient(clienteOrId: Cliente | string, sourceView: string, originContext: QuoteOriginContext) {
+    const clienteId = typeof clienteOrId === 'string' ? clienteOrId : clienteOrId.id
+    if (!clienteId) {
+      openQuoteSearch(originContext)
+      return
+    }
+
+    if (typeof clienteOrId === 'string') {
+      await ensureClientInMemory(clienteId)
+    } else {
+      setClientes((current) => (current.some((cliente) => cliente.id === clienteId) ? current : [clienteOrId, ...current]))
+    }
+
     setSelectedClientId(clienteId)
-    setQuoteSourceView('cockpit')
+    setQuoteSourceView(sourceView)
     setQuoteOriginContext(originContext)
     setView('orcamento-editor')
+  }
+
+  function openQuoteSearch(originContext: QuoteOriginContext = { kind: 'cliente', label: 'Orcamento avulso' }) {
+    setQuoteSourceView('orcamentos')
+    setQuoteOriginContext(originContext)
+    setOrcamentosFilter('todos')
+    setOrcamentosPage(1)
+    setQuoteSearchRequestKey((current) => current + 1)
+    setView('orcamentos')
+  }
+
+  async function openBudgetFromCockpit(clienteId: string, originContext: QuoteOriginContext) {
+    await openQuoteForClient(clienteId, 'cockpit', originContext)
   }
 
   function openQuickAction(action: 'tarefas-vencidas' | 'orcamentos-vencidos' | 'clientes-sem-cadastro' | 'campanhas' | 'orcamentos') {
@@ -1092,9 +1117,7 @@ function App() {
       setView('campanhas')
       return
     }
-    setOrcamentosFilter('todos')
-    setOrcamentosPage(1)
-    setView('orcamentos')
+    openQuoteSearch({ kind: 'cliente', label: 'Orcamento avulso' })
   }
 
   useEffect(() => {
@@ -1300,7 +1323,7 @@ function App() {
                 Campanhas
               </button>
               <button className="primary" type="button" onClick={() => openQuickAction('orcamentos')}>
-                Orcar
+                Nova proposta
               </button>
             </div>
           </div>
@@ -1472,10 +1495,7 @@ function App() {
               setView('cliente360')
             }}
             onOpenBudgetEditor={(cliente) => {
-              setSelectedClientId(cliente.id)
-              setQuoteSourceView('clientes')
-              setQuoteOriginContext({ kind: 'cliente', label: 'Lista de clientes' })
-              setView('orcamento-editor')
+              void openQuoteForClient(cliente, 'clientes', { kind: 'cliente', label: 'Lista de clientes' })
             }}
             onUpdateClient={(clienteId, patch) => {
               updateClienteComercial(clienteId, patch).catch((exception) => {
@@ -1620,9 +1640,7 @@ function App() {
               return created
             }}
             onCreateQuote={(initialItems) => {
-              setQuoteSourceView('cliente360')
-              setQuoteOriginContext({ kind: 'cliente', label: 'Ficha 360', initialItems })
-              setView('orcamento-editor')
+              void openQuoteForClient(selectedClient, 'cliente360', { kind: 'cliente', label: 'Ficha 360', initialItems })
             }}
             onBack={() => setView('clientes')}
           />
@@ -1730,7 +1748,14 @@ function App() {
         )}
         {canUseScopedClientViews && ['cliente360', 'orcamento-editor'].includes(view) && !hasSelectedClient && (
           <section className="panel wide">
-            <div className="empty-state">Nenhum cliente carregado para esta acao.</div>
+            <div className="empty-state">
+              Nenhum cliente carregado para esta acao.
+              {view === 'orcamento-editor' && (
+                <button className="button primary" type="button" onClick={() => openQuoteSearch({ kind: 'cliente', label: 'Orcamento avulso' })}>
+                  Buscar cliente para proposta
+                </button>
+              )}
+            </div>
           </section>
         )}
         {canUseScopedClientViews && view === 'carteira' && (
@@ -1899,13 +1924,7 @@ function App() {
               setView('cliente360')
             }}
             onOpenBudgetEditor={(clienteId, originContext) => {
-              const cliente = scopedClientes.find((item) => item.id === clienteId)
-              if (cliente) {
-                setSelectedClientId(cliente.id)
-                setQuoteSourceView('tarefas')
-                setQuoteOriginContext(originContext ?? { kind: 'tarefa', label: 'Fila de tarefas' })
-                setView('orcamento-editor')
-              }
+              void openQuoteForClient(clienteId, 'tarefas', originContext ?? { kind: 'tarefa', label: 'Fila de tarefas' })
             }}
             onCreate={async (task) => {
               const created = await createTarefa(task)
@@ -2051,18 +2070,11 @@ function App() {
               setView('cliente360')
             }}
             onOpenInboxBudget={async (item) => {
-              const found = await listClientesPage({ page: 1, pageSize: 1, clienteIds: [item.clienteId] })
-              const cliente = found.clientes[0]
-              if (!cliente) return
-              setClientes((current) => current.some((row) => row.id === cliente.id) ? current : [cliente, ...current])
-              setSelectedClientId(cliente.id)
-              setQuoteSourceView('campanhas')
-              setQuoteOriginContext({
+              await openQuoteForClient(item.clienteId, 'campanhas', {
                 kind: 'campanha',
                 sourceId: item.campanhaId,
                 label: item.campanhaNome ?? 'Campanha',
               })
-              setView('orcamento-editor')
             }}
             onCreateInboxTask={async (item) => {
               const created = await createTarefa({
@@ -2118,13 +2130,7 @@ function App() {
               setCampanhaInboxItems((current) => current.map((row) => row.id === item.id ? { ...item, ...updated, clienteNome: item.clienteNome, clienteCidade: item.clienteCidade, clienteUf: item.clienteUf } : row))
             }}
             onOpenBudgetEditor={(cliente, originContext) => {
-              setClientes((current) =>
-                current.some((item) => item.id === cliente.id) ? current : [cliente, ...current],
-              )
-              setSelectedClientId(cliente.id)
-              setQuoteSourceView('campanhas')
-              setQuoteOriginContext(originContext)
-              setView('orcamento-editor')
+              void openQuoteForClient(cliente, 'campanhas', originContext)
             }}
             onDeleteCampaign={async (campanhaId) => {
               await deleteCampanha(campanhaId)
@@ -2235,6 +2241,7 @@ function App() {
             currentUser={session}
             catalogo={catalogo}
             preparedQuoteContext={quoteOriginContext}
+            openSearchRequestKey={quoteSearchRequestKey}
             page={orcamentosPage}
             pageSize={50}
             total={orcamentosTotal}
@@ -2251,17 +2258,10 @@ function App() {
               setView('orcamento-detalhe')
             }}
             onCreateLooseBudget={(cliente) => {
-              setClientes((current) =>
-                current.some((item) => item.id === cliente.id) ? current : [cliente, ...current],
-              )
-              setSelectedClientId(cliente.id)
-              setQuoteSourceView('orcamentos')
-              setQuoteOriginContext((current) =>
-                current.initialItems?.length
-                  ? { ...current, label: current.label || 'Orcamento avulso' }
-                  : { kind: 'cliente', label: 'Orcamento avulso' },
-              )
-              setView('orcamento-editor')
+              const originContext = quoteOriginContext.initialItems?.length
+                ? { ...quoteOriginContext, label: quoteOriginContext.label || 'Orcamento avulso' }
+                : { kind: 'cliente' as const, label: 'Orcamento avulso' }
+              void openQuoteForClient(cliente, 'orcamentos', originContext)
             }}
             onRevise={async (id, input) => {
               const revised = await reviseOrcamento(id, input, input.itens)
@@ -2858,7 +2858,7 @@ function Cockpit({
                       type="button"
                       onClick={() => onOpenBudget(item.clienteId, { kind: 'campanha', sourceId: item.envio.campanhaId, label: item.envio.campanhaNome ?? 'Campanha' })}
                     >
-                      Orcar
+                      Nova proposta
                     </button>
                   </>
                 )}
@@ -2888,7 +2888,7 @@ function Cockpit({
                     type="button"
                     onClick={() => onOpenBudget(item.clienteId, { kind: 'cliente', sourceId: item.oportunidade.id, label: item.oportunidade.proximaAcao || 'Oportunidade' })}
                   >
-                    Orcar
+                    Nova proposta
                   </button>
                 )}
               </div>
@@ -5319,7 +5319,7 @@ function Tarefas({
                     type="button"
                     onClick={() => onOpenBudgetEditor(tarefa.clienteId, { kind: 'tarefa', sourceId: tarefa.id, label: tarefa.titulo })}
                   >
-                    Orcar
+                    Nova proposta
                   </button>
                   <button className="button primary" type="button" onClick={() => onComplete(tarefa.id)}>Concluir</button>
                   <button className="button" type="button" onClick={() => openCompletion(tarefa)}>
@@ -5551,7 +5551,7 @@ function Tarefas({
                     onClick={() => onOpenBudgetEditor(tarefa.clienteId, { kind: 'tarefa', sourceId: tarefa.id, label: tarefa.titulo })}
                     type="button"
                   >
-                    Orcar
+                    Nova proposta
                   </button>
                   <button className="button primary" onClick={() => onComplete(tarefa.id)} type="button">
                     Concluir
@@ -6266,7 +6266,7 @@ function FichaCliente({
           <a className={!quoteWhatsUrl ? 'button disabled' : 'button'} href={quoteWhatsUrl} target="_blank" rel="noreferrer">
             <MessageCircle size={16} /> Abrir WA.ME
           </a>
-          <button className="button primary" type="submit">Criar orcamento</button>
+          <button className="button primary" type="submit">Nova proposta</button>
         </form>
       )}
 
@@ -6768,7 +6768,7 @@ function OrcamentoEditor({
             Copiar mensagem
           </button>
           <button className="button" type="submit" value="draft" disabled={isSaving}>
-            {isSaving ? 'Criando...' : 'Criar orcamento'}
+            {isSaving ? 'Criando...' : 'Nova proposta'}
           </button>
           <button className="button primary" type="submit" value="send" disabled={isSaving || approvalWarnings.length > 0 || !waUrl}>
             {isSaving ? 'Criando...' : 'Criar e enviar'}
@@ -7819,7 +7819,7 @@ function Cliente360({
               <MessageCircle size={16} /> Abrir WhatsApp
             </button>
           )}
-          <button className="button primary" type="button" onClick={() => onCreateQuote()}>Criar orcamento</button>
+          <button className="button primary" type="button" onClick={() => onCreateQuote()}>Nova proposta</button>
           <button className="button" type="button" onClick={handleCreateTask} disabled={isCreatingTask}>
             {isCreatingTask ? 'Criando...' : 'Criar tarefa'}
           </button>
@@ -8028,7 +8028,7 @@ function Cliente360({
               )}
               {lastAIAnalysis.detectedProducts.length > 0 && (
                 <button className="button" type="button" onClick={() => onCreateQuote(quoteItemsFromAnalysis(lastAIAnalysis))}>
-                  Criar orcamento com itens detectados
+                  Nova proposta com itens detectados
                 </button>
               )}
             </div>
@@ -8268,7 +8268,7 @@ function Cliente360({
               <span>{venda.vendedorNome ?? 'Sem vendedor'}</span>
               <span>{venda.kmExtraido ? `${venda.kmExtraido.toLocaleString('pt-BR')} km` : venda.veiculoObservacao || venda.nota || venda.pedido || 'Sem veiculo'}</span>
               <strong>{money(venda.valorTotal)}</strong>
-              <button className="button compact-button" type="button" onClick={() => onCreateQuote([quoteItemFromVenda(venda)])}>Orcar</button>
+              <button className="button compact-button" type="button" onClick={() => onCreateQuote([quoteItemFromVenda(venda)])}>Nova proposta</button>
             </div>
           ))}
           {vendasFiltradas.length === 0 && <div className="empty-state">Nenhuma venda neste filtro.</div>}
@@ -8300,7 +8300,7 @@ function Cliente360({
               <span>{servico.placa || 'Sem placa'}<small>{servico.kmExtraido ? `${servico.kmExtraido.toLocaleString('pt-BR')} km` : ''}</small></span>
               <span>{servico.vendedorNome ?? 'Sem vendedor'}</span>
               <strong>{money(servico.valorTotal)}</strong>
-              <button className="button compact-button" type="button" onClick={() => onCreateQuote([quoteItemFromServico(servico)])}>Orcar</button>
+              <button className="button compact-button" type="button" onClick={() => onCreateQuote([quoteItemFromServico(servico)])}>Nova proposta</button>
             </div>
           ))}
           {servicosFiltrados.length === 0 && <div className="empty-state">Nenhum servico neste filtro.</div>}
@@ -11183,6 +11183,7 @@ function Orcamentos({
   currentUser,
   catalogo,
   preparedQuoteContext,
+  openSearchRequestKey,
   page,
   pageSize,
   total,
@@ -11202,6 +11203,7 @@ function Orcamentos({
   currentUser: SessaoUsuario
   catalogo: CatalogoItem[]
   preparedQuoteContext: QuoteOriginContext
+  openSearchRequestKey: number
   page: number
   pageSize: number
   total: number
@@ -11286,6 +11288,12 @@ function Orcamentos({
     }
   }, [preparedQuoteContext])
 
+  useEffect(() => {
+    if (openSearchRequestKey > 0) {
+      setShowLooseBudgetSearch(true)
+    }
+  }, [openSearchRequestKey])
+
   async function openVersionHistory(orcamento: Orcamento) {
     setVersionTarget(orcamento)
     setVersions([])
@@ -11331,7 +11339,7 @@ function Orcamentos({
             type="button"
             onClick={() => setShowLooseBudgetSearch((current) => !current)}
           >
-            <WalletCards size={16} /> Novo orcamento
+            <WalletCards size={16} /> Nova proposta
           </button>
           <label className="mini-select">
             <Filter size={15} />
@@ -11353,7 +11361,7 @@ function Orcamentos({
         <section className="quote-client-search">
           <div className="panel-header">
             <div>
-              <h3>Novo orcamento avulso</h3>
+              <h3>Nova proposta</h3>
               <p>
                 {preparedQuoteContext.initialItems?.length
                   ? `Item preparado a partir de ${preparedQuoteContext.label}. Escolha o cliente para montar a proposta.`
@@ -11367,7 +11375,7 @@ function Orcamentos({
             <input
               value={looseBudgetQuery}
               onChange={(event) => setLooseBudgetQuery(event.target.value)}
-              placeholder="Buscar cliente para orcamento"
+              placeholder="Buscar cliente para proposta"
               autoFocus
             />
           </label>
