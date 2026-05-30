@@ -116,7 +116,7 @@ Acao:
 
 ### A06 - Pipeline tem estrutura, mas poucos dados reais abertos
 
-Status: P1.
+Status: Concluido.
 
 Evidencia:
 - Pipeline real estava com 0 deals em aberto no teste.
@@ -129,6 +129,11 @@ Acao:
 - Criar conversao em lote de oportunidades priorizadas para deals.
 - Definir regras automaticas: campanha respondeu -> deal; proposta enviada -> deal; cliente de alto valor sem contato -> deal sugerido.
 - Exibir alerta quando houver fila grande e pipeline vazio.
+
+Execucao:
+- Tela de oportunidades agora alerta quando ha oportunidades ativas e o pipeline real esta vazio.
+- Adicionada selecao rapida das primeiras oportunidades priorizadas.
+- Adicionada acao em lote `Criar deals` para converter oportunidades selecionadas em pipeline real.
 
 ### A07 - Funcionalidades de gestao demais para o vendedor
 

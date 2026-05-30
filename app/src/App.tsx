@@ -4305,6 +4305,7 @@ function Oportunidades({
   const [isAssigning, setIsAssigning] = useState(false)
   const [isCreatingCampaign, setIsCreatingCampaign] = useState(false)
   const [isStartingSequence, setIsStartingSequence] = useState(false)
+  const [isCreatingPipelineBatch, setIsCreatingPipelineBatch] = useState(false)
   const [editingDealId, setEditingDealId] = useState('')
   const [dealDraft, setDealDraft] = useState({
     titulo: '',
@@ -4478,6 +4479,15 @@ function Oportunidades({
           )
         })}
       </div>
+      {pipelineAberto.length === 0 && totalAtivas > 0 && (
+        <div className="readiness warn">
+          <strong>Pipeline real vazio com oportunidades ativas.</strong>
+          <span>Selecione oportunidades priorizadas e crie deals para transformar a fila cacheada em funil comercial acompanhavel.</span>
+          <button className="button primary compact-button" type="button" onClick={() => setSelectedIds(selectableIds.slice(0, 10))}>
+            Selecionar primeiras oportunidades
+          </button>
+        </div>
+      )}
       {pipelineAberto.length > 0 && (
         <div className="pipeline-kanban">
           {pipelineStages.slice(0, 5).map((stage) => {
@@ -4652,6 +4662,32 @@ function Oportunidades({
           }}
         >
           {isStartingSequence ? 'Iniciando...' : 'Sequencia 0/2/7/15'}
+        </button>
+        <button
+          className="button primary"
+          type="button"
+          disabled={selectedOportunidades.length === 0 || isCreatingPipelineBatch}
+          onClick={async () => {
+            setError('')
+            setIsCreatingPipelineBatch(true)
+            let created = 0
+            try {
+              for (const oportunidade of selectedOportunidades) {
+                if (oportunidade.bloqueada || createdPipeline.includes(oportunidade.id)) continue
+                await onCreatePipeline(oportunidade)
+                setCreatedPipeline((current) => [...new Set([...current, oportunidade.id])])
+                created += 1
+              }
+              setSelectedIds([])
+              setError(`${created} deals criados no pipeline real.`)
+            } catch (exception) {
+              setError(exception instanceof Error ? exception.message : 'Nao foi possivel criar deals em lote.')
+            } finally {
+              setIsCreatingPipelineBatch(false)
+            }
+          }}
+        >
+          {isCreatingPipelineBatch ? 'Criando deals...' : 'Criar deals'}
         </button>
         <span className="status-pill">{selectedIds.length} selecionados</span>
       </div>
