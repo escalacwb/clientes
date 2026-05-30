@@ -371,6 +371,7 @@ Ja entregue:
 - Alertas comerciais viraram acionaveis: criam tarefa e abrem proposta ou ficha do cliente direto do painel.
 - Propostas paradas podem ser marcadas como perdidas direto dos alertas, exigindo motivo.
 - Relatorios mostra forecast por origem da base e por produto/medida cotada no pipeline aberto.
+- Relatorios permite baixar PDF da reuniao gerencial, alem do CSV.
 
 Pronto quando:
 - Gerente consegue conduzir reuniao semanal pelo forecast do CRM.

@@ -7388,7 +7388,7 @@ function downloadCsv(filename: string, rows: Array<Record<string, unknown>>) {
   window.URL.revokeObjectURL(url)
 }
 
-async function downloadQuotePdf(element: HTMLElement | null, clienteNome: string, date?: string) {
+async function downloadElementPdf(element: HTMLElement | null, filename: string) {
   if (!element) return
   const exportStage = document.createElement('div')
   const exportElement = element.cloneNode(true) as HTMLElement
@@ -7430,10 +7430,14 @@ async function downloadQuotePdf(element: HTMLElement | null, clienteNome: string
       pageIndex += 1
     }
 
-    pdf.save(`${quotePdfFileName(clienteNome, date)}.pdf`)
+    pdf.save(filename.endsWith('.pdf') ? filename : `${filename}.pdf`)
   } finally {
     exportStage.remove()
   }
+}
+
+async function downloadQuotePdf(element: HTMLElement | null, clienteNome: string, date?: string) {
+  await downloadElementPdf(element, `${quotePdfFileName(clienteNome, date)}.pdf`)
 }
 
 function waitForImages(element: HTMLElement) {
@@ -12793,6 +12797,7 @@ function Relatorios({
   const [managementAlertFeedback, setManagementAlertFeedback] = useState('')
   const [managementLossReasons, setManagementLossReasons] = useState<Record<string, string>>({})
   const [managementLossSavingId, setManagementLossSavingId] = useState('')
+  const reportPdfRef = useRef<HTMLElement | null>(null)
   const orcamentosGanhos = resumo?.orcamentosGanhos ?? orcamentos.filter((orcamento) => orcamento.status === 'ganho').length
   const orcamentosTotal = resumo?.orcamentosTotal ?? orcamentos.length
   const taxaConversao = orcamentosTotal ? Math.round((orcamentosGanhos / orcamentosTotal) * 100) : 0
@@ -13211,6 +13216,10 @@ function Relatorios({
     downloadCsv(`reuniao-gerencial-${today}.csv`, rows)
   }
 
+  function exportWeeklyMeetingPdf() {
+    void downloadElementPdf(reportPdfRef.current, `Reuniao gerencial - ${quotePdfDatePart()}.pdf`)
+  }
+
   async function createManagementAlertTask(alert: ManagementAlertRow) {
     setManagementTaskCreatingId(alert.id)
     setManagementAlertFeedback('')
@@ -13253,7 +13262,7 @@ function Relatorios({
   }
 
   return (
-    <section className="grid-layout">
+    <section className="grid-layout" ref={reportPdfRef}>
       <div className="metric-grid">
         <Metric icon={WalletCards} label="Pipeline aberto" value={money(valorAberto)} tone="blue" />
         <Metric icon={CheckCircle2} label="Conversao orcamentos" value={`${taxaConversao}%`} tone="green" />
@@ -13270,10 +13279,16 @@ function Relatorios({
             <h2>Forecast e gargalos</h2>
             <p>Pipeline ponderado por etapa, propostas vencidas e proxima acao gerencial.</p>
           </div>
-          <button className="button ghost" type="button" onClick={exportWeeklyMeetingCsv} disabled={metaRows.length === 0}>
-            <FileUp size={16} />
-            Exportar CSV
-          </button>
+          <div className="inline-actions">
+            <button className="button ghost" type="button" onClick={exportWeeklyMeetingCsv} disabled={metaRows.length === 0}>
+              <FileUp size={16} />
+              Exportar CSV
+            </button>
+            <button className="button ghost" type="button" onClick={exportWeeklyMeetingPdf}>
+              <FileUp size={16} />
+              Baixar PDF
+            </button>
+          </div>
         </div>
         <div className="info-grid forecast-summary">
           <Info label="Pipeline aberto" value={money(pipelineForecast)} />

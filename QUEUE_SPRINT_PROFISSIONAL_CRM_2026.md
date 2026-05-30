@@ -123,9 +123,10 @@ Entregue nesta rodada:
 - Alertas comerciais agora permitem criar tarefa e abrir proposta/ficha diretamente pelo painel gerencial.
 - Alertas de proposta agora permitem marcar perda com motivo obrigatorio direto no painel gerencial.
 - Forecast por origem da base e por produto/medida cotada no pipeline aberto.
+- Exportacao PDF da reuniao semanal diretamente pelos Relatorios.
 
 Proximos pontos:
-- Exportacao PDF da reuniao semanal.
+- Revisar e limpar itens antigos da queue que ja foram entregues em sprints anteriores.
 
 ## Ordem de execucao continua
 
