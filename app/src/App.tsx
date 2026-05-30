@@ -6393,7 +6393,7 @@ function FichaCliente({
             <strong>{money(budgetTotal)}</strong>
           </div>
           <a className={!quoteWhatsUrl ? 'button disabled' : 'button'} href={quoteWhatsUrl} target="_blank" rel="noreferrer">
-            <MessageCircle size={16} /> Abrir WA.ME
+            <MessageCircle size={16} /> Abrir WhatsApp
           </a>
           <button className="button primary" type="submit">Nova proposta</button>
         </form>
@@ -6722,7 +6722,7 @@ function OrcamentoEditor({
             Baixar PDF
           </button>
           <a className={!waUrl ? 'button disabled' : 'button'} href={waUrl} target="_blank" rel="noreferrer">
-            <MessageCircle size={16} /> Abrir WA.ME
+            <MessageCircle size={16} /> Abrir WhatsApp
           </a>
         </div>
       </div>
@@ -7992,6 +7992,7 @@ function Cliente360({
   const veiculosResumo = buildVehicleSummary(veiculos, clienteServicos, clienteVendas)
   const tarefasAbertas = clienteTarefas.filter((tarefa) => tarefa.status === 'aberta')
   const orcamentosAbertos = clienteOrcamentos.filter((orcamento) => ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando'].includes(orcamento.status))
+  const orcamentoAbertoPrincipal = [...orcamentosAbertos].sort((a, b) => b.data.localeCompare(a.data))[0]
   const ultimoOrcamento = [...clienteOrcamentos].sort((a, b) => b.data.localeCompare(a.data))[0]
   const latestMovements = buildClientServiceTimeline(clienteInteracoes, clienteOrcamentos, clienteTarefas, clienteCampanhas)
   const contactIsTerminal = isTerminalContactResult(contactResult)
@@ -8189,7 +8190,16 @@ function Cliente360({
               <MessageCircle size={16} /> Abrir WhatsApp
             </button>
           )}
-          <button className="button primary" type="button" onClick={() => onCreateQuote()}>Nova proposta</button>
+          {orcamentoAbertoPrincipal ? (
+            <button className="button primary" type="button" onClick={() => onOpenBudget(orcamentoAbertoPrincipal.id)}>
+              Abrir proposta aberta
+            </button>
+          ) : (
+            <button className="button primary" type="button" onClick={() => onCreateQuote()}>Nova proposta</button>
+          )}
+          {orcamentoAbertoPrincipal && (
+            <button className="button" type="button" onClick={() => onCreateQuote()}>Nova proposta</button>
+          )}
           <button className="button" type="button" onClick={handleCreateTask} disabled={isCreatingTask}>
             {isCreatingTask ? 'Criando...' : 'Criar tarefa'}
           </button>
@@ -12436,7 +12446,7 @@ function OrcamentoWorkspace({
             {isDeletingBudget ? 'Excluindo...' : 'Excluir'}
           </button>
           <button className="button primary" type="button" disabled={!waUrl || isUpdatingStatus} onClick={() => void registerSendAndOpenWhatsapp()}>
-            <MessageCircle size={16} /> Registrar envio e abrir WA.ME
+            <MessageCircle size={16} /> Enviar pelo WhatsApp
           </button>
         </div>
       </section>
@@ -12454,11 +12464,11 @@ function OrcamentoWorkspace({
           <Info label="Enviado em" value={dateLabel(orcamento.enviadoEm)} />
         </div>
         <div className="readiness ok">
-          <strong>Controle de envio</strong>
+          <strong>Envio da proposta</strong>
           <span>
             {orcamento.enviadoEm
               ? `Proposta enviada em ${dateLabel(orcamento.enviadoEm)}. Proximo follow-up: ${dateLabel(orcamento.proximoFollowupEm)}.`
-              : 'Use "Registrar envio e abrir WA.ME" para abrir o WhatsApp e gravar o envio na proposta.'}
+              : 'Clique em Enviar pelo WhatsApp para abrir a conversa e deixar o follow-up programado.'}
           </span>
         </div>
         <div className="quote-workspace-actions">

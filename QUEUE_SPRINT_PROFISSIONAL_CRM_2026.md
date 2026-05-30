@@ -38,11 +38,12 @@ Entregue nesta rodada:
 - Navegacao principal ficou mais enxuta: tarefas, oportunidades, relatorios e auditoria deixam de competir com a rotina diaria no menu.
 - Orcamento ganhou atalhos de pacotes complementares, sugerindo montagem, balanceamento, alinhamento e cambagem quando ha pneu na proposta.
 - Botoes de resultado do atendimento agora preenchem proxima acao e data automaticamente para orcamento, sem resposta e comprar depois.
+- Ficha do cliente prioriza abrir proposta em andamento antes de criar uma nova, reduzindo duplicidade e confusao no atendimento.
 
 Proximos pontos:
 - Proposta HTML imprimivel com layout final e termos padrao.
 - Campo de prazo de entrega/execucao por item ou proposta.
-- Controle de envio: enviado em, enviado por, proximo follow-up, status de aceite manual. Parcial: acao `Registrar envio e abrir WA.ME` grava envio e follow-up antes de abrir WhatsApp.
+- Controle de envio: enviado em, enviado por, proximo follow-up, status de aceite manual. Parcial: acao `Enviar pelo WhatsApp` grava envio e follow-up antes de abrir a conversa.
 
 ## Sprint B - Campanhas seguras e segmentacao forte
 
