@@ -1542,7 +1542,6 @@ function App() {
             orcamentos={scopedOrcamentos}
             vendasItens={scopedVendasItens}
             servicosItens={scopedServicosItens}
-            catalogo={catalogo}
             page={clientesPage}
             pageSize={clientePageSize}
             total={clientesTotal}
@@ -1606,11 +1605,6 @@ function App() {
                   ...current,
                 ])
               }
-              return created
-            }}
-            onAddBudget={async (orcamento) => {
-              const created = await createOrcamento(orcamento, orcamento.itens)
-              setOrcamentos((current) => [created, ...current])
               return created
             }}
           />
@@ -1694,7 +1688,7 @@ function App() {
                 clienteId: selectedClient.id,
                 vendedorId: selectedClient.vendedorId ?? session?.id,
                 titulo: bestNextAction(selectedClient),
-                descricao: `Tarefa criada pela Ficha 360. ${smartSummary(selectedClient, scopedInteracoes)}`,
+                descricao: `Tarefa criada pela ficha completa. ${smartSummary(selectedClient, scopedInteracoes)}`,
                 dataVencimento: addDays(new Date().toISOString().slice(0, 10), 1),
                 prioridade: 80,
                 origem: 'cliente360',
@@ -1704,7 +1698,7 @@ function App() {
               return created
             }}
             onCreateQuote={(initialItems) => {
-              void openQuoteForClient(selectedClient, 'cliente360', { kind: 'cliente', label: 'Ficha 360', initialItems })
+              void openQuoteForClient(selectedClient, 'cliente360', { kind: 'cliente', label: 'Ficha completa', initialItems })
             }}
             onBack={() => setView('clientes')}
           />
@@ -2580,7 +2574,7 @@ function titleFor(view: string) {
     relatorios: 'Relatorios gerenciais',
     usuarios: 'Usuarios e permissoes',
     auditoria: 'Auditoria',
-    cliente360: 'Ficha 360 do cliente',
+    cliente360: 'Ficha completa do cliente',
   }
   return titles[view]
 }
@@ -3094,7 +3088,7 @@ function Cockpit({
         <div className="panel-header">
           <div>
             <h2>Fila de follow-up comercial</h2>
-            <p>Retornos criados por atendimento, propostas, campanhas e Ficha 360.</p>
+            <p>Retornos criados por atendimento, propostas, campanhas e ficha completa.</p>
           </div>
           <button className="button" type="button" onClick={() => onOpenModule('tarefas')}>Abrir tarefas</button>
         </div>
@@ -3103,7 +3097,7 @@ function Cockpit({
             ['atendimento', 'Atendimento'],
             ['orcamento', 'Propostas'],
             ['campanha', 'Campanhas'],
-            ['cliente360', 'Ficha 360'],
+            ['cliente360', 'Ficha completa'],
             ['cockpit', 'Sem prox. acao'],
           ].map(([origin, label]) => {
             const items = contactFollowups.filter((tarefa) => (tarefa.origem ?? '').startsWith(origin))
@@ -3816,7 +3810,6 @@ function Clientes({
   orcamentos,
   vendasItens,
   servicosItens,
-  catalogo,
   page,
   pageSize,
   total,
@@ -3829,7 +3822,6 @@ function Clientes({
   onOpenBudgetEditor,
   onUpdateClient,
   onAddInteraction,
-  onAddBudget,
 }: {
   currentUser: SessaoUsuario
   clientes: Array<Cliente & { score: number; motivo: string; proximaMelhorAcao: string }>
@@ -3838,7 +3830,6 @@ function Clientes({
   orcamentos: Orcamento[]
   vendasItens: VendaItem[]
   servicosItens: ServicoItem[]
-  catalogo: CatalogoItem[]
   page: number
   pageSize: number
   total: number
@@ -3851,7 +3842,6 @@ function Clientes({
   onOpenBudgetEditor: (cliente: Cliente) => void
   onUpdateClient: (clienteId: string, patch: Partial<Cliente>) => void
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
-  onAddBudget: (orcamento: OrcamentoInput) => Promise<Orcamento>
 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const safePage = Math.min(page, totalPages)
@@ -3909,12 +3899,10 @@ function Clientes({
           orcamentos={orcamentos}
           vendasItens={vendasItens}
           servicosItens={servicosItens}
-        catalogo={catalogo}
-        onOpenFullProfile={() => onOpenFullProfile(selectedClient)}
-        onOpenBudgetEditor={() => onOpenBudgetEditor(selectedClient)}
-        onUpdateClient={onUpdateClient}
+          onOpenFullProfile={() => onOpenFullProfile(selectedClient)}
+          onOpenBudgetEditor={() => onOpenBudgetEditor(selectedClient)}
+          onUpdateClient={onUpdateClient}
           onAddInteraction={onAddInteraction}
-          onAddBudget={onAddBudget}
         />
       ) : (
         <aside className="panel client-card">
@@ -5365,7 +5353,7 @@ function Tarefas({
               <option value="todas">Todas as origens</option>
               <option value="manual">Manual</option>
               <option value="atendimento">Atendimento</option>
-              <option value="cliente360">Ficha 360</option>
+              <option value="cliente360">Ficha completa</option>
               <option value="cockpit">Sem proxima acao</option>
               <option value="interacao">Interacao</option>
               <option value="orcamento">Orcamento</option>
@@ -5980,10 +5968,8 @@ function FichaCliente({
   orcamentos,
   vendasItens,
   servicosItens,
-  catalogo,
   onUpdateClient,
   onAddInteraction,
-  onAddBudget,
   onOpenFullProfile,
   onOpenBudgetEditor,
 }: {
@@ -5993,16 +5979,13 @@ function FichaCliente({
   orcamentos: Orcamento[]
   vendasItens: VendaItem[]
   servicosItens: ServicoItem[]
-  catalogo: CatalogoItem[]
   onUpdateClient: (clienteId: string, patch: Partial<Cliente>) => void
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
-  onAddBudget: (orcamento: OrcamentoInput) => Promise<Orcamento>
   onOpenFullProfile: () => void
   onOpenBudgetEditor: () => void
 }) {
   const [showForm, setShowForm] = useState(false)
   const [showEditForm, setShowEditForm] = useState(false)
-  const [showBudgetForm, setShowBudgetForm] = useState(false)
   const [showFullProfile] = useState(false)
   const [historySeller, setHistorySeller] = useState('todos')
   const [formError, setFormError] = useState('')
@@ -6013,15 +5996,6 @@ function FichaCliente({
     resumo: '',
     dataProximaAcao: '',
   })
-  const [budgetForm, setBudgetForm] = useState({
-    validade: '',
-    previsaoFechamento: '',
-    formaPagamento: '',
-    observacao: '',
-  })
-  const [budgetItems, setBudgetItems] = useState<OrcamentoItemInput[]>([
-    { descricao: '', tipo: 'produto', quantidade: 1, valorUnitario: 0 },
-  ])
   const [editForm, setEditForm] = useState({
     telefone: cliente.telefone ?? '',
     whatsapp: cliente.whatsapp ?? '',
@@ -6058,27 +6032,6 @@ function FichaCliente({
         `Bom dia, ${cliente.responsavel ?? cliente.nome}. Aqui e da Capital Truck Center. Estou passando para ver se precisa cotar pneus ou algum servico.`,
       )}`
     : undefined
-  const validBudgetItems = budgetItems
-    .filter((item) => item.descricao.trim() && item.quantidade > 0 && item.valorUnitario > 0)
-    .map((item) => {
-      const discountFactor = 1 - Math.min(Math.max(item.descontoPercentual ?? 0, 0), 100) / 100
-      const valorTotal = item.quantidade * item.valorUnitario * discountFactor
-      return { ...item, valorTotal }
-    })
-  const budgetTotal = validBudgetItems.reduce((total, item) => total + (item.valorTotal ?? 0), 0)
-  const quoteMessage = buildQuoteMessage(
-    cliente,
-    validBudgetItems,
-    budgetForm.validade,
-    budgetForm.observacao,
-    budgetForm.formaPagamento
-      ? [{ id: budgetForm.formaPagamento, label: budgetForm.formaPagamento, adjustment: 0, total: budgetTotal }]
-      : [],
-  )
-  const quoteWhatsUrl = cliente.whatsapp && validBudgetItems.length > 0
-    ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(quoteMessage)}`
-    : undefined
-
   async function submitInteraction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!form.resumo.trim()) return
@@ -6105,40 +6058,6 @@ function FichaCliente({
       setShowForm(false)
     } catch (exception) {
       setFormError(exception instanceof Error ? exception.message : 'Nao foi possivel registrar o contato.')
-    }
-  }
-
-  async function submitBudget(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!Number.isFinite(budgetTotal) || budgetTotal <= 0) return
-
-    setFormError('')
-    try {
-      await onAddBudget({
-        clienteId: cliente.id,
-        vendedorId: cliente.vendedorId ?? currentUser.id,
-        valorTotal: budgetTotal,
-        validade: budgetForm.validade,
-        previsaoFechamento: budgetForm.previsaoFechamento || undefined,
-        formaPagamento: budgetForm.formaPagamento || undefined,
-        observacao: budgetForm.observacao || undefined,
-        itens: validBudgetItems,
-      })
-
-      await onAddInteraction({
-        clienteId: cliente.id,
-        vendedorId: cliente.vendedorId ?? currentUser.id,
-        canal: 'WhatsApp',
-        tipo: 'orcamento',
-        resumo: budgetForm.observacao || `Orcamento criado no valor de ${money(budgetTotal)}.`,
-        resultado: 'pediu orcamento',
-      })
-
-      setBudgetForm({ validade: '', previsaoFechamento: '', formaPagamento: '', observacao: '' })
-      setBudgetItems([{ descricao: '', tipo: 'produto', quantidade: 1, valorUnitario: 0 }])
-      setShowBudgetForm(false)
-    } catch (exception) {
-      setFormError(exception instanceof Error ? exception.message : 'Nao foi possivel criar o orcamento.')
     }
   }
 
@@ -6184,11 +6103,11 @@ function FichaCliente({
         >
           <Phone size={16} /> Contato
         </button>
-        <button className="button" type="button" onClick={onOpenBudgetEditor}>
-          <WalletCards size={16} /> Orcamento
+        <button className="button primary" type="button" onClick={onOpenBudgetEditor}>
+          <WalletCards size={16} /> Proposta
         </button>
         <button className="button" type="button" onClick={onOpenFullProfile}>
-          <ClipboardList size={16} /> Ficha 360
+          <ClipboardList size={16} /> Ficha completa
         </button>
         <button className="button" type="button" onClick={() => {
           setEditForm({
@@ -6311,157 +6230,6 @@ function FichaCliente({
         </form>
       )}
 
-      {showBudgetForm && (
-        <form className="contact-form" onSubmit={submitBudget}>
-          <label>
-            Validade
-            <input
-              type="date"
-              value={budgetForm.validade}
-              onChange={(event) => setBudgetForm({ ...budgetForm, validade: event.target.value })}
-              required
-            />
-          </label>
-          <label>
-            Prev. fechamento
-            <input
-              type="date"
-              value={budgetForm.previsaoFechamento}
-              onChange={(event) => setBudgetForm({ ...budgetForm, previsaoFechamento: event.target.value })}
-            />
-          </label>
-          <label className="span-2">
-            Condicao de pagamento
-            <input
-              value={budgetForm.formaPagamento}
-              onChange={(event) => setBudgetForm({ ...budgetForm, formaPagamento: event.target.value })}
-              placeholder="Ex.: a vista, 30 dias, 30/60/90 ou no cartao"
-            />
-          </label>
-          <div className="budget-items span-2">
-            {catalogo.length === 0 && (
-              <div className="empty-state compact">Catalogo ainda nao carregado. Voce pode montar o orcamento manualmente.</div>
-            )}
-            {budgetItems.map((item, index) => (
-              <div className="budget-item-row" key={index}>
-                <select
-                  value={item.catalogoItemId ?? ''}
-                  onChange={(event) => {
-                    const selected = catalogo.find((catalogoItem) => catalogoItem.id === event.target.value)
-                    const next = [...budgetItems]
-                    next[index] = selected
-                      ? {
-                          ...item,
-                          catalogoItemId: selected.id,
-                          codigo: selected.codigo,
-                          descricao: selected.descricao,
-                          tipo: selected.tipo,
-                          valorUnitario: selected.preco,
-                          descontoPercentual: item.descontoPercentual ?? 0,
-                          apresentacao: item.apresentacao ?? 'normal',
-                        }
-                      : { ...item, catalogoItemId: undefined, codigo: undefined }
-                    setBudgetItems(next)
-                  }}
-                >
-                  <option value="">Catalogo</option>
-                  {catalogo.map((catalogoItem) => (
-                    <option key={catalogoItem.id} value={catalogoItem.id}>
-                      {catalogoItem.tipo === 'produto' ? 'Produto' : 'Servico'} | {catalogoItem.codigo} | {catalogoItem.descricao} | {money(catalogoItem.preco)}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={item.tipo}
-                  onChange={(event) => {
-                    const next = [...budgetItems]
-                    next[index] = { ...item, tipo: event.target.value as OrcamentoItemInput['tipo'] }
-                    setBudgetItems(next)
-                  }}
-                >
-                  <option value="produto">Produto</option>
-                  <option value="servico">Servico</option>
-                </select>
-                <input
-                  value={item.descricao}
-                  onChange={(event) => {
-                    const next = [...budgetItems]
-                    next[index] = { ...item, descricao: event.target.value }
-                    setBudgetItems(next)
-                  }}
-                  placeholder="Produto ou servico"
-                />
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={item.quantidade}
-                  onChange={(event) => {
-                    const next = [...budgetItems]
-                    next[index] = { ...item, quantidade: Number(event.target.value) }
-                    setBudgetItems(next)
-                  }}
-                  placeholder="Qtd."
-                />
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={item.valorUnitario}
-                  onChange={(event) => {
-                    const next = [...budgetItems]
-                    next[index] = { ...item, valorUnitario: Number(event.target.value) }
-                    setBudgetItems(next)
-                  }}
-                  placeholder="Unitario"
-                />
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  value={item.descontoPercentual ?? 0}
-                  onChange={(event) => {
-                    const next = [...budgetItems]
-                    next[index] = { ...item, descontoPercentual: Number(event.target.value) }
-                    setBudgetItems(next)
-                  }}
-                  placeholder="Desc. %"
-                />
-                <strong>{money((item.quantidade * item.valorUnitario) * (1 - Math.min(Math.max(item.descontoPercentual ?? 0, 0), 100) / 100))}</strong>
-              </div>
-            ))}
-            <button
-              className="button"
-              type="button"
-              onClick={() => setBudgetItems([...budgetItems, { descricao: '', tipo: 'produto', quantidade: 1, valorUnitario: 0 }])}
-            >
-              Adicionar item
-            </button>
-          </div>
-          <label className="span-2">
-            Observacao
-            <textarea
-              value={budgetForm.observacao}
-              onChange={(event) => setBudgetForm({ ...budgetForm, observacao: event.target.value })}
-              placeholder="Ex.: quatro pneus 275/80R22.5 com condicao para pagamento em 30 dias"
-            />
-          </label>
-          <label className="span-2">
-            Mensagem para WhatsApp
-            <textarea readOnly value={quoteMessage} />
-          </label>
-          <div className="budget-total span-2">
-            <span>Total</span>
-            <strong>{money(budgetTotal)}</strong>
-          </div>
-          <a className={!quoteWhatsUrl ? 'button disabled' : 'button'} href={quoteWhatsUrl} target="_blank" rel="noreferrer">
-            <MessageCircle size={16} /> Abrir WhatsApp
-          </a>
-          <button className="button primary" type="submit">Nova proposta</button>
-        </form>
-      )}
-
       <div className="summary-box">
         <strong>Resumo inteligente</strong>
         <p>{smartSummary(cliente, interacoes)}</p>
@@ -6484,7 +6252,7 @@ function FichaCliente({
         <div className="history-section">
           <div className="panel-header compact">
             <div>
-              <h3>Ficha 360</h3>
+              <h3>Ficha completa</h3>
               <p>{filteredVendas.length} vendas · {filteredServicos.length} servicos · {money(totalHistorico)}</p>
             </div>
             <label className="mini-select">
@@ -11751,7 +11519,7 @@ function taskOriginSlaLabel(origin: string) {
   if (origin.startsWith('campanha')) return 'Campanha'
   if (origin.startsWith('orcamento')) return 'Orcamento'
   if (origin.startsWith('atendimento')) return 'Atendimento'
-  if (origin.startsWith('cliente360')) return 'Ficha 360'
+  if (origin.startsWith('cliente360')) return 'Ficha completa'
   if (origin.startsWith('cockpit')) return 'Sem proxima acao'
   if (origin.startsWith('rodobens')) return 'Clientes sem cadastro'
   if (origin.startsWith('oportunidade')) return 'Oportunidade'
