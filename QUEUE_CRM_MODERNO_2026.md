@@ -368,6 +368,7 @@ Ja entregue:
 - Relatorios agora exporta CSV da reuniao gerencial com metas, forecast, disciplina comercial, follow-ups e gargalos.
 - Relatorios ganhou alertas comerciais para proposta sem follow-up, proposta parada e oportunidade sem tarefa.
 - Forecast mostra previsto vs realizado com ganho do mes comparado ao forecast ponderado.
+- Alertas comerciais viraram acionaveis: criam tarefa e abrem proposta ou ficha do cliente direto do painel.
 
 Pronto quando:
 - Gerente consegue conduzir reuniao semanal pelo forecast do CRM.

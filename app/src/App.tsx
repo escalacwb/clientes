@@ -2476,6 +2476,20 @@ function App() {
               const saved = await upsertMetaVendedor(input)
               setMetasVendedores((current) => [saved, ...current.filter((row) => row.id !== saved.id && row.vendedorId !== saved.vendedorId)])
             }}
+            onCreateTask={async (task) => {
+              const created = await createTarefa(task)
+              setTarefas((current) => [created, ...current])
+              return created
+            }}
+            onOpenClient={(clienteId) => {
+              setSelectedClientId(clienteId)
+              setView('cliente-360')
+            }}
+            onOpenQuote={(orcamento) => {
+              setSelectedOrcamentoId(orcamento.id)
+              setSelectedClientId(orcamento.clienteId)
+              setView('orcamento-detalhe')
+            }}
           />
         )}
         {session.role === 'admin' && view === 'vendedores' && (
@@ -12708,6 +12722,9 @@ function Relatorios({
   vendasItens,
   servicosItens,
   onSaveMeta,
+  onCreateTask,
+  onOpenClient,
+  onOpenQuote,
 }: {
   clientes: Cliente[]
   resumo?: DashboardResumo
@@ -12730,6 +12747,9 @@ function Relatorios({
   vendasItens: VendaItem[]
   servicosItens: ServicoItem[]
   onSaveMeta: (input: { vendedorId: string; metaReceita: number; metaContatos: number; metaOrcamentos: number; observacao?: string }) => Promise<void>
+  onCreateTask: (input: TarefaInput) => Promise<Tarefa>
+  onOpenClient: (clienteId: string) => void
+  onOpenQuote: (orcamento: Orcamento) => void
 }) {
   const [metaDrafts, setMetaDrafts] = useState<Record<string, { receita: string; contatos: string; orcamentos: string; observacao: string }>>({})
   const [savingMetaId, setSavingMetaId] = useState('')
@@ -12740,6 +12760,9 @@ function Relatorios({
   const [automationRuleSavingCode, setAutomationRuleSavingCode] = useState('')
   const [isEscalatingSequences, setIsEscalatingSequences] = useState(false)
   const [sequenceEscalationFeedback, setSequenceEscalationFeedback] = useState('')
+  const [managementTaskCreatingId, setManagementTaskCreatingId] = useState('')
+  const [managementTaskCreatedIds, setManagementTaskCreatedIds] = useState<string[]>([])
+  const [managementAlertFeedback, setManagementAlertFeedback] = useState('')
   const orcamentosGanhos = resumo?.orcamentosGanhos ?? orcamentos.filter((orcamento) => orcamento.status === 'ganho').length
   const orcamentosTotal = resumo?.orcamentosTotal ?? orcamentos.length
   const taxaConversao = orcamentosTotal ? Math.round((orcamentosGanhos / orcamentosTotal) * 100) : 0
@@ -12927,11 +12950,17 @@ function Relatorios({
     id: string
     severidade: 'alta' | 'media' | 'baixa'
     tipo: string
+    clienteId: string
+    orcamento?: Orcamento
     cliente: string
     responsavel: string
+    vendedorId?: string
     valor?: number
     problema: string
     acao: string
+    tarefaTitulo: string
+    tarefaDescricao: string
+    tarefaOrigem: TarefaInput['origem']
   }
   const openQuoteStatuses: Orcamento['status'][] = ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando']
   const managementAlertRows: ManagementAlertRow[] = [
@@ -12945,11 +12974,17 @@ function Relatorios({
         id: `orcamento-sem-followup-${orcamento.id}`,
         severidade: 'alta' as const,
         tipo: 'Proposta sem follow-up',
+        clienteId: orcamento.clienteId,
+        orcamento,
         cliente: orcamento.clienteNome ?? clientes.find((cliente) => cliente.id === orcamento.clienteId)?.nome ?? 'Cliente',
         responsavel: orcamento.vendedorNome ?? usuarios.find((usuario) => usuario.id === orcamento.vendedorId)?.nome ?? 'Sem responsavel',
+        vendedorId: orcamento.vendedorId,
         valor: orcamento.valorTotal,
         problema: `Proposta ${orcamento.status} sem proxima data registrada.`,
         acao: 'Definir follow-up no orcamento ou criar tarefa comercial hoje.',
+        tarefaTitulo: 'Follow-up de proposta sem data',
+        tarefaDescricao: `Proposta ${orcamento.status} no valor de ${money(orcamento.valorTotal)} esta sem proximo follow-up.`,
+        tarefaOrigem: 'orcamento',
       })),
     ...orcamentos
       .filter((orcamento) =>
@@ -12961,11 +12996,17 @@ function Relatorios({
         id: `orcamento-parado-${orcamento.id}`,
         severidade: orcamento.valorTotal >= 10000 ? 'alta' as const : 'media' as const,
         tipo: 'Proposta parada',
+        clienteId: orcamento.clienteId,
+        orcamento,
         cliente: orcamento.clienteNome ?? clientes.find((cliente) => cliente.id === orcamento.clienteId)?.nome ?? 'Cliente',
         responsavel: orcamento.vendedorNome ?? usuarios.find((usuario) => usuario.id === orcamento.vendedorId)?.nome ?? 'Sem responsavel',
+        vendedorId: orcamento.vendedorId,
         valor: orcamento.valorTotal,
         problema: `Sem movimento ha ${daysSince(orcamento.enviadoEm ?? orcamento.data)} dias.`,
         acao: 'Retomar contato, atualizar status ou registrar motivo de perda.',
+        tarefaTitulo: 'Retomar proposta parada',
+        tarefaDescricao: `Proposta sem movimento ha ${daysSince(orcamento.enviadoEm ?? orcamento.data)} dias. Valor: ${money(orcamento.valorTotal)}.`,
+        tarefaOrigem: 'orcamento',
       })),
     ...oportunidades
       .filter((oportunidade) => !oportunidade.bloqueada && !oportunidade.tarefaExistente && oportunidade.prioridade >= 75)
@@ -12973,10 +13014,15 @@ function Relatorios({
         id: `oportunidade-sem-tarefa-${oportunidade.id}`,
         severidade: oportunidade.prioridade >= 90 ? 'alta' as const : 'media' as const,
         tipo: 'Oportunidade sem tarefa',
+        clienteId: oportunidade.clienteId,
         cliente: oportunidade.clienteNome,
         responsavel: clientes.find((cliente) => cliente.id === oportunidade.clienteId)?.vendedorNome ?? 'Sem responsavel',
+        vendedorId: clientes.find((cliente) => cliente.id === oportunidade.clienteId)?.vendedorId,
         problema: `${oportunidade.tipo} com prioridade ${oportunidade.prioridade}.`,
         acao: oportunidade.proximaAcao || 'Criar proxima acao comercial.',
+        tarefaTitulo: oportunidade.proximaAcao || 'Tratar oportunidade comercial',
+        tarefaDescricao: oportunidade.motivo,
+        tarefaOrigem: 'oportunidade',
       })),
   ]
     .sort((a, b) => {
@@ -13107,6 +13153,28 @@ function Relatorios({
     downloadCsv(`reuniao-gerencial-${today}.csv`, rows)
   }
 
+  async function createManagementAlertTask(alert: ManagementAlertRow) {
+    setManagementTaskCreatingId(alert.id)
+    setManagementAlertFeedback('')
+    try {
+      await onCreateTask({
+        clienteId: alert.clienteId,
+        vendedorId: alert.vendedorId,
+        titulo: alert.tarefaTitulo,
+        descricao: alert.tarefaDescricao,
+        dataVencimento: new Date().toISOString().slice(0, 10),
+        prioridade: alert.severidade === 'alta' ? 95 : alert.severidade === 'media' ? 75 : 55,
+        origem: alert.tarefaOrigem,
+      })
+      setManagementTaskCreatedIds((current) => [...current, alert.id])
+      setManagementAlertFeedback('Tarefa criada para o alerta comercial.')
+    } catch (exception) {
+      setManagementAlertFeedback(exception instanceof Error ? exception.message : 'Nao foi possivel criar tarefa do alerta.')
+    } finally {
+      setManagementTaskCreatingId('')
+    }
+  }
+
   return (
     <section className="grid-layout">
       <div className="metric-grid">
@@ -13170,6 +13238,11 @@ function Relatorios({
           </div>
           <AlertTriangle size={18} />
         </div>
+        {managementAlertFeedback && (
+          managementAlertFeedback.includes('criada')
+            ? <div className="success-alert">{managementAlertFeedback}</div>
+            : <div className="alert">{managementAlertFeedback}</div>
+        )}
         {managementAlertRows.length > 0 ? (
           <div className="quality-issue-grid">
             {managementAlertRows.map((alert) => (
@@ -13182,6 +13255,25 @@ function Relatorios({
                   {alert.valor ? ` · ${money(alert.valor)}` : ''}
                 </small>
                 <small>{alert.acao}</small>
+                <div className="inline-actions">
+                  <button
+                    className="button primary"
+                    type="button"
+                    disabled={managementTaskCreatingId === alert.id || managementTaskCreatedIds.includes(alert.id)}
+                    onClick={() => createManagementAlertTask(alert)}
+                  >
+                    {managementTaskCreatedIds.includes(alert.id) ? 'Tarefa criada' : managementTaskCreatingId === alert.id ? 'Criando...' : 'Criar tarefa'}
+                  </button>
+                  {alert.orcamento ? (
+                    <button className="button" type="button" onClick={() => onOpenQuote(alert.orcamento!)}>
+                      Abrir proposta
+                    </button>
+                  ) : (
+                    <button className="button" type="button" onClick={() => onOpenClient(alert.clienteId)}>
+                      Abrir ficha
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

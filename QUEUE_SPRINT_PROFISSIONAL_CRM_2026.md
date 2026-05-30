@@ -120,10 +120,11 @@ Entregue nesta rodada:
 - Exportacao CSV da reuniao gerencial com metas, forecast, disciplina, follow-ups e gargalos por vendedor.
 - Painel de alertas comerciais para propostas sem follow-up, propostas paradas e oportunidades sem tarefa.
 - Indicador previsto vs realizado no painel de forecast.
+- Alertas comerciais agora permitem criar tarefa e abrir proposta/ficha diretamente pelo painel gerencial.
 
 Proximos pontos:
 - Forecast por origem e por produto/medida.
-- Transformar alertas em acoes diretas: criar tarefa, abrir proposta ou marcar perda pelo proprio painel.
+- Acao direta para marcar perda pelo painel de alertas com motivo obrigatorio.
 - Exportacao PDF da reuniao semanal.
 
 ## Ordem de execucao continua
