@@ -60,7 +60,7 @@ import { carteiraFiltros, filterClientes } from './lib/filtros'
 import { getCurrentSession, signInWithPassword, signOut } from './repositories/authRepository'
 import { listAutomacaoRegras, setAutomacaoRegraAtiva, type AutomacaoRegra } from './repositories/automacoesRepository'
 import { analyzeWhatsAppContact, type WhatsAppContactAnalysis } from './repositories/aiRepository'
-import { listClienteAlteracoes } from './repositories/auditoriaRepository'
+import { listAuditoriaEventos, listClienteAlteracoes, type AuditoriaEvento } from './repositories/auditoriaRepository'
 import {
   campanhaSegmentos,
   createCampanhaFromClienteIds,
@@ -340,6 +340,7 @@ function App() {
   const [conflitos, setConflitos] = useState<ImportacaoConflito[]>(isSupabaseConfigured ? [] : seedConflitos)
   const [usuarios, setUsuarios] = useState(isSupabaseConfigured ? authUsuarios : seedVendedores)
   const [alteracoes, setAlteracoes] = useState<ClienteAlteracao[]>(isSupabaseConfigured ? [] : seedAlteracoes)
+  const [auditoriaEventos, setAuditoriaEventos] = useState<AuditoriaEvento[]>([])
   const [tarefas, setTarefas] = useState<Tarefa[]>(isSupabaseConfigured ? [] : seedTarefas)
   const [tarefasTotal, setTarefasTotal] = useState(isSupabaseConfigured ? 0 : seedTarefas.length)
   const [tarefasPage, setTarefasPage] = useState(1)
@@ -481,6 +482,7 @@ function App() {
           loadedConflitos,
           loadedUsuarios,
           loadedAlteracoes,
+          loadedAuditoriaEventos,
           loadedTarefas,
           loadedPossiveisDuplicados,
           loadedMesclagens,
@@ -503,6 +505,7 @@ function App() {
           listConflitos(),
           listUsuarios(),
           listClienteAlteracoes(),
+          listAuditoriaEventos(),
           listTarefas(),
           listPossiveisDuplicados(),
           listMesclagens(),
@@ -527,6 +530,7 @@ function App() {
         setConflitos(loadedConflitos)
         setUsuarios(loadedUsuarios)
         setAlteracoes(loadedAlteracoes)
+        setAuditoriaEventos(loadedAuditoriaEventos)
         setTarefas(loadedTarefas)
         setPossiveisDuplicados(loadedPossiveisDuplicados)
         setMesclagens(loadedMesclagens)
@@ -2553,7 +2557,7 @@ function App() {
             }}
           />
         )}
-        {session.role === 'admin' && view === 'auditoria' && <Auditoria alteracoes={alteracoes} />}
+        {session.role === 'admin' && view === 'auditoria' && <Auditoria alteracoes={alteracoes} eventos={auditoriaEventos} />}
       </main>
     </div>
   )
@@ -8158,91 +8162,33 @@ function Cliente360({
           {contactFeedback && <div className="readiness ok">{contactFeedback}</div>}
           {contactError && <div className="alert">{contactError}</div>}
           {interpretationFeedback && <div className="readiness ok">{interpretationFeedback}</div>}
-          <div className="whatsapp-interpret-box">
-            <label className="client360-contact-note">
-              Colar conversa do WhatsApp
-              <textarea
-                value={whatsappHistoryPaste}
-                onChange={(event) => setWhatsappHistoryPaste(event.target.value)}
-                placeholder="Cole aqui o trecho do ultimo atendimento. O sistema resume e preenche os campos abaixo para revisao."
-              />
-            </label>
-            <div className="client360-save-bar">
-              <button className="button primary" type="button" disabled={isAnalyzingWithAI} onClick={() => void applyWhatsAppAIAnalysis()}>
-                {isAnalyzingWithAI ? 'Analisando...' : 'Analisar com IA'}
-              </button>
-              <button className="button primary" type="button" onClick={applyWhatsAppInterpretation}>
-                Interpretar local
-              </button>
-              <button className="button" type="button" disabled={!whatsappHistoryPaste.trim()} onClick={() => {
-                setWhatsappHistoryPaste('')
-                setInterpretationFeedback('')
-              }}>
-                Limpar conversa
-              </button>
+          <details className="client360-contact-tools">
+            <summary>Interpretar conversa do WhatsApp</summary>
+            <div className="whatsapp-interpret-box">
+              <label className="client360-contact-note">
+                Colar conversa do WhatsApp
+                <textarea
+                  value={whatsappHistoryPaste}
+                  onChange={(event) => setWhatsappHistoryPaste(event.target.value)}
+                  placeholder="Cole aqui o trecho do ultimo atendimento. O sistema resume e preenche os campos abaixo para revisao."
+                />
+              </label>
+              <div className="client360-save-bar">
+                <button className="button primary" type="button" disabled={isAnalyzingWithAI} onClick={() => void applyWhatsAppAIAnalysis()}>
+                  {isAnalyzingWithAI ? 'Analisando...' : 'Analisar com IA'}
+                </button>
+                <button className="button primary" type="button" onClick={applyWhatsAppInterpretation}>
+                  Interpretar local
+                </button>
+                <button className="button" type="button" disabled={!whatsappHistoryPaste.trim()} onClick={() => {
+                  setWhatsappHistoryPaste('')
+                  setInterpretationFeedback('')
+                }}>
+                  Limpar conversa
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="client360-contact-grid">
-            <label>
-              Canal
-              <select value={contactChannel} onChange={(event) => setContactChannel(event.target.value as Interacao['canal'])}>
-                <option value="WhatsApp">WhatsApp</option>
-                <option value="Ligacao">Ligacao</option>
-                <option value="Email">Email</option>
-                <option value="Presencial">Presencial</option>
-              </select>
-            </label>
-            <label>
-              Objetivo
-              <select value={contactReason} onChange={(event) => setContactReason(event.target.value)}>
-                <option value="prospeccao">Prospeccao</option>
-                <option value="reativacao">Reativacao</option>
-                <option value="orcamento">Orcamento</option>
-                <option value="follow-up">Follow-up</option>
-                <option value="pos-venda">Pos-venda</option>
-                <option value="cobranca">Cobranca</option>
-                <option value="cadastro">Cadastro</option>
-              </select>
-            </label>
-            <label>
-              Resultado do contato
-              <select value={contactResult} onChange={(event) => setContactResult(event.target.value)}>
-                <option value="respondeu">Respondeu</option>
-                <option value="pediu orcamento">Pediu orcamento</option>
-                <option value="nao respondeu">Nao respondeu</option>
-                <option value="comprar depois">Comprar depois</option>
-                <option value="sem interesse">Sem interesse</option>
-                <option value="numero invalido">Numero invalido</option>
-                <option value="dados atualizados">Dados atualizados</option>
-                <option value="reclamacao">Reclamacao</option>
-                <option value="fechou pedido">Fechou pedido</option>
-              </select>
-            </label>
-            <label>
-              Temperatura
-              <select value={contactTemperature} onChange={(event) => setContactTemperature(event.target.value)}>
-                <option value="quente">Quente</option>
-                <option value="morno">Morno</option>
-                <option value="frio">Frio</option>
-                <option value="bloqueado">Bloqueado</option>
-              </select>
-            </label>
-            <label>
-              Data da proxima acao
-              <input type="date" value={nextActionDate} onChange={(event) => setNextActionDate(event.target.value)} />
-            </label>
-            <label>
-              Orcamento vinculado
-              <select value={contactBudgetId} onChange={(event) => setContactBudgetId(event.target.value)}>
-                <option value="">Sem vinculo</option>
-                {clienteOrcamentos.slice(0, 20).map((orcamento) => (
-                  <option value={orcamento.id} key={orcamento.id}>
-                    {orcamento.id.slice(0, 8)} - {money(orcamento.valorTotal)} - {orcamento.status}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+          </details>
           <div className="client360-outcome-buttons">
             {[
               ['pediu orcamento', 'Pediu orcamento'],
@@ -8275,10 +8221,76 @@ function Cliente360({
             Observacao do contato
             <textarea value={contactNote} onChange={(event) => setContactNote(event.target.value)} placeholder="Ex.: pediu pneu 295/80 para cotar hoje, prefere pagamento 30/60." />
           </label>
-          <label className="client360-contact-note">
-            Proxima acao planejada
-            <input value={contactNextActionText} onChange={(event) => setContactNextActionText(event.target.value)} placeholder="Ex.: enviar proposta revisada, ligar as 14h, confirmar disponibilidade." />
-          </label>
+          <div className="client360-next-action-row">
+            <label className="client360-contact-note">
+              Proxima acao planejada
+              <input value={contactNextActionText} onChange={(event) => setContactNextActionText(event.target.value)} placeholder="Ex.: enviar proposta revisada, ligar as 14h, confirmar disponibilidade." />
+            </label>
+            <label className="client360-contact-note">
+              Data
+              <input type="date" value={nextActionDate} onChange={(event) => setNextActionDate(event.target.value)} />
+            </label>
+          </div>
+          <details className="client360-contact-tools">
+            <summary>Ajustes opcionais do atendimento</summary>
+            <div className="client360-contact-grid">
+              <label>
+                Canal
+                <select value={contactChannel} onChange={(event) => setContactChannel(event.target.value as Interacao['canal'])}>
+                  <option value="WhatsApp">WhatsApp</option>
+                  <option value="Ligacao">Ligacao</option>
+                  <option value="Email">Email</option>
+                  <option value="Presencial">Presencial</option>
+                </select>
+              </label>
+              <label>
+                Objetivo
+                <select value={contactReason} onChange={(event) => setContactReason(event.target.value)}>
+                  <option value="prospeccao">Prospeccao</option>
+                  <option value="reativacao">Reativacao</option>
+                  <option value="orcamento">Orcamento</option>
+                  <option value="follow-up">Follow-up</option>
+                  <option value="pos-venda">Pos-venda</option>
+                  <option value="cobranca">Cobranca</option>
+                  <option value="cadastro">Cadastro</option>
+                </select>
+              </label>
+              <label>
+                Resultado detalhado
+                <select value={contactResult} onChange={(event) => setContactResult(event.target.value)}>
+                  <option value="respondeu">Respondeu</option>
+                  <option value="pediu orcamento">Pediu orcamento</option>
+                  <option value="nao respondeu">Nao respondeu</option>
+                  <option value="comprar depois">Comprar depois</option>
+                  <option value="sem interesse">Sem interesse</option>
+                  <option value="numero invalido">Numero invalido</option>
+                  <option value="dados atualizados">Dados atualizados</option>
+                  <option value="reclamacao">Reclamacao</option>
+                  <option value="fechou pedido">Fechou pedido</option>
+                </select>
+              </label>
+              <label>
+                Temperatura
+                <select value={contactTemperature} onChange={(event) => setContactTemperature(event.target.value)}>
+                  <option value="quente">Quente</option>
+                  <option value="morno">Morno</option>
+                  <option value="frio">Frio</option>
+                  <option value="bloqueado">Bloqueado</option>
+                </select>
+              </label>
+              <label>
+                Orcamento vinculado
+                <select value={contactBudgetId} onChange={(event) => setContactBudgetId(event.target.value)}>
+                  <option value="">Sem vinculo</option>
+                  {clienteOrcamentos.slice(0, 20).map((orcamento) => (
+                    <option value={orcamento.id} key={orcamento.id}>
+                      {orcamento.id.slice(0, 8)} - {money(orcamento.valorTotal)} - {orcamento.status}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </details>
           {lastAIAnalysis && (
             <div className="ai-contact-brief">
               <div>
@@ -8303,7 +8315,7 @@ function Cliente360({
           )}
           <div className="client360-save-bar">
             <button className="button primary" type="button" disabled={isSavingContact} onClick={() => void registerContact(false)}>
-              {isSavingContact ? 'Salvando...' : 'Salvar no historico'}
+              {isSavingContact ? 'Salvando...' : 'Salvar atendimento'}
             </button>
             <button className="button" type="button" disabled={isSavingContact} onClick={() => void registerContact(true)}>
               Salvar e criar orcamento
@@ -9933,6 +9945,13 @@ function qualityIssueSeverityLabel(severidade: ImportacaoQualidadeIssue['severid
 function formatPriceChangePercent(value: number) {
   const signal = value >= 0 ? '+' : ''
   return `${signal}${(value * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
+}
+
+function auditCategoryLabel(category: AuditoriaEvento['categoria']) {
+  if (category === 'orcamento') return 'Proposta'
+  if (category === 'automacao') return 'Automacao'
+  if (category === 'saneamento') return 'Saneamento'
+  return 'Cliente'
 }
 
 function workbookReadiness(preview: WorkbookImportPreview) {
@@ -14648,8 +14667,9 @@ function Usuarios({
   )
 }
 
-function Auditoria({ alteracoes }: { alteracoes: ClienteAlteracao[] }) {
+function Auditoria({ alteracoes, eventos }: { alteracoes: ClienteAlteracao[]; eventos: AuditoriaEvento[] }) {
   const [field, setField] = useState('todos')
+  const [category, setCategory] = useState<AuditoriaEvento['categoria'] | 'todas'>('todas')
   const [query, setQuery] = useState('')
   const [period, setPeriod] = useState<'7d' | '30d' | 'todos'>('30d')
   const auditCoverage = [
@@ -14659,6 +14679,14 @@ function Auditoria({ alteracoes }: { alteracoes: ClienteAlteracao[] }) {
     { label: 'Importacao e saneamento', description: 'Fila de qualidade e conflitos mostram o que precisa ser corrigido.' },
   ]
   const fields = ['todos', ...Array.from(new Set(alteracoes.map((alteracao) => alteracao.campo)))]
+  const filteredEvents = eventos.filter((event) => {
+    if (category !== 'todas' && event.categoria !== category) return false
+    const term = query.trim().toLowerCase()
+    if (term && !`${event.titulo} ${event.detalhe} ${event.entidade} ${event.usuarioNome} ${event.categoria}`.toLowerCase().includes(term)) return false
+    if (period === 'todos') return true
+    const days = period === '7d' ? 7 : 30
+    return daysSince(event.data) <= days
+  })
   const filtered = alteracoes.filter((alteracao) => {
     if (field !== 'todos' && alteracao.campo !== field) return false
     const term = query.trim().toLowerCase()
@@ -14678,9 +14706,11 @@ function Auditoria({ alteracoes }: { alteracoes: ClienteAlteracao[] }) {
       sensitive,
       clientes: new Set(filtered.map((alteracao) => alteracao.clienteNome)).size,
       topUser: topUser ? `${topUser[0]} (${topUser[1]})` : 'Sem registro',
-      last: filtered[0]?.criadoEm ? dateLabel(filtered[0].criadoEm) : 'Sem registro',
+      last: filteredEvents[0]?.data ? dateLabel(filteredEvents[0].data) : filtered[0]?.criadoEm ? dateLabel(filtered[0].criadoEm) : 'Sem registro',
+      timeline: filteredEvents.length,
+      critical: filteredEvents.filter((event) => event.severidade === 'critico').length,
     }
-  }, [filtered])
+  }, [filtered, filteredEvents])
 
   return (
     <section className="grid-layout">
@@ -14715,6 +14745,7 @@ function Auditoria({ alteracoes }: { alteracoes: ClienteAlteracao[] }) {
         </div>
         <div className="mini-metrics vertical">
           <Info label="Eventos filtrados" value={auditSummary.total.toString()} />
+          <Info label="Linha do tempo" value={auditSummary.timeline.toString()} />
           <Info label="Campos sensiveis" value={auditSummary.sensitive.toString()} />
           <Info label="Clientes afetados" value={auditSummary.clientes.toString()} />
           <Info label="Ultima alteracao" value={auditSummary.last} />
@@ -14734,6 +14765,13 @@ function Auditoria({ alteracoes }: { alteracoes: ClienteAlteracao[] }) {
               <option value="30d">30 dias</option>
               <option value="todos">Tudo</option>
             </select>
+            <select className="assign-select audit-filter" value={category} onChange={(event) => setCategory(event.target.value as typeof category)}>
+              <option value="todas">Todas areas</option>
+              <option value="cliente">Cliente</option>
+              <option value="orcamento">Orcamento</option>
+              <option value="automacao">Automacao</option>
+              <option value="saneamento">Saneamento</option>
+            </select>
             <select className="assign-select audit-filter" value={field} onChange={(event) => setField(event.target.value)}>
               {fields.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
@@ -14743,7 +14781,27 @@ function Auditoria({ alteracoes }: { alteracoes: ClienteAlteracao[] }) {
           <Info label="Eventos filtrados" value={auditSummary.total.toString()} />
           <Info label="Campos sensiveis" value={auditSummary.sensitive.toString()} />
           <Info label="Clientes afetados" value={auditSummary.clientes.toString()} />
+          <Info label="Eventos criticos" value={auditSummary.critical.toString()} />
           <Info label="Usuario mais ativo" value={auditSummary.topUser} />
+        </div>
+        <div className="table audit-timeline-table">
+          <div className="table-head audit-event">
+            <span>Data</span>
+            <span>Area</span>
+            <span>Evento</span>
+            <span>Entidade</span>
+            <span>Usuario</span>
+          </div>
+          {filteredEvents.map((event) => (
+            <div className={`table-row audit-event ${event.severidade}`} key={event.id}>
+              <span>{dateLabel(event.data)}</span>
+              <span className="status-pill">{auditCategoryLabel(event.categoria)}</span>
+              <span><strong>{event.titulo}</strong><small>{event.detalhe}</small></span>
+              <span>{event.entidade || 'Sistema'}</span>
+              <span>{event.usuarioNome || 'Sistema'}</span>
+            </div>
+          ))}
+          {filteredEvents.length === 0 && <div className="empty-state compact">Nenhum evento operacional encontrado para os filtros atuais.</div>}
         </div>
         <div className="table">
           <div className="table-head audit">

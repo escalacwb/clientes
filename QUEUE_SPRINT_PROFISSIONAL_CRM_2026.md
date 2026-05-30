@@ -21,7 +21,8 @@ Fontes consultadas:
 - O app deve trabalhar como CRM operacional + CPQ + motor de campanhas para caminhoneiros/frotistas.
 - Toda tela precisa responder: quem acionar, por que acionar, qual proposta montar e qual risco impedir.
 - O diferencial sera usar historico real de vendas, servicos, placa, KM, vendedor historico, origem Capital/Rodobens e listas de preco.
-- Nao basta cadastrar: cada registro precisa gerar fila, forecast, auditoria ou proxima acao.
+- Prioridade maxima: simplicidade de uso da equipe. Vendedor precisa registrar contato, abrir WhatsApp, criar proposta e follow-up sem sentir que esta preenchendo relatorio.
+- Relatorios, auditoria e controles ficam como apoio gerencial discreto, sem atrapalhar a rotina comercial.
 
 ## Sprint A - CPQ profissional completo
 
@@ -33,6 +34,7 @@ Entregue nesta rodada:
 - Forecast ponderado por vendedor.
 - Tabela `catalogo_regras_desconto` criada e integrada ao calculo de aprovacao de orcamentos por tipo/grupo/subgrupo/marca/codigo.
 - Aprovacao gerencial ganhou parecer digitavel e historico de decisao no fluxo da proposta.
+- Ficha do cliente simplificou o bloco `Atendimento agora`: resultado, observacao e proxima acao ficam em primeiro plano; IA e ajustes avancados ficam recolhidos.
 
 Proximos pontos:
 - Bundles sugeridos: pneu + montagem + balanceamento + alinhamento.

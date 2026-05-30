@@ -1696,6 +1696,26 @@ h3 {
   grid-template-columns: 110px minmax(210px, 1.2fr) 160px minmax(150px, 0.9fr) minmax(150px, 0.9fr) 150px;
 }
 
+.audit-event {
+  grid-template-columns: 110px 120px minmax(260px, 1.5fr) minmax(170px, 0.9fr) 150px;
+}
+
+.audit-timeline-table {
+  margin-bottom: 18px;
+}
+
+.table-row.audit-event.critico {
+  border-left: 4px solid #a11d2a;
+}
+
+.table-row.audit-event.atencao {
+  border-left: 4px solid #d9822b;
+}
+
+.table-row.audit-event.info {
+  border-left: 4px solid #386fa4;
+}
+
 .merge {
   grid-template-columns: 110px minmax(210px, 1.1fr) minmax(180px, 1fr) minmax(220px, 1fr) 150px;
 }
@@ -3239,6 +3259,54 @@ h3 {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+}
+
+.client360-next-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 10px;
+  align-items: end;
+}
+
+.client360-contact-tools {
+  border: 1px solid #dbe6df;
+  border-radius: 8px;
+  background: #fbfdfa;
+  margin: 10px 0;
+  padding: 0;
+}
+
+.client360-contact-tools summary {
+  cursor: pointer;
+  color: #173d38;
+  font-weight: 700;
+  list-style: none;
+  padding: 11px 12px;
+}
+
+.client360-contact-tools summary::-webkit-details-marker {
+  display: none;
+}
+
+.client360-contact-tools summary::before {
+  content: '+';
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
+  border-radius: 999px;
+  background: #e7f1eb;
+  color: #0d3b35;
+}
+
+.client360-contact-tools[open] summary::before {
+  content: '-';
+}
+
+.client360-contact-tools .client360-contact-grid,
+.client360-contact-tools .whatsapp-interpret-box {
+  margin: 0 12px 12px;
 }
 
 .client360-contact-grid label,
