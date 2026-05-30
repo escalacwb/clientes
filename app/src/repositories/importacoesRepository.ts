@@ -90,6 +90,26 @@ export type ImportacaoQualidadeIssue = {
   acaoSugerida: string
 }
 
+export type ImportacaoSaneamentoRegistro = {
+  issueId: string
+  issueType: ImportacaoQualidadeIssue['tipo'] | string
+  assignedTo?: string
+  resolvedAt?: string
+  resolvedBy?: string
+  resolutionNote?: string
+  updatedAt?: string
+}
+
+type ImportacaoSaneamentoRow = {
+  issue_id: string
+  issue_type: string
+  assigned_to: string | null
+  resolved_at: string | null
+  resolved_by: string | null
+  resolution_note: string | null
+  updated_at: string | null
+}
+
 export async function listImportacoes(limit = 100): Promise<Importacao[]> {
   const supabase = await getSupabase()
   if (!supabase) return mockImportacoes
@@ -450,6 +470,63 @@ export async function listImportacaoQualidadeIssues(limit = 40): Promise<Importa
     .slice(0, limit)
 }
 
+export async function listImportacaoSaneamentoRegistros(): Promise<ImportacaoSaneamentoRegistro[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('importacao_saneamento_resolucoes')
+    .select('*')
+    .order('updated_at', { ascending: false })
+    .limit(500)
+
+  if (error) {
+    if (error.code === '42P01') return []
+    throw error
+  }
+
+  return ((data ?? []) as ImportacaoSaneamentoRow[]).map(mapImportacaoSaneamentoRegistro)
+}
+
+export async function upsertImportacaoSaneamentoRegistro(input: {
+  issueId: string
+  issueType: ImportacaoQualidadeIssue['tipo'] | string
+  assignedTo?: string
+  resolvedBy?: string
+  resolutionNote?: string
+  resolved?: boolean
+}): Promise<ImportacaoSaneamentoRegistro> {
+  const supabase = await getSupabase()
+  if (!supabase) {
+    return {
+      issueId: input.issueId,
+      issueType: input.issueType,
+      assignedTo: input.assignedTo || undefined,
+      resolvedAt: input.resolved ? new Date().toISOString() : undefined,
+      resolvedBy: input.resolvedBy,
+      resolutionNote: input.resolutionNote,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('importacao_saneamento_resolucoes')
+    .upsert({
+      issue_id: input.issueId,
+      issue_type: input.issueType,
+      assigned_to: input.assignedTo || null,
+      resolved_at: input.resolved ? new Date().toISOString() : null,
+      resolved_by: input.resolved ? input.resolvedBy ?? null : null,
+      resolution_note: input.resolutionNote ?? null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'issue_id' })
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return mapImportacaoSaneamentoRegistro(data as ImportacaoSaneamentoRow)
+}
+
 function localLabel(cidade?: string | null, uf?: string | null) {
   const local = [cidade, uf].filter(Boolean).join('/')
   return local ? ` (${local})` : ''
@@ -459,6 +536,18 @@ function severityWeight(severidade: ImportacaoQualidadeIssue['severidade']) {
   if (severidade === 'alta') return 3
   if (severidade === 'media') return 2
   return 1
+}
+
+function mapImportacaoSaneamentoRegistro(row: ImportacaoSaneamentoRow): ImportacaoSaneamentoRegistro {
+  return {
+    issueId: row.issue_id,
+    issueType: row.issue_type,
+    assignedTo: row.assigned_to ?? undefined,
+    resolvedAt: row.resolved_at ?? undefined,
+    resolvedBy: row.resolved_by ?? undefined,
+    resolutionNote: row.resolution_note ?? undefined,
+    updatedAt: row.updated_at ?? undefined,
+  }
 }
 
 function mapImportacao(row: ImportacaoRow): Importacao {

@@ -139,9 +139,10 @@ import { finalizeImportacaoDiaria } from './repositories/importacoesRepository'
 import { getImportacaoQualidadeResumo } from './repositories/importacoesRepository'
 import { importCatalogPriceFiles } from './repositories/importacoesRepository'
 import { importReferenceFiles } from './repositories/importacoesRepository'
-import { listImportacaoArquivos, listImportacaoQualidadeIssues, type ImportacaoArquivoResumo, type ImportacaoQualidadeIssue, type ImportacaoQualidadeResumo } from './repositories/importacoesRepository'
+import { listImportacaoArquivos, listImportacaoQualidadeIssues, listImportacaoSaneamentoRegistros, type ImportacaoArquivoResumo, type ImportacaoQualidadeIssue, type ImportacaoQualidadeResumo, type ImportacaoSaneamentoRegistro } from './repositories/importacoesRepository'
 import { listImportacoes } from './repositories/importacoesRepository'
 import { runFollowupAutomations } from './repositories/importacoesRepository'
+import { upsertImportacaoSaneamentoRegistro } from './repositories/importacoesRepository'
 import { createMesclagem, listMesclagens, listPossiveisDuplicados } from './repositories/mesclagensRepository'
 import { createOrcamento } from './repositories/orcamentosRepository'
 import { deleteOrcamento } from './repositories/orcamentosRepository'
@@ -2080,6 +2081,7 @@ function App() {
           <Importacoes
             importacoes={importacoes}
             usuarios={usuarios}
+            currentUser={session}
             onAddImportacao={(importacao) => setImportacoes((current) => [importacao, ...current.filter((item) => item.id !== importacao.id)])}
             onOpenClient={openClientFromCockpit}
           />
@@ -9039,11 +9041,13 @@ function minDate(current: string | undefined, next: string) {
 function Importacoes({
   importacoes,
   usuarios,
+  currentUser,
   onAddImportacao,
   onOpenClient,
 }: {
   importacoes: Importacao[]
   usuarios: Vendedor[]
+  currentUser: SessaoUsuario
   onAddImportacao: (importacao: Importacao) => void
   onOpenClient: (clienteId: string) => Promise<void>
 }) {
@@ -9067,9 +9071,11 @@ function Importacoes({
   const [error, setError] = useState('')
   const [registeredFiles, setRegisteredFiles] = useState<string[]>([])
   const [qualityAssignments, setQualityAssignments] = useState<Record<string, string>>({})
-  const [resolvedQualityIssues, setResolvedQualityIssues] = useState<string[]>([])
+  const [saneamentoRegistros, setSaneamentoRegistros] = useState<ImportacaoSaneamentoRegistro[]>([])
+  const [savingQualityIssueId, setSavingQualityIssueId] = useState('')
   const vendedores = usuarios.filter((usuario) => usuario.role === 'vendedor')
-  const activeQualityIssues = qualidadeIssues.filter((issue) => !resolvedQualityIssues.includes(issue.id))
+  const saneamentoByIssue = useMemo(() => new Map(saneamentoRegistros.map((registro) => [registro.issueId, registro])), [saneamentoRegistros])
+  const activeQualityIssues = qualidadeIssues.filter((issue) => !saneamentoByIssue.get(issue.id)?.resolvedAt)
   const arquivosPorImportacao = useMemo(() => {
     return arquivosResumo.reduce<Record<string, ImportacaoArquivoResumo[]>>((acc, arquivo) => {
       acc[arquivo.importacaoId] = [...(acc[arquivo.importacaoId] ?? []), arquivo]
@@ -9103,16 +9109,62 @@ function Importacoes({
     listImportacaoArquivos().then(setArquivosResumo).catch(() => setArquivosResumo([]))
     getImportacaoQualidadeResumo().then(setQualidadeResumo).catch(() => setQualidadeResumo(undefined))
     listImportacaoQualidadeIssues().then(setQualidadeIssues).catch(() => setQualidadeIssues([]))
+    listImportacaoSaneamentoRegistros()
+      .then((registros) => {
+        setSaneamentoRegistros(registros)
+        setQualityAssignments(Object.fromEntries(registros.filter((registro) => registro.assignedTo).map((registro) => [registro.issueId, registro.assignedTo ?? ''])))
+      })
+      .catch(() => setSaneamentoRegistros([]))
   }, [importacoes.length])
 
   async function refreshQuality() {
-    const [resumo, issues] = await Promise.all([
+    const [resumo, issues, registros] = await Promise.all([
       getImportacaoQualidadeResumo(),
       listImportacaoQualidadeIssues(),
+      listImportacaoSaneamentoRegistros(),
     ])
     setQualidadeResumo(resumo)
     setQualidadeIssues(issues)
-    setResolvedQualityIssues([])
+    setSaneamentoRegistros(registros)
+    setQualityAssignments(Object.fromEntries(registros.filter((registro) => registro.assignedTo).map((registro) => [registro.issueId, registro.assignedTo ?? ''])))
+  }
+
+  async function assignQualityIssue(issue: ImportacaoQualidadeIssue, assignedTo: string) {
+    setSavingQualityIssueId(issue.id)
+    setError('')
+    setQualityAssignments((current) => ({ ...current, [issue.id]: assignedTo }))
+    try {
+      const saved = await upsertImportacaoSaneamentoRegistro({
+        issueId: issue.id,
+        issueType: issue.tipo,
+        assignedTo,
+      })
+      setSaneamentoRegistros((current) => [saved, ...current.filter((registro) => registro.issueId !== saved.issueId)])
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel atribuir responsavel do saneamento.')
+    } finally {
+      setSavingQualityIssueId('')
+    }
+  }
+
+  async function resolveQualityIssue(issue: ImportacaoQualidadeIssue) {
+    setSavingQualityIssueId(issue.id)
+    setError('')
+    try {
+      const saved = await upsertImportacaoSaneamentoRegistro({
+        issueId: issue.id,
+        issueType: issue.tipo,
+        assignedTo: qualityAssignments[issue.id],
+        resolved: true,
+        resolvedBy: currentUser.id,
+        resolutionNote: issue.acaoSugerida,
+      })
+      setSaneamentoRegistros((current) => [saved, ...current.filter((registro) => registro.issueId !== saved.issueId)])
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel resolver item de saneamento.')
+    } finally {
+      setSavingQualityIssueId('')
+    }
   }
 
   async function handleFiles(files: FileList | null) {
@@ -9423,7 +9475,8 @@ function Importacoes({
                 Responsavel
                 <select
                   value={qualityAssignments[issue.id] ?? ''}
-                  onChange={(event) => setQualityAssignments((current) => ({ ...current, [issue.id]: event.target.value }))}
+                  disabled={savingQualityIssueId === issue.id}
+                  onChange={(event) => void assignQualityIssue(issue, event.target.value)}
                 >
                   <option value="">Nao atribuido</option>
                   {vendedores.map((vendedor) => (
@@ -9440,9 +9493,10 @@ function Importacoes({
                 <button
                   className="button compact-button"
                   type="button"
-                  onClick={() => setResolvedQualityIssues((current) => [...new Set([...current, issue.id])])}
+                  disabled={savingQualityIssueId === issue.id}
+                  onClick={() => void resolveQualityIssue(issue)}
                 >
-                  Marcar resolvido
+                  {savingQualityIssueId === issue.id ? 'Salvando...' : 'Marcar resolvido'}
                 </button>
               </div>
             </article>

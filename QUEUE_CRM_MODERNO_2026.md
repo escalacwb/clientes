@@ -416,6 +416,7 @@ Entregas:
 Ja entregue:
 - Tela Importacoes exibe fila priorizada de saneamento com clientes sem WhatsApp, sem vendedor, origem desconhecida, servicos sem placa e conflitos.
 - Cada item da fila pode receber responsavel, abrir ficha do cliente quando houver vinculo e ser marcado como resolvido na fila operacional.
+- Responsavel e resolucao da fila ficam persistidos no Supabase, mantendo a fila consistente apos reload.
 - Saude da base mede ultima importacao, arquivos obrigatorios, conflitos, sem vendedor, sem WhatsApp, origem desconhecida e oportunidades desatualizadas.
 
 Pronto quando:
