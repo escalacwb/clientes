@@ -369,6 +369,7 @@ Ja entregue:
 - Relatorios ganhou alertas comerciais para proposta sem follow-up, proposta parada e oportunidade sem tarefa.
 - Forecast mostra previsto vs realizado com ganho do mes comparado ao forecast ponderado.
 - Alertas comerciais viraram acionaveis: criam tarefa e abrem proposta ou ficha do cliente direto do painel.
+- Propostas paradas podem ser marcadas como perdidas direto dos alertas, exigindo motivo.
 
 Pronto quando:
 - Gerente consegue conduzir reuniao semanal pelo forecast do CRM.

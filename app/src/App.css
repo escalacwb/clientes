@@ -3055,6 +3055,13 @@ h3 {
   align-items: center;
 }
 
+.management-loss-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
 .info-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4507,6 +4514,10 @@ h3 {
 
   .forecast-report {
     grid-template-columns: minmax(180px, 1fr) 110px 110px 110px 70px 70px minmax(180px, 1fr);
+  }
+
+  .management-loss-row {
+    grid-template-columns: 1fr;
   }
 
   .import-flow {

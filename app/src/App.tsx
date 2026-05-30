@@ -2490,6 +2490,12 @@ function App() {
               setSelectedClientId(orcamento.clienteId)
               setView('orcamento-detalhe')
             }}
+            onMarkQuoteLost={async (orcamento, motivoPerda) => {
+              await updateOrcamentoStatus(orcamento.id, 'perdido', motivoPerda)
+              setOrcamentos((current) =>
+                current.map((item) => (item.id === orcamento.id ? { ...item, status: 'perdido', motivoPerda } : item)),
+              )
+            }}
           />
         )}
         {session.role === 'admin' && view === 'vendedores' && (
@@ -12725,6 +12731,7 @@ function Relatorios({
   onCreateTask,
   onOpenClient,
   onOpenQuote,
+  onMarkQuoteLost,
 }: {
   clientes: Cliente[]
   resumo?: DashboardResumo
@@ -12750,6 +12757,7 @@ function Relatorios({
   onCreateTask: (input: TarefaInput) => Promise<Tarefa>
   onOpenClient: (clienteId: string) => void
   onOpenQuote: (orcamento: Orcamento) => void
+  onMarkQuoteLost: (orcamento: Orcamento, motivoPerda: string) => Promise<void>
 }) {
   const [metaDrafts, setMetaDrafts] = useState<Record<string, { receita: string; contatos: string; orcamentos: string; observacao: string }>>({})
   const [savingMetaId, setSavingMetaId] = useState('')
@@ -12763,6 +12771,8 @@ function Relatorios({
   const [managementTaskCreatingId, setManagementTaskCreatingId] = useState('')
   const [managementTaskCreatedIds, setManagementTaskCreatedIds] = useState<string[]>([])
   const [managementAlertFeedback, setManagementAlertFeedback] = useState('')
+  const [managementLossReasons, setManagementLossReasons] = useState<Record<string, string>>({})
+  const [managementLossSavingId, setManagementLossSavingId] = useState('')
   const orcamentosGanhos = resumo?.orcamentosGanhos ?? orcamentos.filter((orcamento) => orcamento.status === 'ganho').length
   const orcamentosTotal = resumo?.orcamentosTotal ?? orcamentos.length
   const taxaConversao = orcamentosTotal ? Math.round((orcamentosGanhos / orcamentosTotal) * 100) : 0
@@ -13175,6 +13185,25 @@ function Relatorios({
     }
   }
 
+  async function markManagementQuoteLost(alert: ManagementAlertRow) {
+    if (!alert.orcamento) return
+    const motivoPerda = managementLossReasons[alert.id]?.trim()
+    if (!motivoPerda) {
+      setManagementAlertFeedback('Informe o motivo de perda antes de encerrar a proposta.')
+      return
+    }
+    setManagementLossSavingId(alert.id)
+    setManagementAlertFeedback('')
+    try {
+      await onMarkQuoteLost(alert.orcamento, motivoPerda)
+      setManagementAlertFeedback('Proposta marcada como perdida com motivo registrado.')
+    } catch (exception) {
+      setManagementAlertFeedback(exception instanceof Error ? exception.message : 'Nao foi possivel marcar a proposta como perdida.')
+    } finally {
+      setManagementLossSavingId('')
+    }
+  }
+
   return (
     <section className="grid-layout">
       <div className="metric-grid">
@@ -13274,6 +13303,23 @@ function Relatorios({
                     </button>
                   )}
                 </div>
+                {alert.orcamento && (
+                  <div className="management-loss-row">
+                    <input
+                      value={managementLossReasons[alert.id] ?? ''}
+                      onChange={(event) => setManagementLossReasons((current) => ({ ...current, [alert.id]: event.target.value }))}
+                      placeholder="Motivo da perda: preco, prazo, concorrente..."
+                    />
+                    <button
+                      className="button danger"
+                      type="button"
+                      disabled={managementLossSavingId === alert.id || !managementLossReasons[alert.id]?.trim()}
+                      onClick={() => markManagementQuoteLost(alert)}
+                    >
+                      {managementLossSavingId === alert.id ? 'Salvando...' : 'Marcar perda'}
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
