@@ -32,9 +32,9 @@ Entregue nesta rodada:
 - Condicoes comerciais persistidas.
 - Forecast ponderado por vendedor.
 - Tabela `catalogo_regras_desconto` criada e integrada ao calculo de aprovacao de orcamentos por tipo/grupo/subgrupo/marca/codigo.
+- Aprovacao gerencial ganhou parecer digitavel e historico de decisao no fluxo da proposta.
 
 Proximos pontos:
-- Aprovacao formal com usuario aprovador, motivo, data e historico separado.
 - Bundles sugeridos: pneu + montagem + balanceamento + alinhamento.
 - Proposta HTML imprimivel com layout final e termos padrao.
 - Campo de prazo de entrega/execucao por item ou proposta.

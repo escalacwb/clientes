@@ -11985,6 +11985,7 @@ function OrcamentoWorkspace({
   const [revisionTarget, setRevisionTarget] = useState<Orcamento | null>(null)
   const [lossReason, setLossReason] = useState('')
   const [approvalRejectReason, setApprovalRejectReason] = useState('')
+  const [approvalNote, setApprovalNote] = useState('')
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
   const [isDeletingBudget, setIsDeletingBudget] = useState(false)
   const [feedback, setFeedback] = useState('')
@@ -12167,12 +12168,23 @@ function OrcamentoWorkspace({
         </div>
         <div className="quote-workspace-actions">
           {orcamento.status === 'aguardando_aprovacao' && canApprove && (
-            <button className="button primary" type="button" disabled={isUpdatingStatus} onClick={() => updateStatus('enviado')}>
-              Aprovar e marcar enviado
-            </button>
-          )}
-          {orcamento.status === 'aguardando_aprovacao' && canApprove && (
-            <>
+            <div className="approval-decision-panel">
+              <label>
+                Parecer da aprovacao
+                <textarea
+                  value={approvalNote}
+                  onChange={(event) => setApprovalNote(event.target.value)}
+                  placeholder="Ex.: desconto aprovado por volume, validar disponibilidade antes da ordem de compra."
+                />
+              </label>
+              <button
+                className="button primary"
+                type="button"
+                disabled={isUpdatingStatus}
+                onClick={() => updateStatus('enviado', approvalNote.trim() || 'Aprovado e liberado para envio.')}
+              >
+                Aprovar e liberar envio
+              </button>
               <select className="assign-select" value={approvalRejectReason} onChange={(event) => setApprovalRejectReason(event.target.value)}>
                 <option value="">Motivo rejeicao</option>
                 <option value="desconto_excessivo">Desconto excessivo</option>
@@ -12184,7 +12196,7 @@ function OrcamentoWorkspace({
               <button className="button danger" type="button" disabled={!approvalRejectReason || isUpdatingStatus} onClick={() => updateStatus('perdido', `aprovacao_rejeitada:${approvalRejectReason}`)}>
                 Rejeitar
               </button>
-            </>
+            </div>
           )}
           <button className="button" type="button" disabled={isUpdatingStatus} onClick={() => updateStatus('enviado')}>Enviado</button>
           <button className="button" type="button" disabled={isUpdatingStatus} onClick={() => updateStatus('negociando')}>Negociando</button>

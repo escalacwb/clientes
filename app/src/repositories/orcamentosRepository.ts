@@ -412,7 +412,7 @@ export async function updateOrcamentoStatus(
     await createOrcamentoAprovacao(
       id,
       aprovadoPor ? 'aprovada' : 'enviada',
-      aprovadoPor ? 'Aprovado e liberado para envio.' : 'Marcado como enviado.',
+      aprovadoPor ? motivoPerda ?? 'Aprovado e liberado para envio.' : 'Marcado como enviado.',
       aprovadoPor,
       { status },
     )

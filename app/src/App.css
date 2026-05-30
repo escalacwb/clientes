@@ -2989,6 +2989,30 @@ h3 {
   color: var(--muted);
 }
 
+.approval-decision-panel {
+  grid-column: 1 / -1;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) auto auto auto;
+  gap: 10px;
+  align-items: end;
+  background: #f8fbf8;
+}
+
+.approval-decision-panel label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.approval-decision-panel textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
 .quality-issue {
   display: grid;
   gap: 10px;
