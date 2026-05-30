@@ -12755,6 +12755,8 @@ function Relatorios({
   const forecastTotal = forecastVendedor.reduce((total, row) => total + row.forecastPonderado, 0)
   const pipelineForecast = forecastVendedor.reduce((total, row) => total + row.pipelineAberto, 0)
   const propostasVencidasForecast = forecastVendedor.reduce((total, row) => total + row.vencidas, 0)
+  const ganhoMesTotal = forecastVendedor.reduce((total, row) => total + row.ganhoMes, 0)
+  const previstoVsRealizado = forecastTotal > 0 ? Math.round((ganhoMesTotal / forecastTotal) * 100) : 0
   const medidas = rankingMedidas.length > 0
     ? rankingMedidas.map((item) => ({ label: item.label, count: item.itens }))
     : rankBy(vendasItens, (venda) => venda.medida ?? venda.produtoNome)
@@ -13131,8 +13133,9 @@ function Relatorios({
         <div className="info-grid forecast-summary">
           <Info label="Pipeline aberto" value={money(pipelineForecast)} />
           <Info label="Forecast ponderado" value={money(forecastTotal)} />
+          <Info label="Previsto vs realizado" value={`${previstoVsRealizado}%`} />
           <Info label="Propostas vencidas" value={propostasVencidasForecast.toString()} />
-          <Info label="Ganho no mes" value={money(forecastVendedor.reduce((total, row) => total + row.ganhoMes, 0))} />
+          <Info label="Ganho no mes" value={money(ganhoMesTotal)} />
         </div>
         <div className="table">
           <div className="table-head forecast-report">

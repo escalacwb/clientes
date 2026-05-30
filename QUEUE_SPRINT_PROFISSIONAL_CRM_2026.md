@@ -119,9 +119,9 @@ Entregue nesta rodada:
 - Metas mensais por vendedor com receita, contatos, propostas, observacao, ranking e score comercial.
 - Exportacao CSV da reuniao gerencial com metas, forecast, disciplina, follow-ups e gargalos por vendedor.
 - Painel de alertas comerciais para propostas sem follow-up, propostas paradas e oportunidades sem tarefa.
+- Indicador previsto vs realizado no painel de forecast.
 
 Proximos pontos:
-- Previsto vs realizado.
 - Forecast por origem e por produto/medida.
 - Transformar alertas em acoes diretas: criar tarefa, abrir proposta ou marcar perda pelo proprio painel.
 - Exportacao PDF da reuniao semanal.

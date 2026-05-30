@@ -367,6 +367,7 @@ Ja entregue:
 - Tela de Relatorios ganhou painel `Forecast e gargalos` com resumo executivo e ranking por vendedor.
 - Relatorios agora exporta CSV da reuniao gerencial com metas, forecast, disciplina comercial, follow-ups e gargalos.
 - Relatorios ganhou alertas comerciais para proposta sem follow-up, proposta parada e oportunidade sem tarefa.
+- Forecast mostra previsto vs realizado com ganho do mes comparado ao forecast ponderado.
 
 Pronto quando:
 - Gerente consegue conduzir reuniao semanal pelo forecast do CRM.
