@@ -101,6 +101,10 @@ export type Orcamento = {
   aprovadoEm?: string
   enviadoPor?: string
   enviadoEm?: string
+  pedidoConfirmadoPor?: string
+  pedidoConfirmadoEm?: string
+  pedidoReferencia?: string
+  pedidoObservacao?: string
   proximoFollowupEm?: string
   prazoEntrega?: string
   prazoExecucao?: string

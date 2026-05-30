@@ -154,7 +154,7 @@ import { listOrcamentoAprovacoes } from './repositories/orcamentosRepository'
 import { listOrcamentoVersoes } from './repositories/orcamentosRepository'
 import { reviseOrcamento } from './repositories/orcamentosRepository'
 import { updateOrcamentoFollowup } from './repositories/orcamentosRepository'
-import { updateOrcamentoStatus } from './repositories/orcamentosRepository'
+import { updateOrcamentoStatus, type PedidoConfirmadoInput } from './repositories/orcamentosRepository'
 import { listOportunidadesPage, listOportunidadesResumo, markOportunidadeComTarefa, refreshOportunidadesCache, type OportunidadeFilter, type OportunidadeResumo } from './repositories/oportunidadesRepository'
 import { createPipelineFromSuggestion, listPipelineOportunidades, updatePipelineOportunidade, updatePipelineStage } from './repositories/pipelineRepository'
 import { escalateStaleCommercialSequences, listDefaultCommercialSequenceSteps, listSequenciaExecucoes, startDefaultCommercialSequence, updateSequenceStep, type SequenciaEtapaConfig } from './repositories/sequenciasRepository'
@@ -2338,9 +2338,9 @@ function App() {
               setOrcamentos((current) => current.map((orcamento) => (orcamento.id === id ? revised : orcamento)))
               return revised
             }}
-            onStatusChange={(id, status, motivoPerda) => {
+            onStatusChange={(id, status, motivoPerda, pedidoConfirmado) => {
               const changedOrcamento = orcamentos.find((orcamento) => orcamento.id === id)
-              updateOrcamentoStatus(id, status, motivoPerda, status === 'enviado' ? session.id : undefined).catch((exception) => {
+              updateOrcamentoStatus(id, status, motivoPerda, status === 'enviado' ? session.id : undefined, pedidoConfirmado).catch((exception) => {
                 setModuleError('orcamentos', exception instanceof Error ? exception.message : 'Nao foi possivel atualizar a proposta.')
               })
               if (status === 'ganho' && changedOrcamento) {
@@ -2358,6 +2358,11 @@ function App() {
                         motivoPerda,
                         aprovadoPor: status === 'enviado' ? session.id : orcamento.aprovadoPor,
                         aprovadoEm: status === 'enviado' ? new Date().toISOString() : orcamento.aprovadoEm,
+                        pedidoConfirmadoPor: pedidoConfirmado?.usuarioId ?? orcamento.pedidoConfirmadoPor,
+                        pedidoConfirmadoEm: pedidoConfirmado ? new Date().toISOString() : orcamento.pedidoConfirmadoEm,
+                        pedidoReferencia: pedidoConfirmado?.referencia || orcamento.pedidoReferencia,
+                        pedidoObservacao: pedidoConfirmado?.observacao || orcamento.pedidoObservacao,
+                        proximoFollowupEm: pedidoConfirmado ? undefined : orcamento.proximoFollowupEm,
                       }
                     : orcamento,
                   ),
@@ -2386,8 +2391,8 @@ function App() {
               setOrcamentos((current) => current.map((orcamento) => (orcamento.id === id ? revised : orcamento)))
               return revised
             }}
-            onStatusChange={async (status, motivoPerda) => {
-              await updateOrcamentoStatus(selectedOrcamento.id, status, motivoPerda, status === 'enviado' ? session.id : undefined)
+            onStatusChange={async (status, motivoPerda, pedidoConfirmado) => {
+              await updateOrcamentoStatus(selectedOrcamento.id, status, motivoPerda, status === 'enviado' ? session.id : undefined, pedidoConfirmado)
               if (status === 'ganho') {
                 await attributeCampanhaRevenueByOrcamento(selectedOrcamento.id, selectedOrcamento.valorTotal)
               }
@@ -2400,6 +2405,11 @@ function App() {
                         motivoPerda,
                         aprovadoPor: status === 'enviado' ? session.id : orcamento.aprovadoPor,
                         aprovadoEm: status === 'enviado' ? new Date().toISOString() : orcamento.aprovadoEm,
+                        pedidoConfirmadoPor: pedidoConfirmado?.usuarioId ?? orcamento.pedidoConfirmadoPor,
+                        pedidoConfirmadoEm: pedidoConfirmado ? new Date().toISOString() : orcamento.pedidoConfirmadoEm,
+                        pedidoReferencia: pedidoConfirmado?.referencia || orcamento.pedidoReferencia,
+                        pedidoObservacao: pedidoConfirmado?.observacao || orcamento.pedidoObservacao,
+                        proximoFollowupEm: pedidoConfirmado ? undefined : orcamento.proximoFollowupEm,
                       }
                     : orcamento,
                 ),
@@ -11907,7 +11917,7 @@ function Orcamentos({
   onOpenDetail: (orcamento: Orcamento) => void
   onCreateLooseBudget: (cliente: Cliente) => void
   onRevise: (id: string, orcamento: OrcamentoInput) => Promise<Orcamento>
-  onStatusChange: (id: string, status: Orcamento['status'], motivoPerda?: string) => void
+  onStatusChange: (id: string, status: Orcamento['status'], motivoPerda?: string, pedidoConfirmado?: PedidoConfirmadoInput) => void
   onDelete: (id: string) => Promise<void>
 }) {
   const [lossReasons, setLossReasons] = useState<Record<string, string>>({})
@@ -12019,6 +12029,16 @@ function Orcamentos({
     }
   }
 
+  function confirmOrder(orcamento: Orcamento) {
+    const referencia = window.prompt('Referencia do pedido / ordem de compra (opcional):')?.trim() ?? ''
+    const observacao = window.prompt('Observacao para o pedido confirmado (opcional):')?.trim() ?? ''
+    onStatusChange(orcamento.id, 'ganho', undefined, {
+      usuarioId: currentUser.id,
+      referencia,
+      observacao,
+    })
+  }
+
   return (
     <section className="panel wide">
       <div className="panel-header">
@@ -12119,6 +12139,7 @@ function Orcamentos({
           const cliente = clientes.find((item) => item.id === orcamento.clienteId)
           const vendedor = usuarios.find((item) => item.id === orcamento.vendedorId)
           const isExpired = openStatuses.includes(orcamento.status) && daysSince(orcamento.validade) > 0
+          const isClosed = orcamento.status === 'ganho' || orcamento.status === 'perdido'
           return (
             <div className={isExpired ? 'table-row five expired-budget' : 'table-row five'} key={orcamento.id}>
               <span><strong>{cliente?.nome ?? orcamento.clienteNome ?? 'Cliente nao carregado'}</strong></span>
@@ -12127,6 +12148,8 @@ function Orcamentos({
                 {orcamento.aprovacaoMotivo && <small>{orcamento.aprovacaoMotivo}</small>}
                 {orcamento.motivoPerda && <small>Motivo: {lossReasonLabel(orcamento.motivoPerda)}</small>}
                 {orcamento.aprovadoEm && <small>Aprovado em {dateLabel(orcamento.aprovadoEm)}</small>}
+                {orcamento.pedidoConfirmadoEm && <small>Pedido confirmado em {dateLabel(orcamento.pedidoConfirmadoEm)}</small>}
+                {orcamento.pedidoReferencia && <small>Pedido: {orcamento.pedidoReferencia}</small>}
               </span>
               <span>
                 <strong>{money(orcamento.valorTotal)}</strong>
@@ -12151,16 +12174,16 @@ function Orcamentos({
                       event.currentTarget.value = ''
                       if (action === 'enviado') onStatusChange(orcamento.id, 'enviado')
                       if (action === 'negociando') onStatusChange(orcamento.id, 'negociando')
-                      if (action === 'ganho') onStatusChange(orcamento.id, 'ganho')
+                      if (action === 'ganho') confirmOrder(orcamento)
                       if (action === 'versoes') openVersionHistory(orcamento)
                       if (action === 'revisar') setRevisionTarget(orcamento)
                       if (action === 'excluir') void handleDeleteBudget(orcamento)
                     }}
                   >
                     <option value="">Mais acoes</option>
-                    <option value="enviado">Marcar enviado</option>
-                    <option value="negociando">Marcar negociando</option>
-                    <option value="ganho">Marcar ganho</option>
+                    {!isClosed && <option value="enviado">Marcar enviado</option>}
+                    {!isClosed && <option value="negociando">Marcar negociando</option>}
+                    {!isClosed && <option value="ganho">Confirmar pedido</option>}
                     <option value="versoes">Ver versoes</option>
                     <option value="revisar">Revisar proposta</option>
                     <option value="excluir">{deletingBudgetId === orcamento.id ? 'Excluindo...' : 'Excluir proposta'}</option>
@@ -12195,7 +12218,7 @@ function Orcamentos({
                     </>
                   )}
                 </div>
-                <details className="budget-loss-row">
+                {!isClosed && <details className="budget-loss-row">
                   <summary>Marcar perda</summary>
                   <select
                     className="assign-select"
@@ -12218,7 +12241,7 @@ function Orcamentos({
                   >
                     Perder
                   </button>
-                </details>
+                </details>}
               </span>
             </div>
           )
@@ -12324,7 +12347,7 @@ function OrcamentoWorkspace({
   catalogo: CatalogoItem[]
   onBack: () => void
   onRevise: (id: string, orcamento: OrcamentoInput) => Promise<Orcamento>
-  onStatusChange: (status: Orcamento['status'], motivoPerda?: string) => Promise<void>
+  onStatusChange: (status: Orcamento['status'], motivoPerda?: string, pedidoConfirmado?: PedidoConfirmadoInput) => Promise<void>
   onUpdateFollowup: (followupDate: string) => Promise<void>
   onDelete: () => Promise<void>
 }) {
@@ -12352,6 +12375,7 @@ function OrcamentoWorkspace({
     : undefined
   const isExpired = ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando'].includes(orcamento.status) && daysSince(orcamento.validade) > 0
   const canApprove = currentUser.role === 'admin'
+  const isClosed = orcamento.status === 'ganho' || orcamento.status === 'perdido'
 
   useEffect(() => {
     setFollowupDraft(orcamento.proximoFollowupEm ?? '')
@@ -12421,12 +12445,12 @@ function OrcamentoWorkspace({
     }
   }
 
-  async function updateStatus(status: Orcamento['status'], motivo?: string) {
+  async function updateStatus(status: Orcamento['status'], motivo?: string, pedidoConfirmado?: PedidoConfirmadoInput) {
     setIsUpdatingStatus(true)
     setError('')
     setFeedback('')
     try {
-      await onStatusChange(status, motivo)
+      await onStatusChange(status, motivo, pedidoConfirmado)
       setFeedback(`Status atualizado para ${status}.`)
       await refreshApprovals()
     } catch (exception) {
@@ -12434,6 +12458,16 @@ function OrcamentoWorkspace({
     } finally {
       setIsUpdatingStatus(false)
     }
+  }
+
+  async function confirmOrderFromDetail() {
+    const referencia = window.prompt('Referencia do pedido / ordem de compra (opcional):')?.trim() ?? ''
+    const observacao = window.prompt('Observacao para o pedido confirmado (opcional):')?.trim() ?? ''
+    await updateStatus('ganho', undefined, {
+      usuarioId: currentUser.id,
+      referencia,
+      observacao,
+    })
   }
 
   async function copyMessage() {
@@ -12530,7 +12564,17 @@ function OrcamentoWorkspace({
           <Info label="Previsao" value={dateLabel(orcamento.previsaoFechamento)} />
           <Info label="Follow-up" value={dateLabel(orcamento.proximoFollowupEm)} />
           <Info label="Enviado em" value={dateLabel(orcamento.enviadoEm)} />
+          <Info label="Pedido" value={orcamento.pedidoConfirmadoEm ? dateLabel(orcamento.pedidoConfirmadoEm) : 'Nao confirmado'} />
         </div>
+        {orcamento.pedidoConfirmadoEm && (
+          <div className="readiness ok">
+            <strong>Pedido confirmado</strong>
+            <span>
+              {orcamento.pedidoReferencia ? `Referencia: ${orcamento.pedidoReferencia}. ` : ''}
+              {orcamento.pedidoObservacao || 'Cliente confirmou o pedido manualmente nesta proposta.'}
+            </span>
+          </div>
+        )}
         <div className="readiness ok">
           <strong>Envio da proposta</strong>
           <span>
@@ -12586,19 +12630,23 @@ function OrcamentoWorkspace({
               </button>
             </div>
           )}
-          <button className="button" type="button" disabled={isUpdatingStatus} onClick={() => updateStatus('enviado')}>Enviado</button>
-          <button className="button" type="button" disabled={isUpdatingStatus} onClick={() => updateStatus('negociando')}>Negociando</button>
-          <button className="button" type="button" disabled={isUpdatingStatus} onClick={() => updateStatus('ganho')}>Ganho</button>
-          <select className="assign-select" value={lossReason} onChange={(event) => setLossReason(event.target.value)}>
-            <option value="">Motivo perda</option>
-            <option value="preco">Preco</option>
-            <option value="prazo">Prazo</option>
-            <option value="concorrente">Concorrente</option>
-            <option value="sem_estoque">Sem estoque</option>
-            <option value="nao_respondeu">Nao respondeu</option>
-            <option value="aprovacao_rejeitada">Aprovacao rejeitada</option>
-          </select>
-          <button className="button" type="button" disabled={!lossReason || isUpdatingStatus} onClick={() => updateStatus('perdido', lossReason)}>Perdido</button>
+          {!isClosed && (
+            <>
+              <button className="button" type="button" disabled={isUpdatingStatus} onClick={() => updateStatus('enviado')}>Enviado</button>
+              <button className="button" type="button" disabled={isUpdatingStatus} onClick={() => updateStatus('negociando')}>Negociando</button>
+              <button className="button primary" type="button" disabled={isUpdatingStatus} onClick={() => void confirmOrderFromDetail()}>Confirmar pedido</button>
+              <select className="assign-select" value={lossReason} onChange={(event) => setLossReason(event.target.value)}>
+                <option value="">Motivo perda</option>
+                <option value="preco">Preco</option>
+                <option value="prazo">Prazo</option>
+                <option value="concorrente">Concorrente</option>
+                <option value="sem_estoque">Sem estoque</option>
+                <option value="nao_respondeu">Nao respondeu</option>
+                <option value="aprovacao_rejeitada">Aprovacao rejeitada</option>
+              </select>
+              <button className="button" type="button" disabled={!lossReason || isUpdatingStatus} onClick={() => updateStatus('perdido', lossReason)}>Perdido</button>
+            </>
+          )}
           <button className="button primary" type="button" onClick={() => setRevisionTarget(orcamento)}>Revisar proposta</button>
         </div>
       </section>

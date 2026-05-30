@@ -22,6 +22,10 @@ type OrcamentoRow = {
   aprovado_em: string | null
   enviado_por: string | null
   enviado_em: string | null
+  pedido_confirmado_por: string | null
+  pedido_confirmado_em: string | null
+  pedido_referencia: string | null
+  pedido_observacao: string | null
   proximo_followup_em: string | null
   prazo_entrega: string | null
   prazo_execucao: string | null
@@ -81,6 +85,12 @@ type OrcamentoAprovacaoRow = {
 }
 
 export type OrcamentoListFilter = Orcamento['status'] | 'todos' | 'vencidos'
+
+export type PedidoConfirmadoInput = {
+  usuarioId?: string
+  referencia?: string
+  observacao?: string
+}
 
 export async function listOrcamentos(limit = 100): Promise<Orcamento[]> {
   const supabase = await getSupabase()
@@ -241,6 +251,10 @@ export async function createOrcamento(input: OrcamentoInput, itens: OrcamentoIte
       aprovado_em: input.aprovadoEm ?? null,
       enviado_por: input.enviadoPor ?? null,
       enviado_em: input.enviadoEm ?? null,
+      pedido_confirmado_por: input.pedidoConfirmadoPor ?? null,
+      pedido_confirmado_em: input.pedidoConfirmadoEm ?? null,
+      pedido_referencia: input.pedidoReferencia ?? null,
+      pedido_observacao: input.pedidoObservacao ?? null,
       proximo_followup_em: input.proximoFollowupEm ?? null,
       prazo_entrega: input.prazoEntrega ?? null,
       prazo_execucao: input.prazoExecucao ?? null,
@@ -324,6 +338,10 @@ export async function reviseOrcamento(
       aprovado_em: input.aprovadoEm ?? null,
       enviado_por: input.enviadoPor ?? null,
       enviado_em: input.enviadoEm ?? null,
+      pedido_confirmado_por: input.pedidoConfirmadoPor ?? null,
+      pedido_confirmado_em: input.pedidoConfirmadoEm ?? null,
+      pedido_referencia: input.pedidoReferencia ?? null,
+      pedido_observacao: input.pedidoObservacao ?? null,
       proximo_followup_em: input.proximoFollowupEm ?? null,
       prazo_entrega: input.prazoEntrega ?? null,
       prazo_execucao: input.prazoExecucao ?? null,
@@ -375,6 +393,7 @@ export async function updateOrcamentoStatus(
   status: Orcamento['status'],
   motivoPerda?: string,
   aprovadoPor?: string,
+  pedidoConfirmado?: PedidoConfirmadoInput,
 ): Promise<void> {
   const supabase = await getSupabase()
   if (!supabase) return
@@ -391,6 +410,13 @@ export async function updateOrcamentoStatus(
     patch.enviado_por = aprovadoPor ?? undefined
     patch.enviado_em = new Date().toISOString()
     patch.proximo_followup_em = nextBusinessDate(2)
+  }
+  if (status === 'ganho' && pedidoConfirmado) {
+    patch.pedido_confirmado_por = pedidoConfirmado.usuarioId ?? aprovadoPor ?? undefined
+    patch.pedido_confirmado_em = new Date().toISOString()
+    patch.pedido_referencia = pedidoConfirmado.referencia?.trim() || null
+    patch.pedido_observacao = pedidoConfirmado.observacao?.trim() || null
+    patch.proximo_followup_em = null
   }
 
   const { error } = await supabase
@@ -415,6 +441,21 @@ export async function updateOrcamentoStatus(
       aprovadoPor ? motivoPerda ?? 'Aprovado e liberado para envio.' : 'Marcado como enviado.',
       aprovadoPor,
       { status },
+    )
+  }
+  if (status === 'ganho' && pedidoConfirmado) {
+    await createOrcamentoAprovacao(
+      id,
+      'enviada',
+      pedidoConfirmado.referencia?.trim()
+        ? `Pedido confirmado. Referencia: ${pedidoConfirmado.referencia.trim()}.`
+        : 'Pedido confirmado manualmente.',
+      pedidoConfirmado.usuarioId ?? aprovadoPor,
+      {
+        status,
+        pedido_referencia: pedidoConfirmado.referencia?.trim() || null,
+        pedido_observacao: pedidoConfirmado.observacao?.trim() || null,
+      },
     )
   }
   if (status === 'perdido' && motivoPerda?.startsWith('aprovacao_rejeitada:')) {
@@ -650,6 +691,10 @@ function mapOrcamento(row: OrcamentoRow): Orcamento {
     aprovadoEm: row.aprovado_em ?? undefined,
     enviadoPor: row.enviado_por ?? undefined,
     enviadoEm: row.enviado_em ?? undefined,
+    pedidoConfirmadoPor: row.pedido_confirmado_por ?? undefined,
+    pedidoConfirmadoEm: row.pedido_confirmado_em ?? undefined,
+    pedidoReferencia: row.pedido_referencia ?? undefined,
+    pedidoObservacao: row.pedido_observacao ?? undefined,
     proximoFollowupEm: row.proximo_followup_em ?? undefined,
     prazoEntrega: row.prazo_entrega ?? undefined,
     prazoExecucao: row.prazo_execucao ?? undefined,
