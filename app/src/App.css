@@ -5382,14 +5382,14 @@ h3 {
   }
 
   .sidebar {
-    display: grid;
-    grid-template-columns: 84px minmax(0, 1fr);
+    display: flex;
     align-items: center;
+    justify-content: flex-start;
     position: sticky;
     top: 0;
     z-index: 20;
-    gap: 8px;
-    padding: 10px 12px;
+    min-height: 58px;
+    padding: 9px 12px;
     overflow: hidden;
     box-shadow: 0 10px 28px rgba(18, 49, 47, 0.16);
   }
@@ -5405,8 +5405,8 @@ h3 {
   }
 
   .sidebar .brand-logo {
-    width: 82px;
-    max-height: 36px;
+    width: 116px;
+    max-height: 40px;
     object-fit: contain;
     object-position: left center;
   }
@@ -5420,38 +5420,14 @@ h3 {
 
   .nav,
   .nav-section {
-    display: flex;
-    gap: 8px;
-  }
-
-  .nav {
-    grid-column: 2;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    overflow-x: auto;
-    padding-bottom: 2px;
-    scrollbar-width: none;
-    overscroll-behavior-inline: contain;
-  }
-
-  .nav::-webkit-scrollbar {
     display: none;
   }
 
-  .nav-section {
-    min-width: max-content;
+  .nav {
+    grid-column: auto;
   }
 
-  .nav-item {
-    min-width: max-content;
-    min-height: 34px;
-    padding: 8px 10px;
-    font-size: 14px;
-    white-space: nowrap;
-  }
-
-  .nav-item.mobile-nav-secondary {
+  .nav::-webkit-scrollbar {
     display: none;
   }
 
