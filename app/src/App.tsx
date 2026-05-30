@@ -10610,6 +10610,9 @@ function Campanhas({
   const [selectedCampaignClientIds, setSelectedCampaignClientIds] = useState<string[]>([])
   const [isBulkCampaignUpdating, setIsBulkCampaignUpdating] = useState(false)
   const [isCreatingCampaignTasks, setIsCreatingCampaignTasks] = useState(false)
+  const [contactEditTarget, setContactEditTarget] = useState<Cliente | null>(null)
+  const [contactEditForm, setContactEditForm] = useState({ responsavel: '', whatsapp: '' })
+  const [isSavingContactEdit, setIsSavingContactEdit] = useState(false)
   const appliedInitialCampanhaIdRef = useRef('')
   const segmento = campanhaSegmentos.find((item) => item.id === segmentoId) ?? campanhaSegmentos[0]
   const activeCampaignResumo = campanhasResumo.find((resumo) => resumo.campanhaId === activeCampanhaId)
@@ -10804,6 +10807,50 @@ function Campanhas({
     return mensagemModelo
       .replace('{primeiro_nome}', primeiroNome)
       .replace('{nome_vendedor}', cliente.vendedorNome || 'Capital Truck Center')
+  }
+
+  function openCampaignContactEdit(cliente: Cliente) {
+    setContactEditTarget(cliente)
+    setContactEditForm({
+      responsavel: cliente.responsavel ?? '',
+      whatsapp: cliente.whatsapp ?? '',
+    })
+    setCampaignError('')
+  }
+
+  async function saveCampaignContactEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!contactEditTarget) return
+
+    const whatsapp = contactEditForm.whatsapp.replace(/\D/g, '')
+    setIsSavingContactEdit(true)
+    setCampaignError('')
+    try {
+      await updateClienteComercial(contactEditTarget.id, {
+        responsavel: contactEditForm.responsavel.trim() || undefined,
+        whatsapp: whatsapp || undefined,
+      })
+      setClientes((current) =>
+        current.map((cliente) =>
+          cliente.id === contactEditTarget.id
+            ? { ...cliente, responsavel: contactEditForm.responsavel.trim() || undefined, whatsapp: whatsapp || undefined }
+            : cliente,
+        ),
+      )
+      setElegibilidade((current) => ({
+        ...current,
+        [contactEditTarget.id]: {
+          ...(current[contactEditTarget.id] ?? { clienteId: contactEditTarget.id, elegivel: true, motivoBloqueio: 'Apto' }),
+          elegivel: Boolean(whatsapp),
+          motivoBloqueio: whatsapp ? 'Apto' : 'Sem WhatsApp',
+        },
+      }))
+      setContactEditTarget(null)
+    } catch (exception) {
+      setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel salvar o contato do cliente.')
+    } finally {
+      setIsSavingContactEdit(false)
+    }
   }
 
   async function saveCurrentCampaign() {
@@ -11762,7 +11809,7 @@ function Campanhas({
               </span>
               <span>
                 <strong>{cliente.nome}</strong>
-                <small>{cliente.whatsapp}</small>
+                <small>{cliente.responsavel || 'Responsavel nao informado'} - {cliente.whatsapp || 'sem WhatsApp'}</small>
                 {readiness.blocked && <small className="score danger">{readiness.reason}</small>}
               </span>
               <span>{finalMessage}</span>
@@ -11784,6 +11831,9 @@ function Campanhas({
                   title="Reabre o WhatsApp e volta o envio para pendente, mesmo quando ha contato recente."
                 >
                   Reenviar
+                </button>
+                <button className="button" type="button" onClick={() => openCampaignContactEdit(cliente)}>
+                  Editar contato
                 </button>
                 <button className="button" type="button" disabled={!canOpenNormally} onClick={() => markStatus(cliente, 'enviado', finalMessage)}>
                   Enviado
@@ -11836,6 +11886,48 @@ function Campanhas({
           Proxima
         </button>
       </div>
+      {contactEditTarget && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setContactEditTarget(null)}>
+          <form className="campaign-contact-modal" onSubmit={saveCampaignContactEdit} onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <span>
+                <strong>Editar contato rapido</strong>
+                <small>{contactEditTarget.nome}</small>
+              </span>
+              <button className="button" type="button" onClick={() => setContactEditTarget(null)}>
+                Fechar
+              </button>
+            </div>
+            <label>
+              Responsavel
+              <input
+                value={contactEditForm.responsavel}
+                onChange={(event) => setContactEditForm((current) => ({ ...current, responsavel: event.target.value }))}
+                placeholder="Nome da pessoa de contato"
+                autoFocus
+              />
+            </label>
+            <label>
+              WhatsApp
+              <input
+                value={contactEditForm.whatsapp}
+                onChange={(event) => setContactEditForm((current) => ({ ...current, whatsapp: event.target.value }))}
+                inputMode="numeric"
+                placeholder="Somente numeros, com DDD"
+              />
+            </label>
+            <small>Esses dados serao salvos no cadastro do cliente e usados no envio desta campanha.</small>
+            <div className="modal-actions">
+              <button className="button" type="button" onClick={() => setContactEditTarget(null)}>
+                Cancelar
+              </button>
+              <button className="button primary" type="submit" disabled={isSavingContactEdit}>
+                {isSavingContactEdit ? 'Salvando...' : 'Salvar contato'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </section>
   )
 }
