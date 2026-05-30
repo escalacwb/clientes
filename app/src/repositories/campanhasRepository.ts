@@ -591,33 +591,49 @@ async function findClientesByProdutoOuServico(term: string): Promise<string[]> {
     for (const searchTerm of searchTerms) {
       const pattern = `%${searchTerm}%`
       const searchServices = shouldSearchServicesForCampaignTerm(searchTerm)
-      const [vendas, servicos] = await Promise.all([
-        supabase
-          .from('vendas_itens')
-          .select('cliente_id')
-          .or(`produto_nome.ilike.${pattern},produto_codigo.ilike.${pattern},marca.ilike.${pattern},modelo.ilike.${pattern},medida.ilike.${pattern}`)
-          .limit(5000),
+      const [vendasIds, servicosIds] = await Promise.all([
+        collectCampaignClienteIds((from, to) =>
+          supabase
+            .from('vendas_itens')
+            .select('cliente_id')
+            .or(`produto_nome.ilike.${pattern},produto_codigo.ilike.${pattern},marca.ilike.${pattern},modelo.ilike.${pattern},medida.ilike.${pattern}`)
+            .range(from, to),
+        ),
         searchServices
-          ? supabase
-              .from('servicos_itens')
-              .select('cliente_id')
-              .or(`servico_nome.ilike.${pattern},servico_codigo.ilike.${pattern},observacao.ilike.${pattern},placa.ilike.${pattern}`)
-              .limit(5000)
-          : Promise.resolve({ data: [], error: null }),
+          ? collectCampaignClienteIds((from, to) =>
+              supabase
+                .from('servicos_itens')
+                .select('cliente_id')
+                .or(`servico_nome.ilike.${pattern},servico_codigo.ilike.${pattern},observacao.ilike.${pattern},placa.ilike.${pattern}`)
+                .range(from, to),
+            )
+          : Promise.resolve([]),
       ])
 
-      if (vendas.error && servicos.error) throw vendas.error
-
-      if (!vendas.error) {
-        for (const row of vendas.data ?? []) clienteIds.add(row.cliente_id as string)
-      }
-      if (!servicos.error) {
-        for (const row of servicos.data ?? []) clienteIds.add(row.cliente_id as string)
-      }
+      vendasIds.forEach((id) => clienteIds.add(id))
+      servicosIds.forEach((id) => clienteIds.add(id))
     }
   }
 
   return Array.from(clienteIds)
+}
+
+async function collectCampaignClienteIds(
+  fetchPage: (from: number, to: number) => PromiseLike<{ data: Array<{ cliente_id?: string | null }> | null; error: unknown }>,
+) {
+  const ids = new Set<string>()
+  const pageSize = 1000
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await fetchPage(from, from + pageSize - 1)
+    if (error) throw error
+    for (const row of data ?? []) {
+      if (row.cliente_id) ids.add(row.cliente_id)
+    }
+    if (!data || data.length < pageSize) break
+  }
+
+  return Array.from(ids)
 }
 
 function shouldSearchServicesForCampaignTerm(term: string) {
