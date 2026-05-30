@@ -46,6 +46,7 @@ Entregue nesta rodada:
 - Registro rapido de contato na ficha ganhou resultados prontos, texto orientador e botao `Salvar contato e follow-up`, reduzindo duvida sobre o que sera gravado.
 - Linguagem operacional foi padronizada para `Propostas` nos pontos visiveis do app, reduzindo a alternancia entre orcamento/proposta para o vendedor.
 - Lista de propostas ficou menos poluida: exclusao foi movida para `Mais acoes` e perda fica recolhida em `Marcar perda`, mantendo foco em abrir, enviar, negociar e ganhar.
+- Campanhas ficaram mais orientadas ao uso diario: etapas viraram `Publico`, `Texto`, `Enviar` e `Retornos`, e filtros avancados foram recolhidos para nao assustar o vendedor.
 
 Proximos pontos:
 - Proposta HTML imprimivel com layout final e termos padrao.

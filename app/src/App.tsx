@@ -2412,7 +2412,7 @@ function App() {
           <section className="panel wide">
             <div className="empty-state">
               Proposta nao encontrada na pagina atual.
-              <button className="button" type="button" onClick={() => setView('orcamentos')}>Voltar para orcamentos</button>
+              <button className="button" type="button" onClick={() => setView('orcamentos')}>Voltar para propostas</button>
             </div>
           </section>
         )}
@@ -2569,7 +2569,7 @@ function titleFor(view: string) {
     mesclagem: 'Controle de importacoes',
     campanhas: 'Campanhas e respostas',
     'campanhas-inbox': 'Campanhas e respostas',
-    orcamentos: 'Orcamentos e conversao',
+    orcamentos: 'Propostas e conversao',
     catalogo: 'Catalogo e precos',
     relatorios: 'Relatorios gerenciais',
     usuarios: 'Usuarios e permissoes',
@@ -2849,7 +2849,7 @@ function Cockpit({
     try {
       const result = await onRunFollowupAutomations()
       setFollowupAutomationMessage(
-        `${result.total} tarefas sincronizadas: ${result.orcamentos} orcamentos vencidos e ${result.campanhas} respostas de campanha.`,
+        `${result.total} tarefas sincronizadas: ${result.orcamentos} propostas vencidas e ${result.campanhas} respostas de campanha.`,
       )
     } catch (exception) {
       setFollowupAutomationMessage(exception instanceof Error ? exception.message : 'Nao foi possivel gerar follow-ups.')
@@ -3473,7 +3473,7 @@ function CampanhasInbox({
       <div className="panel-header">
         <div>
           <h2>Inbox de campanhas</h2>
-          <p>Fila operacional para tratar respostas, retornos, orcamentos e perdas sem voltar para a montagem da campanha.</p>
+          <p>Fila operacional para tratar respostas, retornos, propostas e perdas sem voltar para a montagem da campanha.</p>
         </div>
         <div className="toolbar-actions">
           <label className="mini-select">
@@ -3481,7 +3481,7 @@ function CampanhasInbox({
             <select value={statusFilter} onChange={(event) => onStatusFilterChange(event.target.value as CampanhaEnvioStatus | 'todos')}>
               <option value="todos">Todos os status</option>
               <option value="respondeu">Responderam</option>
-              <option value="virou_orcamento">Virou orcamento</option>
+              <option value="virou_orcamento">Virou proposta</option>
               <option value="enviado">Enviados</option>
               <option value="nao_respondeu">Nao respondeu</option>
               <option value="pendente">Pendentes</option>
@@ -3505,7 +3505,7 @@ function CampanhasInbox({
       <div className="info-grid campaign-summary">
         <Info label="Na fila" value={actionable.length.toString()} />
         <Info label="Responderam" value={(counts.respondeu ?? 0).toString()} />
-        <Info label="Orcamentos" value={(counts.virou_orcamento ?? 0).toString()} />
+        <Info label="Propostas" value={(counts.virou_orcamento ?? 0).toString()} />
         <Info label="Sem resposta" value={(counts.nao_respondeu ?? 0).toString()} />
         <Info label="Ganhos" value={(counts.ganhou ?? 0).toString()} />
         <Info label="Perdidos" value={(counts.perdido ?? 0).toString()} />
@@ -3680,7 +3680,7 @@ function Dashboard({
       id: 'orcamentos-vencidos' as const,
       title: 'Retomar propostas',
       count: resumo?.oportunidadesOrcamentoVencido ?? 0,
-      detail: 'Orcamentos vencidos ainda sem ganho/perda.',
+      detail: 'Propostas vencidas ainda sem ganho/perda.',
       action: 'Ver vencidos',
     },
     {
@@ -3933,7 +3933,7 @@ function Carteira({
       <div className="panel-header">
         <div>
           <h2>Minha rotina de hoje</h2>
-          <p>Fila priorizada por orcamentos, recompra, inatividade e dados incompletos.</p>
+          <p>Fila priorizada por propostas, recompra, inatividade e dados incompletos.</p>
         </div>
         <FilterControl clientes={baseClientes} orcamentos={orcamentos} value={filtro} onChange={onFilterChange} />
       </div>
@@ -10321,10 +10321,10 @@ function Campanhas({
   }).length
   const campaignReadyCount = Math.max(0, total - campaignQuality.bloqueados - campaignQuality.semWhatsapp - campaignQuality.optOut)
   const campaignStepHelp: Record<typeof campaignTab, string> = {
-    publico: 'Defina quem entra na campanha e valide se o publico faz sentido antes de escrever.',
-    mensagem: 'Edite a mensagem, variaveis e imagem padrao que o vendedor vai usar no WhatsApp.',
-    execucao: 'Trabalhe os primeiros 50 contatos, registre envios e crie tarefas em lote.',
-    resultado: 'Acompanhe respostas, orcamentos, ganhos, perdas e ROI da campanha.',
+    publico: 'Escolha quem sera acionado. Comece por um objetivo pronto e refine apenas se precisar.',
+    mensagem: 'Escreva o texto que o vendedor vai mandar no WhatsApp. A mensagem pode ser livre.',
+    execucao: 'Abra WhatsApp, registre envios e trabalhe a fila sem sair da pagina.',
+    resultado: 'Acompanhe respostas, propostas, ganhos e proximos retornos.',
   }
 
   useEffect(() => {
@@ -10748,13 +10748,13 @@ function Campanhas({
           1. Publico <span>{total}</span>
         </button>
         <button className={campaignTab === 'mensagem' ? 'active' : ''} type="button" onClick={() => setCampaignTab('mensagem')}>
-          2. Mensagem
+          2. Texto
         </button>
         <button className={campaignTab === 'execucao' ? 'active' : ''} type="button" onClick={() => setCampaignTab('execucao')}>
-          3. Execucao <span>{filteredClientes.length}</span>
+          3. Enviar <span>{filteredClientes.length}</span>
         </button>
         <button className={campaignTab === 'resultado' ? 'active' : ''} type="button" onClick={() => setCampaignTab('resultado')}>
-          4. Resultado
+          4. Retornos
         </button>
       </div>
       <div className="campaign-guide-summary">
@@ -10785,8 +10785,8 @@ function Campanhas({
       </div>
       <section className="campaign-builder-stage">
         <div className="campaign-stage-header">
-          <span>Campanha assistida</span>
-          <small>Escolha o objetivo comercial primeiro. Depois refine publico, mensagem e execucao.</small>
+          <span>Escolha um objetivo</span>
+          <small>Use um ponto de partida pronto. Depois ajuste publico, texto e envio.</small>
         </div>
         <div className="campaign-preset-grid">
           <button
@@ -11202,7 +11202,7 @@ function Campanhas({
               <option value="pendente">Pendentes</option>
               <option value="enviado">Enviados</option>
               <option value="respondeu">Responderam</option>
-              <option value="virou_orcamento">Virou orcamento</option>
+              <option value="virou_orcamento">Virou proposta</option>
               <option value="ganhou">Ganhos</option>
               <option value="perdido">Perdidos</option>
               <option value="nao_respondeu">Nao respondeu</option>
@@ -11230,6 +11230,10 @@ function Campanhas({
               ))}
             </select>
           </label>
+        </div>
+        <details className="campaign-advanced-filters">
+          <summary>Filtros avancados: produto, placa, KM, origem e historico</summary>
+          <div className="campaign-filter-grid">
           <label>
             Vendedor historico
             <input value={publicoFiltros.vendedorHistoricoNome ?? ''} onChange={(event) => updatePublicoFiltro('vendedorHistoricoNome', event.target.value)} placeholder="Nome no sistema" />
@@ -11291,7 +11295,8 @@ function Campanhas({
             <input type="checkbox" checked={Boolean(publicoFiltros.somenteComWhatsapp)} onChange={(event) => updatePublicoFiltro('somenteComWhatsapp', event.target.checked)} />
             Somente com WhatsApp
           </label>
-        </div>
+          </div>
+        </details>
       </section>
       {campaignError && <div className="alert">{campaignError}</div>}
       {isLoading && <div className="empty-state">Carregando segmento de campanha...</div>}

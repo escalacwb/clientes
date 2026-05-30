@@ -4040,6 +4040,24 @@ h3 {
   padding: 0;
 }
 
+.campaign-advanced-filters {
+  border: 1px solid #dce5df;
+  border-radius: 8px;
+  background: #fbfcfb;
+  padding: 10px 12px;
+}
+
+.campaign-advanced-filters summary {
+  cursor: pointer;
+  color: #123d37;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.campaign-advanced-filters .campaign-filter-grid {
+  margin-top: 12px;
+}
+
 .campaign-message-editor {
   display: grid;
   gap: 6px;
