@@ -6032,6 +6032,32 @@ function FichaCliente({
         `Bom dia, ${cliente.responsavel ?? cliente.nome}. Aqui e da Capital Truck Center. Estou passando para ver se precisa cotar pneus ou algum servico.`,
       )}`
     : undefined
+  const contactPresets = [
+    {
+      label: 'Pediu proposta',
+      resultado: 'pediu orcamento',
+      resumo: 'Cliente pediu proposta. Montar cotacao e retornar ainda hoje.',
+      dataProximaAcao: addDays(new Date().toISOString(), 1),
+    },
+    {
+      label: 'Respondeu',
+      resultado: 'respondeu',
+      resumo: 'Cliente respondeu. Continuar atendimento e registrar proximo passo.',
+      dataProximaAcao: addDays(new Date().toISOString(), 2),
+    },
+    {
+      label: 'Nao respondeu',
+      resultado: 'sem resposta',
+      resumo: 'Contato realizado, cliente ainda nao respondeu.',
+      dataProximaAcao: addDays(new Date().toISOString(), 3),
+    },
+    {
+      label: 'Comprar depois',
+      resultado: 'pediu retorno depois',
+      resumo: 'Cliente pediu retorno em outro momento.',
+      dataProximaAcao: addDays(new Date().toISOString(), 15),
+    },
+  ]
   async function submitInteraction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!form.resumo.trim()) return
@@ -6101,7 +6127,7 @@ function FichaCliente({
             setShowForm((current) => !current)
           }}
         >
-          <Phone size={16} /> Contato
+          <Phone size={16} /> Registrar contato
         </button>
         <button className="button primary" type="button" onClick={onOpenBudgetEditor}>
           <WalletCards size={16} /> Proposta
@@ -6189,6 +6215,27 @@ function FichaCliente({
 
       {showForm && (
         <form className="contact-form" onSubmit={submitInteraction}>
+          <div className="contact-form-header span-2">
+            <strong>Registrar contato</strong>
+            <small>Salve em poucos segundos o que aconteceu e a proxima acao.</small>
+          </div>
+          <div className="contact-preset-grid span-2">
+            {contactPresets.map((preset) => (
+              <button
+                className="button"
+                key={preset.label}
+                type="button"
+                onClick={() => setForm((current) => ({
+                  ...current,
+                  resultado: preset.resultado,
+                  resumo: current.resumo || preset.resumo,
+                  dataProximaAcao: current.dataProximaAcao || preset.dataProximaAcao,
+                }))}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
           <label>
             Canal
             <select value={form.canal} onChange={(event) => setForm({ ...form, canal: event.target.value })}>
@@ -6206,6 +6253,7 @@ function FichaCliente({
               <option>respondeu</option>
               <option>pediu orcamento</option>
               <option>pediu retorno depois</option>
+              <option>sem resposta</option>
               <option>sem interesse</option>
               <option>telefone invalido</option>
             </select>
@@ -6226,7 +6274,7 @@ function FichaCliente({
               onChange={(event) => setForm({ ...form, dataProximaAcao: event.target.value })}
             />
           </label>
-          <button className="button primary" type="submit">Registrar</button>
+          <button className="button primary" type="submit">Salvar contato e follow-up</button>
         </form>
       )}
 

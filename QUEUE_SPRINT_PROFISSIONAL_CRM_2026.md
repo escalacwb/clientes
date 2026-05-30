@@ -43,6 +43,7 @@ Entregue nesta rodada:
 - Minha rotina ganhou bloco `Comece por aqui`, mostrando uma unica acao recomendada com botoes diretos para reduzir paralisia e abandono.
 - Lista de clientes trocou score tecnico por prioridade comercial e mostra a proxima acao ja na linha do cliente.
 - Ficha resumida do cliente removeu o orcamento antigo inline: agora o vendedor usa sempre o editor completo de proposta, com botao principal `Proposta` e acesso separado a `Ficha completa`.
+- Registro rapido de contato na ficha ganhou resultados prontos, texto orientador e botao `Salvar contato e follow-up`, reduzindo duvida sobre o que sera gravado.
 
 Proximos pontos:
 - Proposta HTML imprimivel com layout final e termos padrao.

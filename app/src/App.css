@@ -2040,6 +2040,26 @@ h3 {
   gap: 10px;
 }
 
+.contact-form-header {
+  display: grid;
+  gap: 3px;
+}
+
+.contact-form-header strong {
+  color: #0f2f2c;
+  font-size: 15px;
+}
+
+.contact-form-header small {
+  color: #5c6b66;
+}
+
+.contact-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+
 .contact-form label {
   display: grid;
   gap: 5px;
