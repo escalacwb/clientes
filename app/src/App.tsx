@@ -245,6 +245,7 @@ const hiddenViewRedirects: Record<string, string> = {
 const adminOnlyViews = new Set(['importacoes', 'conflitos', 'mesclagem', 'relatorios', 'vendedores', 'usuarios', 'auditoria'])
 const sellerPrimaryViews = new Set(['cockpit', 'clientes', 'campanhas', 'orcamentos', 'catalogo'])
 const mobilePrimaryViews = new Set(['cockpit', 'clientes', 'campanhas', 'orcamentos'])
+const mobileAllowedViews = new Set(['cockpit', 'clientes', 'campanhas', 'orcamentos', 'cliente360', 'orcamento-editor', 'orcamento-detalhe'])
 
 function normalizeView(view: string) {
   return hiddenViewRedirects[view] ?? view
@@ -295,6 +296,20 @@ function BrandLogo({ compact = false }: { compact?: boolean }) {
   )
 }
 
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() => (typeof window === 'undefined' ? false : window.matchMedia(query).matches))
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(query)
+    const update = () => setMatches(mediaQuery.matches)
+    update()
+    mediaQuery.addEventListener('change', update)
+    return () => mediaQuery.removeEventListener('change', update)
+  }, [query])
+
+  return matches
+}
+
 function uniqueBy<T>(items: T[], getKey: (item: T) => string) {
   const seen = new Set<string>()
   return items.filter((item) => {
@@ -312,6 +327,7 @@ type QuoteOriginContext =
 
 function App() {
   const clientePageSize = 50
+  const isMobileShell = useMediaQuery('(max-width: 720px)')
   const [session, setSession] = useState<SessaoUsuario | null>(null)
   const [isCheckingSession, setIsCheckingSession] = useState(true)
   const [view, setView] = useState(() => normalizeView(localStorage.getItem('capital-crm:last-view') ?? 'cockpit'))
@@ -448,8 +464,12 @@ function App() {
       setView(nextView)
       return
     }
+    if (isMobileShell && session && !mobileAllowedViews.has(nextView)) {
+      setView('cockpit')
+      return
+    }
     localStorage.setItem('capital-crm:last-view', nextView)
-  }, [view])
+  }, [isMobileShell, session, view])
 
   useEffect(() => {
     localStorage.setItem('capital-crm:cliente-filter', clienteFiltro)
@@ -1220,12 +1240,13 @@ function App() {
     .map((section) => ({
       ...section,
       items: section.items
+        .filter((item) => !isMobileShell || mobilePrimaryViews.has(item.id))
         .filter((item) => session.role === 'admin' || !adminOnlyViews.has(item.id))
         .filter((item) => session.role === 'admin' || sellerPrimaryViews.has(item.id))
         .map((item) => item.id === 'orcamentos' ? { ...item, label: 'Propostas' } : item),
     }))
     .filter((section) => section.items.length > 0)
-  const canUseScopedClientViews = session.role === 'admin' || !sellerHasNoCarteira
+  const canUseScopedClientViews = session.role === 'admin' || isMobileShell || !sellerHasNoCarteira
 
   return (
     <div className="app-shell">
@@ -1356,10 +1377,10 @@ function App() {
                 Orcar
               </button>
               <button className="mobile-only" type="button" onClick={() => setView('clientes')}>
-                Clientes
+                Historico
               </button>
               <button className="mobile-only" type="button" onClick={() => setView('cockpit')}>
-                Rotina
+                Inicio
               </button>
               <button className="quick-tarefas" type="button" onClick={() => openQuickAction('tarefas-vencidas')}>
                 <span>{cockpitTarefasVencidas.length}</span>
@@ -1425,7 +1446,22 @@ function App() {
           </section>
         )}
 
-        {view === 'cockpit' && !sellerHasNoCarteira && (
+        {isMobileShell && canUseScopedClientViews && view === 'cockpit' && (
+          <MobileActionHome
+            clientes={scoredClientes.slice(0, 8)}
+            tarefasCount={cockpitTarefasVencidas.length}
+            campanhasCount={cockpitCampanhas.length}
+            onOpenClient={(cliente) => {
+              setSelectedClientId(cliente.id)
+              setView('cliente360')
+            }}
+            onCreateQuote={(cliente) => {
+              void openQuoteForClient(cliente, 'mobile', { kind: 'cliente', label: 'Mobile' })
+            }}
+            onOpenCampaigns={() => setView('campanhas')}
+          />
+        )}
+        {view === 'cockpit' && !isMobileShell && !sellerHasNoCarteira && (
           <Cockpit
             currentUser={session}
             usuarios={usuarios}
@@ -2676,6 +2712,126 @@ function Login({ usuarios, onLogin }: { usuarios: Vendedor[]; onLogin: (session:
         </p>
       </section>
     </main>
+  )
+}
+
+function MobileActionHome({
+  clientes,
+  tarefasCount,
+  campanhasCount,
+  onOpenClient,
+  onCreateQuote,
+  onOpenCampaigns,
+}: {
+  clientes: Array<Cliente & { score?: number; motivo?: string; proximaMelhorAcao?: string }>
+  tarefasCount: number
+  campanhasCount: number
+  onOpenClient: (cliente: Cliente) => void
+  onCreateQuote: (cliente: Cliente) => void
+  onOpenCampaigns: () => void
+}) {
+  const [query, setQuery] = useState('')
+  const [remoteClientes, setRemoteClientes] = useState<Cliente[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+  const searchRef = useRef<HTMLInputElement | null>(null)
+  const trimmedQuery = query.trim()
+
+  useEffect(() => {
+    let isActive = true
+    if (trimmedQuery.length < 2) {
+      setRemoteClientes([])
+      setIsSearching(false)
+      return
+    }
+
+    setIsSearching(true)
+    listClientesPage({ page: 1, pageSize: 8, query: trimmedQuery })
+      .then((result) => {
+        if (isActive) setRemoteClientes(result.clientes)
+      })
+      .catch(() => {
+        if (!isActive) return
+        const normalized = normalizeTextForMatch(trimmedQuery)
+        setRemoteClientes(
+          clientes
+            .filter((cliente) => normalizeTextForMatch(`${cliente.nome} ${cliente.cidade} ${cliente.uf} ${cliente.whatsapp ?? ''} ${cliente.cpfCnpj ?? ''}`).includes(normalized))
+            .slice(0, 8),
+        )
+      })
+      .finally(() => {
+        if (isActive) setIsSearching(false)
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [clientes, trimmedQuery])
+
+  const visibleClientes = trimmedQuery.length >= 2 ? remoteClientes : clientes.slice(0, 5)
+
+  function focusClientSearch() {
+    searchRef.current?.focus()
+  }
+
+  return (
+    <section className="mobile-home" aria-label="Inicio mobile do vendedor">
+      <div className="mobile-home-hero">
+        <span>Mobile vendedor</span>
+        <strong>Orcar, enviar campanha e consultar cliente sem procurar menu.</strong>
+        <small>{tarefasCount} tarefas criticas - {campanhasCount} campanhas para tratar</small>
+      </div>
+
+      <div className="mobile-action-grid">
+        <button className="mobile-action-card primary" type="button" onClick={focusClientSearch}>
+          <strong>Orcar cliente</strong>
+          <span>Busque o cliente e monte a proposta em poucos toques.</span>
+        </button>
+        <button className="mobile-action-card" type="button" onClick={onOpenCampaigns}>
+          <strong>Enviar campanha</strong>
+          <span>Abra campanhas salvas e envie pelo WhatsApp.</span>
+        </button>
+        <button className="mobile-action-card" type="button" onClick={focusClientSearch}>
+          <strong>Consultar historico</strong>
+          <span>Abra a ficha 360, contatos, compras e follow-up.</span>
+        </button>
+      </div>
+
+      <label className="mobile-client-search">
+        Cliente
+        <input
+          ref={searchRef}
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Nome, cidade, WhatsApp ou CNPJ"
+        />
+      </label>
+
+      <div className="mobile-client-list">
+        <div className="mobile-list-heading">
+          <strong>{trimmedQuery.length >= 2 ? 'Resultado da busca' : 'Clientes para acao rapida'}</strong>
+          <span>{isSearching ? 'Buscando...' : `${visibleClientes.length} exibidos`}</span>
+        </div>
+        {visibleClientes.length === 0 && (
+          <div className="empty-card">Nenhum cliente encontrado. Refine a busca para abrir historico ou orcar.</div>
+        )}
+        {visibleClientes.map((cliente) => (
+          <article className="mobile-client-card" key={cliente.id}>
+            <strong>{cliente.nome}</strong>
+            <span>{[cliente.cidade, cliente.uf].filter(Boolean).join('/')} - {cliente.whatsapp || cliente.telefone || 'sem WhatsApp'}</span>
+            <small>{(cliente as Cliente & { proximaMelhorAcao?: string }).proximaMelhorAcao ?? bestNextAction(cliente)} - Ultima compra {dateLabel(cliente.ultimaCompraEm)}</small>
+            <div className="mobile-client-card-actions">
+              <button className="button primary" type="button" onClick={() => onCreateQuote(cliente)}>
+                Orcar
+              </button>
+              <button className="button" type="button" onClick={() => onOpenClient(cliente)}>
+                Historico
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
   )
 }
 
