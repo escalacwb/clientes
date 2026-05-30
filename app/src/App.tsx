@@ -244,6 +244,7 @@ const hiddenViewRedirects: Record<string, string> = {
 
 const adminOnlyViews = new Set(['importacoes', 'conflitos', 'mesclagem', 'relatorios', 'vendedores', 'usuarios', 'auditoria'])
 const sellerPrimaryViews = new Set(['cockpit', 'clientes', 'campanhas', 'orcamentos', 'catalogo'])
+const mobilePrimaryViews = new Set(['cockpit', 'clientes', 'campanhas', 'orcamentos'])
 
 function normalizeView(view: string) {
   return hiddenViewRedirects[view] ?? view
@@ -1245,14 +1246,15 @@ function App() {
                 const Icon = item.icon
                 return (
                   <button
-                    className={view === item.id ? 'nav-item active' : 'nav-item'}
+                    className={`${view === item.id ? 'nav-item active' : 'nav-item'} ${mobilePrimaryViews.has(item.id) ? 'mobile-nav-primary' : 'mobile-nav-secondary'}`}
                     key={item.id}
                     onClick={() => setView(item.id)}
                     type="button"
                     title={item.label}
                   >
                     <Icon size={18} />
-                    <span>{item.label}</span>
+                    <span className="nav-label-full">{item.label}</span>
+                    {item.id === 'orcamentos' && <span className="nav-label-mobile">Orcar</span>}
                   </button>
                 )
               })}
@@ -1350,24 +1352,30 @@ function App() {
               )}
             </div>
             <div className="quick-jump-bar" aria-label="Atalhos operacionais">
-              <button type="button" onClick={() => openQuickAction('tarefas-vencidas')}>
+              <button className="primary quick-orcar" type="button" onClick={() => openQuickAction('orcamentos')}>
+                Orcar
+              </button>
+              <button className="mobile-only" type="button" onClick={() => setView('clientes')}>
+                Clientes
+              </button>
+              <button className="mobile-only" type="button" onClick={() => setView('cockpit')}>
+                Rotina
+              </button>
+              <button className="quick-tarefas" type="button" onClick={() => openQuickAction('tarefas-vencidas')}>
                 <span>{cockpitTarefasVencidas.length}</span>
                 Tarefas
               </button>
-              <button type="button" onClick={() => openQuickAction('orcamentos-vencidos')}>
+              <button className="quick-propostas" type="button" onClick={() => openQuickAction('orcamentos-vencidos')}>
                 <span>{cockpitOrcamentos.length}</span>
                 Propostas
               </button>
-              <button type="button" onClick={() => openQuickAction('clientes-sem-cadastro')}>
+              <button className="quick-sem-cadastro" type="button" onClick={() => openQuickAction('clientes-sem-cadastro')}>
                 <span>{cockpitRodobens.length}</span>
                 Sem cadastro
               </button>
-              <button type="button" onClick={() => openQuickAction('campanhas')}>
+              <button className="quick-campanhas" type="button" onClick={() => openQuickAction('campanhas')}>
                 <span>{cockpitCampanhas.length}</span>
                 Campanhas
-              </button>
-              <button className="primary" type="button" onClick={() => openQuickAction('orcamentos')}>
-                Nova proposta
               </button>
             </div>
           </div>

@@ -105,6 +105,11 @@
   font: inherit;
 }
 
+.nav-label-mobile,
+.mobile-only {
+  display: none;
+}
+
 .nav-item:hover,
 .nav-item.active {
   background: #214744;
@@ -5345,6 +5350,22 @@ h3 {
     white-space: nowrap;
   }
 
+  .nav-item.mobile-nav-secondary {
+    display: none;
+  }
+
+  .mobile-only {
+    display: inline-flex;
+  }
+
+  .nav-item[title='Propostas'] .nav-label-full {
+    display: none;
+  }
+
+  .nav-item[title='Propostas'] .nav-label-mobile {
+    display: inline;
+  }
+
   .topbar {
     flex-direction: column;
     gap: 10px;
@@ -5357,7 +5378,7 @@ h3 {
   }
 
   .topbar h1 {
-    font-size: 22px;
+    font-size: 20px;
   }
 
   .topbar-actions {
@@ -5374,7 +5395,9 @@ h3 {
   }
 
   .quick-jump-bar {
-    display: flex;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(88px, 1fr);
     flex-wrap: nowrap;
     justify-content: flex-start;
     position: fixed;
@@ -5396,6 +5419,23 @@ h3 {
     min-width: max-content;
     font-size: 12px;
     padding: 0 8px;
+  }
+
+  .quick-jump-bar .quick-propostas,
+  .quick-jump-bar .quick-sem-cadastro {
+    display: none;
+  }
+
+  .quick-jump-bar .quick-orcar {
+    order: -5;
+  }
+
+  .quick-jump-bar .quick-campanhas {
+    order: -4;
+  }
+
+  .quick-jump-bar .mobile-only {
+    order: -3;
   }
 
   .quick-jump-bar::-webkit-scrollbar {
@@ -5420,6 +5460,14 @@ h3 {
     display: none;
   }
 
+  .data-banner {
+    display: none;
+  }
+
+  .budget-summary {
+    display: none;
+  }
+
   .panel {
     padding: 14px;
   }
@@ -5436,8 +5484,11 @@ h3 {
   }
 
   .panel-header p {
-    font-size: 13px;
-    line-height: 1.4;
+    display: none;
+  }
+
+  .panel-header h2 {
+    font-size: 18px;
   }
 
   .table {
@@ -5503,14 +5554,14 @@ h3 {
     height: auto;
     min-height: 0;
     display: block;
-    padding: 8px 10px;
+    border-radius: 0;
+    background: transparent;
+    padding: 0;
     text-align: left;
   }
 
   .table-row .score small {
-    color: #5d6b67;
-    font-weight: 700;
-    margin-top: 3px;
+    display: none;
   }
 
   .next-campaign-target {

@@ -55,6 +55,7 @@ Entregue nesta rodada:
 - PDF da proposta ficou mais compacto e tenta ajustar propostas medias em uma pagina, reduzindo quebras ruins e paginas finais quase vazias.
 - Versao mobile ficou mais operacional: menu horizontal compacto, atalhos grandes, listas em cards e menos elementos de topo competindo com a acao principal.
 - Segunda rodada mobile validada em sessao local: removido overflow horizontal, cards de clientes/propostas passaram a respeitar largura do celular, alerta administrativo foi ocultado no mobile e atalhos operacionais viraram barra inferior fixa.
+- Terceira rodada mobile mudou a estrategia para uso real de vendedor: menu mobile mostra apenas Minha rotina, Clientes, Campanhas e Orcar; Importacoes/Equipe/Usuarios/Catalogo saem da navegacao mobile; a barra inferior prioriza Orcar, Campanhas, Clientes e Rotina; descricoes tecnicas e resumos gerenciais foram removidos da primeira leitura mobile.
 
 Proximos pontos:
 - Continuar refinando proposta HTML imprimivel em casos extremos de muitos itens.
