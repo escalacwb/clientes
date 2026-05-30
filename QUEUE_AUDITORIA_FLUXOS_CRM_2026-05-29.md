@@ -132,7 +132,7 @@ Acao:
 
 ### A07 - Funcionalidades de gestao demais para o vendedor
 
-Status: P1.
+Status: Concluido.
 
 Evidencia:
 - Vendedor acessa Catalogo, Oportunidades, Campanhas e Orcamentos, mas sem carteira tudo fica vazio.
@@ -149,6 +149,11 @@ Acao:
   - Campanhas/retornos.
   - Catalogo.
 - Ocultar/colapsar telas que sao apenas gerenciais quando nao houver dados.
+
+Execucao:
+- Sidebar do vendedor foi reduzida para `Minha rotina`, `Clientes`, `Campanhas`, `Propostas` e `Catalogo`.
+- Telas como clientes sem cadastro, tarefas e oportunidades continuam acessiveis por atalhos/contexto, mas deixam de competir como menu principal do vendedor.
+- Admin mantem a visao completa de operacao, comercial e gestao.
 
 ### A08 - Historico e atividade evoluiram, mas falta painel de produtividade por usuario
 

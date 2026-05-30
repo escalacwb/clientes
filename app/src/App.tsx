@@ -236,6 +236,7 @@ const hiddenViewRedirects: Record<string, string> = {
 }
 
 const adminOnlyViews = new Set(['importacoes', 'conflitos', 'mesclagem', 'relatorios', 'vendedores', 'usuarios', 'auditoria'])
+const sellerPrimaryViews = new Set(['cockpit', 'clientes', 'campanhas', 'orcamentos', 'catalogo'])
 
 function normalizeView(view: string) {
   return hiddenViewRedirects[view] ?? view
@@ -1206,7 +1207,10 @@ function App() {
   const visibleNavSections = navSections
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => session.role === 'admin' || !adminOnlyViews.has(item.id)),
+      items: section.items
+        .filter((item) => session.role === 'admin' || !adminOnlyViews.has(item.id))
+        .filter((item) => session.role === 'admin' || sellerPrimaryViews.has(item.id))
+        .map((item) => item.id === 'orcamentos' ? { ...item, label: 'Propostas' } : item),
     }))
     .filter((section) => section.items.length > 0)
   const canUseScopedClientViews = session.role === 'admin' || !sellerHasNoCarteira
