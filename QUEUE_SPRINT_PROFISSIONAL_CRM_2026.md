@@ -20,7 +20,7 @@ Fontes consultadas:
 
 - O app deve trabalhar como CRM operacional + CPQ + motor de campanhas para caminhoneiros/frotistas.
 - Toda tela precisa responder: quem acionar, por que acionar, qual proposta montar e qual risco impedir.
-- O diferencial sera usar historico real de vendas, servicos, placa, KM, vendedor historico, origem Capital/Rodobens e listas de preco.
+- O diferencial sera usar historico real de vendas, servicos, placa, KM, vendedor historico, origem Capital/listas externas e listas de preco.
 - Prioridade maxima: simplicidade de uso da equipe. Vendedor precisa registrar contato, abrir WhatsApp, criar proposta e follow-up sem sentir que esta preenchendo relatorio.
 - Relatorios, auditoria e controles ficam como apoio gerencial discreto, sem atrapalhar a rotina comercial.
 
@@ -39,6 +39,7 @@ Entregue nesta rodada:
 - Orcamento ganhou atalhos de pacotes complementares, sugerindo montagem, balanceamento, alinhamento e cambagem quando ha pneu na proposta.
 - Botoes de resultado do atendimento agora preenchem proxima acao e data automaticamente para orcamento, sem resposta e comprar depois.
 - Ficha do cliente prioriza abrir proposta em andamento antes de criar uma nova, reduzindo duplicidade e confusao no atendimento.
+- Clientes sem cadastro ganharam acao unica `Abrir e registrar`, que abre WhatsApp, registra interacao, cria follow-up e muda status para contatado.
 
 Proximos pontos:
 - Proposta HTML imprimivel com layout final e termos padrao.
@@ -52,7 +53,7 @@ Status: Em andamento.
 Entregue nesta rodada:
 - Bloqueio visual de envio para sem WhatsApp, nao contatar e contato recente.
 - Indicadores de bloqueados, sem WhatsApp e opt-out no painel de campanhas.
-- Segmentacao combinavel em campanhas por cidade, UF, vendedor, origem Capital/Rodobens, produto/servico comprado, dias sem compra, dias sem contato, valor historico minimo e somente com WhatsApp.
+- Segmentacao combinavel em campanhas por cidade, UF, vendedor, origem Capital/listas externas, produto/servico comprado, dias sem compra, dias sem contato, valor historico minimo e somente com WhatsApp.
 - Campanhas salvas preservam os filtros avancados no `filtro_usado`, permitindo reabrir o mesmo publico sem remontar manualmente.
 - Segmentacao passou a cruzar vendedor historico, status de lead, medida, placa/veiculo e faixa de KM com vendas, servicos e cadastro de veiculos.
 - Criada view `vw_clientes_campanha_elegibilidade` para centralizar bloqueios de campanha por nao contatar, falta de WhatsApp e contato recente.

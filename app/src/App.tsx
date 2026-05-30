@@ -3961,6 +3961,9 @@ function RodobensInbox({
   }, [page, query, statusFilter])
 
   async function registerFirstContact(cliente: Cliente) {
+    const message = buildExternalLeadOpeningMessage(cliente)
+    const waUrl = cliente.whatsapp ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(message)}` : undefined
+    if (waUrl) window.open(waUrl, '_blank', 'noopener,noreferrer')
     await onAddInteraction({
       clienteId: cliente.id,
       vendedorId: cliente.vendedorId ?? currentUser.id,
@@ -4123,9 +4126,6 @@ function RodobensInbox({
             <span>Acoes</span>
           </div>
           {leads.map((cliente) => {
-            const message = `Bom dia, ${cliente.responsavel ?? cliente.nome}. Aqui e da Capital Truck Center. Identifiquei seu cadastro em uma lista externa e gostaria de entender se podemos ajudar com pneus ou servicos.`
-            const waUrl = cliente.whatsapp ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(message)}` : undefined
-
             return (
               <div className="table-row rodobens-row rodobens-bulk-row" key={cliente.id}>
                 <span>
@@ -4162,11 +4162,8 @@ function RodobensInbox({
                   <button className="button" type="button" onClick={() => onSelect(cliente)}>
                     <UserRound size={16} /> Ficha
                   </button>
-                  <a className={!waUrl ? 'button disabled' : 'button'} href={waUrl} target="_blank" rel="noreferrer">
-                    <MessageCircle size={16} /> WhatsApp
-                  </a>
-                  <button className="button primary" type="button" onClick={() => registerFirstContact(cliente)}>
-                    Registrar contato
+                  <button className="button primary" type="button" disabled={!cliente.whatsapp} onClick={() => registerFirstContact(cliente)}>
+                    <MessageCircle size={16} /> Abrir e registrar
                   </button>
                   <button className="button" type="button" onClick={() => updateLead(cliente, 'qualificado')}>
                     Qualificar
@@ -8871,6 +8868,11 @@ function inDateRange(value: string | undefined, startDate: string, endDate: stri
 function buildServiceOpeningMessage(cliente: Cliente) {
   const firstName = (cliente.responsavel || cliente.nome).split(' ')[0]
   return `Bom dia, ${firstName}. Aqui é da Capital Truck Center. Estou passando para ver se precisa cotar pneus ou algum serviço.`
+}
+
+function buildExternalLeadOpeningMessage(cliente: Cliente) {
+  const firstName = (cliente.responsavel || cliente.nome).split(' ')[0]
+  return `Bom dia, ${firstName}. Aqui e da Capital Truck Center. Estou entrando em contato para entender sua frota e ver se podemos ajudar com pneus ou servicos.`
 }
 
 function nextActionLabelFromResult(resultado: string) {
