@@ -7229,10 +7229,11 @@ function buildQuoteMessage(
   lines.push('', '⚠️ Antes da emissão da ordem de compra, solicite a confirmação de disponibilidade, prazo e condições.')
   lines.push('', 'Posso confirmar disponibilidade para você?')
   const closingQuestion = lines.pop()
-  lines.push('', '📌 *Condições gerais*')
-  quoteStandardTerms.forEach((term) => lines.push(`- ${term}`))
-  if (closingQuestion) lines.push('', closingQuestion)
-  return lines.join('\n')
+  const messageLines = lines.filter((line) => !line.toLowerCase().includes('ordem de compra'))
+  messageLines.push('', '📌 *Condições gerais*')
+  quoteStandardTerms.forEach((term) => messageLines.push(`- ${term}`))
+  if (closingQuestion) messageLines.push('', closingQuestion)
+  return messageLines.join('\n')
 }
 
 function quoteMessageBlockTitle(title: string, kind: NonNullable<OrcamentoItemInput['apresentacao']>) {
@@ -7379,10 +7380,25 @@ async function downloadElementPdf(element: HTMLElement | null, filename: string)
     const contentHeight = pageHeight - margin * 2
     const imageWidth = contentWidth
     const pageCanvasHeight = Math.floor((contentHeight * canvas.width) / imageWidth)
+    const naturalImageHeight = (canvas.height * imageWidth) / canvas.width
+
+    if (naturalImageHeight <= contentHeight * 1.18) {
+      const fittedWidth = naturalImageHeight > contentHeight
+        ? Math.min(imageWidth, (contentHeight * canvas.width) / canvas.height)
+        : imageWidth
+      const fittedHeight = (canvas.height * fittedWidth) / canvas.width
+      const fittedX = margin + (contentWidth - fittedWidth) / 2
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', fittedX, margin, fittedWidth, fittedHeight)
+      pdf.save(filename.endsWith('.pdf') ? filename : `${filename}.pdf`)
+      return
+    }
+
     let sourceY = 0
     let pageIndex = 0
 
     while (sourceY < canvas.height) {
+      const remaining = canvas.height - sourceY
+      if (remaining < 24) break
       const sliceHeight = Math.min(pageCanvasHeight, canvas.height - sourceY)
       const pageCanvas = document.createElement('canvas')
       pageCanvas.width = canvas.width

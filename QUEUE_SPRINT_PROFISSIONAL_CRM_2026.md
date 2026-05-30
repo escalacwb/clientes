@@ -52,9 +52,10 @@ Entregue nesta rodada:
 - Proposta comercial ganhou termos padrao no WhatsApp e no PDF: disponibilidade antes da ordem de compra, prazo/agenda, validade das condicoes e garantia.
 - Prazos de entrega e execucao ganharam atalhos rapidos no editor e na revisao da proposta, evitando digitacao repetitiva.
 - Detalhe da proposta ganhou controle direto de follow-up com atalhos para hoje, 2 dias, 7 dias ou data manual, sem precisar revisar a proposta.
+- PDF da proposta ficou mais compacto e tenta ajustar propostas medias em uma pagina, reduzindo quebras ruins e paginas finais quase vazias.
 
 Proximos pontos:
-- Refinar proposta HTML imprimivel com layout final em casos de muitos itens.
+- Continuar refinando proposta HTML imprimivel em casos extremos de muitos itens.
 - Controle de envio: enviado em, enviado por e proximo follow-up cobertos; ainda evoluir aceite manual quando houver fluxo de pedido confirmado.
 
 ## Sprint B - Campanhas seguras e segmentacao forte
