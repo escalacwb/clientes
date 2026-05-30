@@ -44,6 +44,8 @@ Entregue nesta rodada:
 - Lista de clientes trocou score tecnico por prioridade comercial e mostra a proxima acao ja na linha do cliente.
 - Ficha resumida do cliente removeu o orcamento antigo inline: agora o vendedor usa sempre o editor completo de proposta, com botao principal `Proposta` e acesso separado a `Ficha completa`.
 - Registro rapido de contato na ficha ganhou resultados prontos, texto orientador e botao `Salvar contato e follow-up`, reduzindo duvida sobre o que sera gravado.
+- Linguagem operacional foi padronizada para `Propostas` nos pontos visiveis do app, reduzindo a alternancia entre orcamento/proposta para o vendedor.
+- Lista de propostas ficou menos poluida: exclusao foi movida para `Mais acoes` e perda fica recolhida em `Marcar perda`, mantendo foco em abrir, enviar, negociar e ganhar.
 
 Proximos pontos:
 - Proposta HTML imprimivel com layout final e termos padrao.

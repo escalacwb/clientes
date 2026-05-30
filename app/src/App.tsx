@@ -219,7 +219,7 @@ const navSections = [
     title: 'Comercial',
     items: [
       { id: 'campanhas', label: 'Campanhas', icon: Send },
-      { id: 'orcamentos', label: 'Orcamentos', icon: WalletCards },
+      { id: 'orcamentos', label: 'Propostas', icon: WalletCards },
       { id: 'catalogo', label: 'Catalogo', icon: ClipboardList },
     ],
   },
@@ -741,7 +741,7 @@ function App() {
         setOrcamentosTotal(result.total)
         clearModuleError('orcamentos')
       } catch (exception) {
-        if (isMounted) setModuleError('orcamentos', exception instanceof Error ? exception.message : 'Nao foi possivel carregar os orcamentos.')
+        if (isMounted) setModuleError('orcamentos', exception instanceof Error ? exception.message : 'Nao foi possivel carregar as propostas.')
       } finally {
         if (isMounted) setIsLoadingOrcamentos(false)
       }
@@ -1120,7 +1120,7 @@ function App() {
     setView('orcamento-editor')
   }
 
-  function openQuoteSearch(originContext: QuoteOriginContext = { kind: 'cliente', label: 'Orcamento avulso' }) {
+  function openQuoteSearch(originContext: QuoteOriginContext = { kind: 'cliente', label: 'Proposta avulsa' }) {
     setQuoteSourceView('orcamentos')
     setQuoteOriginContext(originContext)
     setOrcamentosFilter('todos')
@@ -1157,7 +1157,7 @@ function App() {
       setView('campanhas')
       return
     }
-    openQuoteSearch({ kind: 'cliente', label: 'Orcamento avulso' })
+    openQuoteSearch({ kind: 'cliente', label: 'Proposta avulsa' })
   }
 
   useEffect(() => {
@@ -1339,7 +1339,7 @@ function App() {
                         setView('catalogo')
                       }}
                     >
-                      <span>{result.kind === 'cliente' ? 'Cliente' : result.kind === 'orcamento' ? 'Orcamento' : 'Catalogo'}</span>
+                      <span>{result.kind === 'cliente' ? 'Cliente' : result.kind === 'orcamento' ? 'Proposta' : 'Catalogo'}</span>
                       <strong>{result.title}</strong>
                       <small>{result.detail}</small>
                     </button>
@@ -1726,7 +1726,7 @@ function App() {
                   clienteId: created.clienteId,
                   vendedorId: created.vendedorId,
                   telefone: selectedClient.whatsapp,
-                  mensagemFinal: created.observacao || `Orcamento ${created.id.slice(0, 8)} criado a partir da campanha ${quoteOriginContext.label}.`,
+                  mensagemFinal: created.observacao || `Proposta ${created.id.slice(0, 8)} criada a partir da campanha ${quoteOriginContext.label}.`,
                   status: 'virou_orcamento',
                   orcamentoId: created.id,
                 })
@@ -1736,7 +1736,7 @@ function App() {
                 vendedorId: created.vendedorId ?? selectedClient.vendedorId ?? session.id,
                 canal: 'WhatsApp',
                 tipo: 'orcamento',
-                resumo: `${created.observacao || `Orcamento criado no valor de ${money(created.valorTotal)}.`} Origem: ${quoteOriginContext.label}.`,
+                resumo: `${created.observacao || `Proposta criada no valor de ${money(created.valorTotal)}.`} Origem: ${quoteOriginContext.label}.`,
                 resultado: 'pediu orcamento',
               })
               setInteracoes((current) => [interacao, ...current])
@@ -1809,7 +1809,7 @@ function App() {
             <div className="empty-state">
               Nenhum cliente carregado para esta acao.
               {view === 'orcamento-editor' && (
-                <button className="button primary" type="button" onClick={() => openQuoteSearch({ kind: 'cliente', label: 'Orcamento avulso' })}>
+                <button className="button primary" type="button" onClick={() => openQuoteSearch({ kind: 'cliente', label: 'Proposta avulsa' })}>
                   Buscar cliente para proposta
                 </button>
               )}
@@ -2320,8 +2320,8 @@ function App() {
             }}
             onCreateLooseBudget={(cliente) => {
               const originContext = quoteOriginContext.initialItems?.length
-                ? { ...quoteOriginContext, label: quoteOriginContext.label || 'Orcamento avulso' }
-                : { kind: 'cliente' as const, label: 'Orcamento avulso' }
+                ? { ...quoteOriginContext, label: quoteOriginContext.label || 'Proposta avulsa' }
+                : { kind: 'cliente' as const, label: 'Proposta avulsa' }
               void openQuoteForClient(cliente, 'orcamentos', originContext)
             }}
             onRevise={async (id, input) => {
@@ -2332,7 +2332,7 @@ function App() {
             onStatusChange={(id, status, motivoPerda) => {
               const changedOrcamento = orcamentos.find((orcamento) => orcamento.id === id)
               updateOrcamentoStatus(id, status, motivoPerda, status === 'enviado' ? session.id : undefined).catch((exception) => {
-                setModuleError('orcamentos', exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o orcamento.')
+                setModuleError('orcamentos', exception instanceof Error ? exception.message : 'Nao foi possivel atualizar a proposta.')
               })
               if (status === 'ganho' && changedOrcamento) {
                 attributeCampanhaRevenueByOrcamento(id, changedOrcamento.valorTotal)
@@ -2411,7 +2411,7 @@ function App() {
         {canUseScopedClientViews && view === 'orcamento-detalhe' && !selectedOrcamento && (
           <section className="panel wide">
             <div className="empty-state">
-              Orcamento nao encontrado na pagina atual.
+              Proposta nao encontrada na pagina atual.
               <button className="button" type="button" onClick={() => setView('orcamentos')}>Voltar para orcamentos</button>
             </div>
           </section>
@@ -2892,7 +2892,7 @@ function Cockpit({
           <Info label="Atrasadas" value={tarefasVencidas.length.toString()} />
           <Info label="Follow-ups" value={contactFollowups.length.toString()} />
           <Info label="Respostas campanha" value={campanhas.length.toString()} />
-          <Info label="Orc. vencidos" value={orcamentos.length.toString()} />
+          <Info label="Prop. vencidas" value={orcamentos.length.toString()} />
           <Info label="Sem cadastro" value={rodobens.length.toString()} />
           <Info label="Sem prox. acao" value={clientesSemProximaAcao.length.toString()} />
         </div>
@@ -3225,9 +3225,9 @@ function Cockpit({
         <div className="panel-header">
           <div>
             <h2>Propostas para retomar</h2>
-            <p>Orcamentos vencidos ainda abertos.</p>
+            <p>Propostas vencidas ainda abertas.</p>
           </div>
-          <button className="button" type="button" onClick={() => onOpenModule('orcamentos')}>Abrir orcamentos</button>
+          <button className="button" type="button" onClick={() => onOpenModule('orcamentos')}>Abrir propostas</button>
         </div>
         <div className="cockpit-list">
           {orcamentos.map((orcamento) => (
@@ -3248,7 +3248,7 @@ function Cockpit({
               </div>
             </article>
           ))}
-          {orcamentos.length === 0 && <div className="empty-state compact">Nenhum orcamento vencido na fila.</div>}
+          {orcamentos.length === 0 && <div className="empty-state compact">Nenhuma proposta vencida na fila.</div>}
         </div>
       </section>
 
@@ -6021,8 +6021,8 @@ function FichaCliente({
     filteredServicos.reduce((total, servico) => total + servico.valorTotal, 0)
   const openBudget = clienteOrcamentos.find((orcamento) => ['aberto', 'enviado', 'negociando'].includes(orcamento.status))
   const commercialAlerts = [
-    openBudget ? `Orcamento ${openBudget.status} de ${money(openBudget.valorTotal)} com validade ${dateLabel(openBudget.validade)}.` : '',
-    openBudget && daysSince(openBudget.validade) > 0 ? 'Orcamento vencido: fazer follow-up imediato.' : '',
+    openBudget ? `Proposta ${openBudget.status} de ${money(openBudget.valorTotal)} com validade ${dateLabel(openBudget.validade)}.` : '',
+    openBudget && daysSince(openBudget.validade) > 0 ? 'Proposta vencida: fazer follow-up imediato.' : '',
     !cliente.whatsapp ? 'Cliente sem WhatsApp cadastrado.' : '',
     daysSince(cliente.ultimoContatoEm) > 60 ? 'Sem contato comercial ha mais de 60 dias.' : '',
     daysSince(cliente.ultimaCompraEm) > 180 ? 'Cliente em risco: mais de 180 dias sem compra.' : '',
@@ -6567,16 +6567,16 @@ function OrcamentoEditor({
       await onCreateTask({
         clienteId: cliente.id,
         vendedorId: cliente.vendedorId ?? currentUser.id,
-        titulo: shouldSend ? 'Follow-up de proposta enviada' : 'Follow-up do orcamento',
+        titulo: shouldSend ? 'Follow-up de proposta enviada' : 'Follow-up da proposta',
         descricao: `${shouldSend ? 'Confirmar recebimento da proposta' : 'Retornar proposta'} ${created.id.slice(0, 8)} de ${money(created.valorTotal)}.`,
         dataVencimento: previsaoFechamento || new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10),
         prioridade: needsApproval ? 90 : 80,
         origem: shouldSend ? 'orcamento:envio' : 'orcamento:followup',
       })
       if (shouldSend && waUrl) window.open(waUrl, '_blank', 'noopener,noreferrer')
-      setFeedback(`Orcamento ${created.id.slice(0, 8)} ${shouldSend ? 'criado e marcado como enviado' : 'criado'} com total de ${money(created.valorTotal)}.`)
+      setFeedback(`Proposta ${created.id.slice(0, 8)} ${shouldSend ? 'criada e marcada como enviada' : 'criada'} com total de ${money(created.valorTotal)}.`)
     } catch (exception) {
-      setError(exception instanceof Error ? exception.message : 'Nao foi possivel criar o orcamento.')
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel criar a proposta.')
     } finally {
       setIsSaving(false)
     }
@@ -7268,7 +7268,7 @@ function quotePdfFileName(clienteNome: string, date?: string) {
     .replace(/[\\/:*?"<>|]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-  return `Orcamento - ${safeCliente || 'Cliente'} - ${datePart}`
+  return `Proposta - ${safeCliente || 'Cliente'} - ${datePart}`
 }
 
 function quotePdfDatePart(date?: string) {
@@ -8093,8 +8093,8 @@ function Cliente360({
           <Info label="Email" value={cliente.email || 'Nao informado'} />
           <Info label="Total vendas" value={money(cliente.totalComprado)} />
           <Info label="Total servicos" value={money(cliente.totalServicos)} />
-          <Info label="Orcamentos abertos" value={orcamentosAbertos.length.toString()} />
-          <Info label="Ultimo orcamento" value={ultimoOrcamento ? `${money(ultimoOrcamento.valorTotal)} · ${ultimoOrcamento.status}` : 'Sem historico'} />
+          <Info label="Propostas abertas" value={orcamentosAbertos.length.toString()} />
+          <Info label="Ultima proposta" value={ultimoOrcamento ? `${money(ultimoOrcamento.valorTotal)} · ${ultimoOrcamento.status}` : 'Sem historico'} />
         </div>
         {clientFeedback && <div className="readiness ok">{clientFeedback}</div>}
         {isEditingClient && (
@@ -8636,7 +8636,7 @@ function Cliente360({
                 </div>
               </div>
             ))}
-            {clienteOrcamentos.length === 0 && <div className="empty-state">Sem orcamentos.</div>}
+            {clienteOrcamentos.length === 0 && <div className="empty-state">Sem propostas.</div>}
           </div>
         </div>
       </section>
@@ -8941,7 +8941,7 @@ function buildClientServiceTimeline(
     ...orcamentos.map((orcamento) => ({
       id: `orcamento-${orcamento.id}`,
       date: orcamento.data,
-      title: `Orcamento ${orcamento.status}`,
+      title: `Proposta ${orcamento.status}`,
       detail: `${money(orcamento.valorTotal)} · validade ${dateLabel(orcamento.validade)}`,
       tone: orcamento.status === 'perdido' ? 'danger' : orcamento.status === 'ganho' ? 'ok' : 'warn',
     })),
@@ -11108,7 +11108,7 @@ function Campanhas({
           <Info label="Alcance" value={(activeCampaignResumo?.total ?? campanhaClientes.length).toString()} />
           <Info label="Enviados" value={(activeCampaignResumo?.enviados ?? campaignCounts.enviado).toString()} />
           <Info label="Responderam" value={(activeCampaignResumo?.responderam ?? campaignCounts.respondeu).toString()} />
-          <Info label="Orcamentos" value={(activeCampaignResumo?.viraramOrcamento ?? campaignCounts.virou_orcamento).toString()} />
+          <Info label="Propostas" value={(activeCampaignResumo?.viraramOrcamento ?? campaignCounts.virou_orcamento).toString()} />
           <Info label="Ganhos" value={(activeCampaignResumo?.viraramVenda ?? campaignCounts.ganhou).toString()} />
           <Info label="Receita atribuida" value={money(activeCampaignResumo?.receitaAtribuida ?? 0)} />
           <Info label="Custo" value={money(activeCampaignResumo?.custoEstimado ?? numberFromInput(campaignCost))} />
@@ -11858,7 +11858,7 @@ function Orcamentos({
     <section className="panel wide">
       <div className="panel-header">
         <div>
-          <h2>Orcamentos abertos</h2>
+          <h2>Propostas abertas</h2>
           <p>Status, validade, previsao de fechamento e motivo de perda ficam centralizados.</p>
         </div>
         <div className="toolbar-actions">
@@ -11949,7 +11949,7 @@ function Orcamentos({
           <span>Validade</span>
           <span>Vendedor</span>
         </div>
-        {isLoading && <div className="empty-state compact">Carregando orcamentos...</div>}
+        {isLoading && <div className="empty-state compact">Carregando propostas...</div>}
         {!isLoading && orcamentos.map((orcamento) => {
           const cliente = clientes.find((item) => item.id === orcamento.clienteId)
           const vendedor = usuarios.find((item) => item.id === orcamento.vendedorId)
@@ -11977,14 +11977,6 @@ function Orcamentos({
                   <button className="button primary" type="button" onClick={() => onOpenDetail(orcamento)}>
                     Abrir
                   </button>
-                  <button
-                    className="button danger"
-                    type="button"
-                    disabled={deletingBudgetId === orcamento.id}
-                    onClick={() => void handleDeleteBudget(orcamento)}
-                  >
-                    {deletingBudgetId === orcamento.id ? 'Excluindo...' : 'Excluir'}
-                  </button>
                   <select
                     className="assign-select"
                     value=""
@@ -11997,6 +11989,7 @@ function Orcamentos({
                       if (action === 'ganho') onStatusChange(orcamento.id, 'ganho')
                       if (action === 'versoes') openVersionHistory(orcamento)
                       if (action === 'revisar') setRevisionTarget(orcamento)
+                      if (action === 'excluir') void handleDeleteBudget(orcamento)
                     }}
                   >
                     <option value="">Mais acoes</option>
@@ -12005,6 +11998,7 @@ function Orcamentos({
                     <option value="ganho">Marcar ganho</option>
                     <option value="versoes">Ver versoes</option>
                     <option value="revisar">Revisar proposta</option>
+                    <option value="excluir">{deletingBudgetId === orcamento.id ? 'Excluindo...' : 'Excluir proposta'}</option>
                   </select>
                   {orcamento.status === 'aguardando_aprovacao' && canApprove && (
                     <button className="button primary" type="button" onClick={() => onStatusChange(orcamento.id, 'enviado')}>
@@ -12036,7 +12030,8 @@ function Orcamentos({
                     </>
                   )}
                 </div>
-                <div className="budget-loss-row">
+                <details className="budget-loss-row">
+                  <summary>Marcar perda</summary>
                   <select
                     className="assign-select"
                     value={lossReasons[orcamento.id] ?? ''}
@@ -12058,15 +12053,15 @@ function Orcamentos({
                   >
                     Perder
                   </button>
-                </div>
+                </details>
               </span>
             </div>
           )
         })}
-        {!isLoading && orcamentos.length === 0 && <div className="empty-state">Nenhum orcamento nesta visao.</div>}
+        {!isLoading && orcamentos.length === 0 && <div className="empty-state">Nenhuma proposta nesta visao.</div>}
       </div>
       <div className="pagination-bar">
-        <span>Pagina {page} de {totalPages} - {total} orcamentos</span>
+        <span>Pagina {page} de {totalPages} - {total} propostas</span>
         <div className="toolbar-actions">
           <button className="button" type="button" disabled={page <= 1 || isLoading} onClick={() => onPageChange(Math.max(1, page - 1))}>
             Anterior
@@ -14851,7 +14846,7 @@ function permissionsFor(role: string) {
   return [
     { label: 'Ver propria carteira', description: 'Acesso limitado aos clientes atribuidos.' },
     { label: 'Registrar contatos', description: 'Pode criar interacoes e proximas acoes.' },
-    { label: 'Criar orcamentos', description: 'Pode abrir e atualizar os proprios orcamentos.' },
+    { label: 'Criar propostas', description: 'Pode abrir e atualizar as proprias propostas.' },
     { label: 'Usar WhatsApp', description: 'Pode abrir mensagens personalizadas via wa.me.' },
   ]
 }

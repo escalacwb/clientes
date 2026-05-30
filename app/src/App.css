@@ -2143,6 +2143,18 @@ h3 {
   opacity: 0.86;
 }
 
+.budget-loss-row summary {
+  cursor: pointer;
+  color: #65736f;
+  font-size: 12px;
+  font-weight: 800;
+  list-style-position: inside;
+}
+
+.budget-loss-row[open] {
+  opacity: 1;
+}
+
 .budget-summary {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 14px;
