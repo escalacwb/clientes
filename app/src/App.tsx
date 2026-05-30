@@ -10650,6 +10650,16 @@ function Campanhas({
     execucao: 'Abra WhatsApp, registre envios e trabalhe a fila sem sair da pagina.',
     resultado: 'Acompanhe respostas, propostas, ganhos e proximos retornos.',
   }
+  const campaignAudienceIntent =
+    segmentoId === 'rodobens-pendentes'
+      ? 'sem-cadastro'
+      : publicoFiltros.produtoTerm || publicoFiltros.medidaTerm
+      ? 'compradores-produto'
+      : publicoFiltros.cidade || publicoFiltros.uf || publicoFiltros.vendedorId
+      ? 'regiao'
+      : publicoFiltros.valorMin || publicoFiltros.diasSemCompraMin
+      ? 'alto-valor'
+      : ''
 
   useEffect(() => {
     let cancelled = false
@@ -11534,45 +11544,41 @@ function Campanhas({
       </div>
       <section className="campaign-builder-stage campaign-audience-stage">
         <div className="campaign-stage-header">
-          <span>Publico e filtros da lista</span>
-          <small>{activePublicoFilterCount} filtros ativos. Os filtros abaixo controlam apenas a lista de clientes desta campanha.</small>
+          <span>Monte o publico da campanha</span>
+          <small>Escolha uma intencao, preencha os campos principais e confira a lista antes de escrever a mensagem.</small>
         </div>
-        <div className="campaign-preset-grid">
-          <button className="campaign-preset" type="button" onClick={() => applyCampaignPreset('sem-cadastro')}>
+        <div className="campaign-preset-grid campaign-intent-grid">
+          <button className={campaignAudienceIntent === 'sem-cadastro' ? 'campaign-preset active' : 'campaign-preset'} type="button" onClick={() => applyCampaignPreset('sem-cadastro')}>
             <strong>Clientes sem cadastro</strong>
-            <small>Listas externas novas, com WhatsApp e ainda nao qualificadas.</small>
+            <small>Listas externas novas para primeiro contato.</small>
           </button>
-          <button className="campaign-preset" type="button" onClick={() => applyCampaignPreset('compradores-produto')}>
+          <button className={campaignAudienceIntent === 'compradores-produto' ? 'campaign-preset active' : 'campaign-preset'} type="button" onClick={() => applyCampaignPreset('compradores-produto')}>
             <strong>Comprou produto/servico</strong>
-            <small>Use produto, medida, marca ou servico para montar a audiencia.</small>
+            <small>Filtre por pneu, medida, marca ou servico comprado.</small>
           </button>
-          <button className="campaign-preset" type="button" onClick={() => applyCampaignPreset('regiao')}>
+          <button className={campaignAudienceIntent === 'regiao' ? 'campaign-preset active' : 'campaign-preset'} type="button" onClick={() => applyCampaignPreset('regiao')}>
             <strong>Cidade ou regiao</strong>
-            <small>Comece por localidade e refine por vendedor ou historico.</small>
+            <small>Acao por praca, rota ou carteira regional.</small>
           </button>
-          <button className="campaign-preset" type="button" onClick={() => applyCampaignPreset('alto-valor')}>
+          <button className={campaignAudienceIntent === 'alto-valor' ? 'campaign-preset active' : 'campaign-preset'} type="button" onClick={() => applyCampaignPreset('alto-valor')}>
             <strong>Reativar alto valor</strong>
             <small>Clientes com historico relevante e mais de 90 dias sem compra.</small>
           </button>
         </div>
+        <div className="campaign-filter-grid campaign-filter-focus">
+          <label>
+            Produto, servico, marca ou termo comprado
+            <input value={publicoFiltros.produtoTerm ?? ''} onChange={(event) => updatePublicoFiltro('produtoTerm', event.target.value)} placeholder="Ex.: 295/80, Michelin, alinhamento" />
+          </label>
+          <label>
+            Medida especifica
+            <input value={publicoFiltros.medidaTerm ?? ''} onChange={(event) => updatePublicoFiltro('medidaTerm', event.target.value)} placeholder="Ex.: 295/80R22.5" />
+          </label>
+        </div>
         <div className="campaign-audience-toolbar">
           <label className="mini-select">
             <Search size={15} />
-            <input value={query} onChange={(event) => changeQuery(event.target.value)} placeholder="Buscar cliente" />
-          </label>
-          <label className="mini-select">
-            <Filter size={15} />
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as CampanhaEnvioStatus | 'todos')}>
-              <option value="todos">Todos os status</option>
-              <option value="pendente">Pendentes</option>
-              <option value="enviado">Enviados</option>
-              <option value="respondeu">Responderam</option>
-              <option value="virou_orcamento">Virou proposta</option>
-              <option value="ganhou">Ganhos</option>
-              <option value="perdido">Perdidos</option>
-              <option value="nao_respondeu">Nao respondeu</option>
-              <option value="nao_contatar">Nao contatar</option>
-            </select>
+            <input value={query} onChange={(event) => changeQuery(event.target.value)} placeholder="Busca livre dentro do publico" />
           </label>
           <span>{total} clientes no publico · pagina {page} de {totalPages}</span>
           <button className="button" type="button" onClick={resetCampaignAudience}>Limpar publico</button>
@@ -11596,20 +11602,40 @@ function Campanhas({
             </select>
           </label>
         </div>
+        <section className="campaign-audience-preview">
+          <div className="campaign-preview-header">
+            <span>
+              <strong>Previa dos clientes filtrados</strong>
+              <small>{isLoading ? 'Atualizando lista...' : `${campanhaClientes.length} nesta pagina de ${total} encontrados`}</small>
+            </span>
+            <div className="toolbar-actions">
+              <button className="button" disabled={page <= 1 || isLoading} onClick={() => setPage((current) => Math.max(1, current - 1))} type="button">
+                Anterior
+              </button>
+              <button className="button" disabled={page >= totalPages || isLoading} onClick={() => setPage((current) => current + 1)} type="button">
+                Proxima
+              </button>
+            </div>
+          </div>
+          <div className="campaign-preview-list">
+            {campanhaClientes.slice(0, 12).map((cliente) => (
+              <article className="campaign-preview-client" key={cliente.id}>
+                <strong>{cliente.nome}</strong>
+                <span>{[cliente.cidade, cliente.uf].filter(Boolean).join('/')} - {cliente.whatsapp || 'sem WhatsApp'}</span>
+                <small>{cliente.produtoPrincipal || origemLabel(cliente.origemBase)} - ultima compra {dateLabel(cliente.ultimaCompraEm)}</small>
+              </article>
+            ))}
+            {!isLoading && campanhaClientes.length === 0 && (
+              <div className="empty-state compact">Nenhum cliente encontrado com estes filtros. Remova algum criterio ou ajuste o termo buscado.</div>
+            )}
+          </div>
+        </section>
         <details className="campaign-advanced-filters">
-          <summary>Filtros avancados: produto, placa, KM, origem e historico</summary>
+          <summary>Filtros avancados: placa, KM, origem e historico</summary>
           <div className="campaign-filter-grid">
           <label>
             Vendedor historico
             <input value={publicoFiltros.vendedorHistoricoNome ?? ''} onChange={(event) => updatePublicoFiltro('vendedorHistoricoNome', event.target.value)} placeholder="Nome no sistema" />
-          </label>
-          <label>
-            Produto ou servico comprado
-            <input value={publicoFiltros.produtoTerm ?? ''} onChange={(event) => updatePublicoFiltro('produtoTerm', event.target.value)} placeholder="Ex.: 295/80; Michelin; alinhamento" />
-          </label>
-          <label>
-            Medida
-            <input value={publicoFiltros.medidaTerm ?? ''} onChange={(event) => updatePublicoFiltro('medidaTerm', event.target.value)} placeholder="Ex.: 295/80R22.5" />
           </label>
           <label>
             Placa / veiculo
@@ -11665,6 +11691,25 @@ function Campanhas({
       </section>
       {campaignError && <div className="alert">{campaignError}</div>}
       {isLoading && <div className="empty-state">Carregando segmento de campanha...</div>}
+      {!isLoading && (
+        <div className="bulk-action-bar campaign-execution-filter">
+          <label className="mini-select">
+            <Filter size={15} />
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as CampanhaEnvioStatus | 'todos')}>
+              <option value="todos">Todos os status da fila</option>
+              <option value="pendente">Pendentes</option>
+              <option value="enviado">Enviados</option>
+              <option value="respondeu">Responderam</option>
+              <option value="virou_orcamento">Virou proposta</option>
+              <option value="ganhou">Ganhos</option>
+              <option value="perdido">Perdidos</option>
+              <option value="nao_respondeu">Nao respondeu</option>
+              <option value="nao_contatar">Nao contatar</option>
+            </select>
+          </label>
+          <span className="status-pill">{filteredClientes.length} clientes nesta fila</span>
+        </div>
+      )}
       {!isLoading && filteredClientes.length > 0 && (
         <div className="bulk-action-bar">
           <button
