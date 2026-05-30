@@ -153,7 +153,7 @@ import { reviseOrcamento } from './repositories/orcamentosRepository'
 import { updateOrcamentoStatus } from './repositories/orcamentosRepository'
 import { listOportunidadesPage, listOportunidadesResumo, markOportunidadeComTarefa, refreshOportunidadesCache, type OportunidadeFilter, type OportunidadeResumo } from './repositories/oportunidadesRepository'
 import { createPipelineFromSuggestion, listPipelineOportunidades, updatePipelineOportunidade, updatePipelineStage } from './repositories/pipelineRepository'
-import { escalateStaleCommercialSequences, startDefaultCommercialSequence } from './repositories/sequenciasRepository'
+import { escalateStaleCommercialSequences, listSequenciaExecucoes, startDefaultCommercialSequence } from './repositories/sequenciasRepository'
 import {
   completeTarefa,
   createTarefa,
@@ -194,6 +194,7 @@ import type {
   PossivelDuplicado,
   ServicoItem,
   SessaoUsuario,
+  SequenciaExecucao,
   Tarefa,
   TarefaInput,
   Vendedor,
@@ -12792,6 +12793,8 @@ function Relatorios({
   const [automationRuleSavingCode, setAutomationRuleSavingCode] = useState('')
   const [isEscalatingSequences, setIsEscalatingSequences] = useState(false)
   const [sequenceEscalationFeedback, setSequenceEscalationFeedback] = useState('')
+  const [sequenceExecutions, setSequenceExecutions] = useState<SequenciaExecucao[]>([])
+  const [sequenceExecutionsLoading, setSequenceExecutionsLoading] = useState(false)
   const [managementTaskCreatingId, setManagementTaskCreatingId] = useState('')
   const [managementTaskCreatedIds, setManagementTaskCreatedIds] = useState<string[]>([])
   const [managementAlertFeedback, setManagementAlertFeedback] = useState('')
@@ -13093,6 +13096,16 @@ function Relatorios({
       return order[b.severidade] - order[a.severidade]
     })
     .slice(0, 12)
+  const activeSequenceExecutions = sequenceExecutions.filter((execution) => execution.status === 'ativa')
+  const pausedSequenceExecutions = sequenceExecutions.filter((execution) => execution.status === 'pausada')
+  const sequenceExecutionsDue = activeSequenceExecutions.filter((execution) => daysSince(execution.proximaAcaoEm) >= 0)
+  const sequenceExecutionRows = [...sequenceExecutions]
+    .sort((a, b) => {
+      const statusOrder = a.status.localeCompare(b.status)
+      if (statusOrder !== 0) return statusOrder
+      return a.proximaAcaoEm.localeCompare(b.proximaAcaoEm)
+    })
+    .slice(0, 10)
 
   useEffect(() => {
     let isMounted = true
@@ -13107,6 +13120,25 @@ function Relatorios({
       })
       .finally(() => {
         if (isMounted) setAutomationRulesLoading(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let isMounted = true
+    setSequenceExecutionsLoading(true)
+    listSequenciaExecucoes()
+      .then((rows) => {
+        if (isMounted) setSequenceExecutions(rows)
+      })
+      .catch((exception) => {
+        if (isMounted) setAutomationRulesError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar sequencias comerciais.')
+      })
+      .finally(() => {
+        if (isMounted) setSequenceExecutionsLoading(false)
       })
 
     return () => {
@@ -13133,6 +13165,8 @@ function Relatorios({
     setSequenceEscalationFeedback('')
     try {
       const created = await escalateStaleCommercialSequences()
+      const rows = await listSequenciaExecucoes()
+      setSequenceExecutions(rows)
       setSequenceEscalationFeedback(created > 0
         ? `${created} tarefas gerenciais criadas para sequencias estagnadas.`
         : 'Nenhuma sequencia estagnada encontrada agora.')
@@ -13552,6 +13586,46 @@ function Relatorios({
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Sequencias comerciais</h2>
+            <p>Fila das cadencias 0/2/7/15 em andamento, pausadas e vencidas para acompanhamento gerencial.</p>
+          </div>
+          <RefreshCw size={18} />
+        </div>
+        <div className="info-grid">
+          <Info label="Ativas" value={activeSequenceExecutions.length.toString()} />
+          <Info label="Pausadas" value={pausedSequenceExecutions.length.toString()} />
+          <Info label="Vencidas/hoje" value={sequenceExecutionsDue.length.toString()} />
+          <Info label="Total na fila" value={sequenceExecutions.length.toString()} />
+        </div>
+        {sequenceExecutionsLoading && <div className="empty-state compact">Carregando sequencias comerciais...</div>}
+        {!sequenceExecutionsLoading && (
+          <div className="table">
+            <div className="table-head sequence-report-row">
+              <span>Cliente</span>
+              <span>Status</span>
+              <span>Etapa</span>
+              <span>Proxima acao</span>
+              <span>Sequencia</span>
+            </div>
+            {sequenceExecutionRows.map((execution) => (
+              <div className="table-row sequence-report-row" key={execution.id}>
+                <span><strong>{execution.clienteNome}</strong><small>{execution.vendedorId ?? 'Sem vendedor vinculado'}</small></span>
+                <span className={execution.status === 'ativa' ? 'status-pill ok' : 'status-pill warn'}>{execution.status}</span>
+                <span>{execution.etapaAtual}</span>
+                <span className={daysSince(execution.proximaAcaoEm) >= 0 && execution.status === 'ativa' ? 'score danger' : 'score'}>
+                  {dateLabel(execution.proximaAcaoEm)}
+                </span>
+                <span>{execution.sequenciaNome}</span>
+              </div>
+            ))}
+            {sequenceExecutionRows.length === 0 && <div className="empty-state compact">Sem sequencias ativas ou pausadas agora.</div>}
+          </div>
+        )}
       </section>
 
       <section className="panel wide">

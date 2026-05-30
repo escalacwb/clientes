@@ -1,4 +1,5 @@
 import { getSupabase } from '../lib/supabase'
+import type { SequenciaExecucao } from '../types'
 
 type SequenciaRow = {
   id: string
@@ -13,7 +14,38 @@ type SequenciaExecucaoEstagnadaRow = {
   proxima_acao_em: string | null
 }
 
+type SequenciaExecucaoRow = {
+  id: string
+  sequencia_id: string
+  sequencia_nome?: string | null
+  cliente_id: string
+  cliente_nome?: string | null
+  vendedor_id?: string | null
+  status: SequenciaExecucao['status']
+  etapa_atual?: number | null
+  proxima_acao_em?: string | null
+  criado_em?: string | null
+  encerrada_em?: string | null
+}
+
 const defaultSequenceCode = 'whatsapp-retorno-comercial-0-2-7-15'
+
+export async function listSequenciaExecucoes(limit = 80): Promise<SequenciaExecucao[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('vw_sequencias_execucao')
+    .select('*')
+    .in('status', ['ativa', 'pausada'])
+    .order('status', { ascending: true })
+    .order('proxima_acao_em', { ascending: true })
+    .limit(limit)
+
+  if (error) throw error
+
+  return ((data ?? []) as SequenciaExecucaoRow[]).map(mapSequenciaExecucao)
+}
 
 export async function startDefaultCommercialSequence(clienteIds: string[], vendedorId?: string): Promise<number> {
   const supabase = await getSupabase()
@@ -191,4 +223,20 @@ async function ensureDefaultSequence(): Promise<SequenciaRow> {
 
   if (stepsError) throw stepsError
   return sequence
+}
+
+function mapSequenciaExecucao(row: SequenciaExecucaoRow): SequenciaExecucao {
+  return {
+    id: row.id,
+    sequenciaId: row.sequencia_id,
+    sequenciaNome: row.sequencia_nome ?? 'Sequencia comercial',
+    clienteId: row.cliente_id,
+    clienteNome: row.cliente_nome ?? 'Cliente',
+    vendedorId: row.vendedor_id ?? undefined,
+    status: row.status,
+    etapaAtual: row.etapa_atual ?? 1,
+    proximaAcaoEm: row.proxima_acao_em ?? new Date().toISOString().slice(0, 10),
+    criadoEm: row.criado_em ?? '',
+    encerradaEm: row.encerrada_em ?? undefined,
+  }
 }

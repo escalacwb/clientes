@@ -82,7 +82,6 @@ Entregue nesta rodada:
 Status: Parcial.
 
 Proximos pontos:
-- Exibir fila de sequencias ativas/pausadas em tela propria ou painel gerencial.
 - Permitir ajustar dias e mensagens da cadencia pelo app.
 
 Entregue nesta rodada:
@@ -92,6 +91,7 @@ Entregue nesta rodada:
 - Pausa automatica de sequencias quando cliente responde, vira orcamento, ganha/perde ou recebe orcamento.
 - Tabelas de regras/logs de automacao para rastreabilidade.
 - Relatorios ganhou acao `Escalar sequencias`, que pausa cadencias estagnadas na ultima etapa e cria tarefas gerenciais deduplicadas.
+- Relatorios ganhou painel de sequencias comerciais com ativas, pausadas, vencidas/hoje e fila por cliente.
 
 ## Sprint E - Qualidade de dados e governanca
 

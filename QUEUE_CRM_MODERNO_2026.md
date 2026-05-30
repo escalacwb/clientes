@@ -298,6 +298,7 @@ Ja entregue:
 - Sequencias ativas pausam automaticamente quando o cliente responde campanha, vira orcamento, ganha, perde, marca nao contatar ou recebe/revisa orcamento.
 - Criadas tabelas `automacao_regras` e `automacao_logs` para rastrear automacoes executadas.
 - Relatorios permite escalar sequencias estagnadas para tarefa gerencial, pausando a cadencia e registrando log da automacao.
+- Relatorios exibe fila de sequencias ativas/pausadas com etapa, proxima acao e contadores gerenciais.
 
 Pronto quando:
 - A equipe consegue fazer cadencias consistentes sem lembrar manualmente cada passo.
