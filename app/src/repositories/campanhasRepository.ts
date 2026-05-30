@@ -404,6 +404,52 @@ export async function createCampanhaSalva(input: {
   return mapCampanha(data as CampanhaRow)
 }
 
+export async function updateCampanhaSalva(
+  campanhaId: string,
+  input: {
+    nome: string
+    descricao?: string
+    objetivo?: string
+    custoEstimado?: number
+    metaReceita?: number
+    mensagemModelo: string
+    filtroUsado: CampanhaFiltroUsado
+  },
+): Promise<CampanhaSalva> {
+  const supabase = await getSupabase()
+  if (!supabase) {
+    return {
+      id: campanhaId,
+      nome: input.nome,
+      descricao: input.descricao,
+      objetivo: input.objetivo,
+      custoEstimado: input.custoEstimado ?? 0,
+      metaReceita: input.metaReceita ?? 0,
+      mensagemModelo: input.mensagemModelo,
+      filtroUsado: input.filtroUsado,
+      criadaEm: new Date().toISOString(),
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('campanhas')
+    .update({
+      nome: input.nome,
+      descricao: input.descricao ?? 'Campanha salva pelo app web',
+      objetivo: input.objetivo ?? null,
+      custo_estimado: input.custoEstimado ?? 0,
+      meta_receita: input.metaReceita ?? 0,
+      mensagem_modelo: input.mensagemModelo,
+      filtro_usado: input.filtroUsado,
+    })
+    .eq('id', campanhaId)
+    .select('id,nome,descricao,objetivo,custo_estimado,meta_receita,mensagem_modelo,filtro_usado,criada_em')
+    .single()
+
+  if (error) throw error
+  return mapCampanha(data as CampanhaRow)
+}
+
 export async function deleteCampanha(campanhaId: string): Promise<void> {
   const supabase = await getSupabase()
   if (!supabase) return

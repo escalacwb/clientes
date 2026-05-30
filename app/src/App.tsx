@@ -73,6 +73,7 @@ import {
   listCampanhasSalvas,
   listCampanhasVendedorResumo,
   upsertCampanhaEnvio,
+  updateCampanhaSalva,
   type CampanhaElegibilidade,
   type CampanhaImagemPadrao,
   type CampanhaPublicoFiltros,
@@ -10728,7 +10729,6 @@ function Campanhas({
 
   function updatePublicoFiltro<K extends keyof CampanhaPublicoFiltros>(key: K, value: CampanhaPublicoFiltros[K]) {
     setPublicoFiltros((current) => ({ ...current, [key]: value || undefined }))
-    setActiveCampanhaId('')
     setPage(1)
     setStatusFilter('todos')
   }
@@ -10864,7 +10864,7 @@ function Campanhas({
     setCampaignError('')
     try {
       const activeSavedCampaign = campanhasSalvas.find((campanha) => campanha.id === activeCampanhaId)
-      const created = await createCampanhaSalva({
+      const campaignPayload = {
         nome,
         descricao: segmento.descricao,
         objetivo: campaignObjective.trim() || undefined,
@@ -10880,10 +10880,15 @@ function Campanhas({
           imagemPadrao: campaignImage,
           janelaMinimaDias: numberFromInput(campaignWindowDays) || 7,
         },
+      }
+      const saved = activeCampanhaId
+        ? await updateCampanhaSalva(activeCampanhaId, campaignPayload)
+        : await createCampanhaSalva({
+          ...campaignPayload,
         criadaPor: currentUser.id,
-      })
-      setCampanhasSalvas((current) => [created, ...current.filter((campanha) => campanha.id !== created.id)])
-      setActiveCampanhaId(created.id)
+        })
+      setCampanhasSalvas((current) => [saved, ...current.filter((campanha) => campanha.id !== saved.id)])
+      setActiveCampanhaId(saved.id)
       await refreshCampaignResumo()
     } catch (exception) {
       setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel salvar a campanha.')
@@ -11026,7 +11031,6 @@ function Campanhas({
     try {
       const image = await optimizeCampaignImage(file)
       setCampaignImage(image)
-      setActiveCampanhaId('')
     } catch (exception) {
       setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel preparar a imagem da campanha.')
     }
@@ -11093,7 +11097,7 @@ function Campanhas({
           <label className="mini-select">
             <ClipboardList size={15} />
             <select value={activeCampanhaId} onChange={(event) => applySavedCampaign(event.target.value)}>
-              <option value="">Campanha nova</option>
+              <option value="">Nova campanha sem salvar</option>
               {campanhasSalvas.map((campanha) => (
                 <option value={campanha.id} key={campanha.id}>{campanha.nome}</option>
               ))}
@@ -11183,6 +11187,36 @@ function Campanhas({
           )}
         </div>
       </div>
+      <section className="campaign-saved-strip">
+        <div>
+          <strong>Campanhas salvas</strong>
+          <small>{activeCampanhaId ? `Aberta agora: ${saveName || activeCampanhaId.slice(0, 8)}` : 'Selecione uma campanha para continuar de onde parou.'}</small>
+        </div>
+        <div className="campaign-saved-list">
+          <button className={!activeCampanhaId ? 'button primary' : 'button'} type="button" onClick={() => {
+            setActiveCampanhaId('')
+            setSaveName('')
+            setCampaignObjective('')
+            setMensagemModelo(campanhaSegmentos[0].template)
+            setSegmentoId('selecionados')
+            setPublicoFiltros({})
+            setQuery('')
+            setPage(1)
+          }}>
+            Nova
+          </button>
+          {campanhasSalvas.slice(0, 8).map((campanha) => (
+            <button
+              className={campanha.id === activeCampanhaId ? 'button primary' : 'button'}
+              type="button"
+              key={campanha.id}
+              onClick={() => applySavedCampaign(campanha.id)}
+            >
+              {campanha.nome}
+            </button>
+          ))}
+        </div>
+      </section>
       <section className="campaign-builder-stage campaign-objective-stage">
         <div className="campaign-stage-header">
           <span>Escolha um objetivo</span>
@@ -11238,7 +11272,6 @@ function Campanhas({
             value={mensagemModelo}
             onChange={(event) => {
               setMensagemModelo(event.target.value)
-              setActiveCampanhaId('')
             }}
             rows={4}
           />
@@ -11260,7 +11293,6 @@ function Campanhas({
             value={saveName}
             onChange={(event) => {
               setSaveName(event.target.value)
-              setActiveCampanhaId('')
             }}
             placeholder="Ex.: Michelin Curitiba - maio"
           />
@@ -11271,7 +11303,6 @@ function Campanhas({
             value={campaignObjective}
             onChange={(event) => {
               setCampaignObjective(event.target.value)
-              setActiveCampanhaId('')
             }}
             placeholder="Ex.: reativar compradores de pneus"
           />
@@ -11283,7 +11314,6 @@ function Campanhas({
             value={campaignCost}
             onChange={(event) => {
               setCampaignCost(event.target.value)
-              setActiveCampanhaId('')
             }}
             placeholder="0,00"
           />
@@ -11295,7 +11325,6 @@ function Campanhas({
             value={campaignRevenueGoal}
             onChange={(event) => {
               setCampaignRevenueGoal(event.target.value)
-              setActiveCampanhaId('')
             }}
             placeholder="0,00"
           />
@@ -11307,7 +11336,6 @@ function Campanhas({
             value={campaignWindowDays}
             onChange={(event) => {
               setCampaignWindowDays(event.target.value.replace(/\D/g, ''))
-              setActiveCampanhaId('')
             }}
             placeholder="7"
           />
@@ -11484,11 +11512,11 @@ function Campanhas({
       <div className="campaign-save-bar">
         <span>
           {activeCampanhaId
-            ? 'Campanha salva selecionada. Ela continua disponivel no seletor "Campanha nova" depois do reload.'
-            : 'Para acessar esta campanha depois do reload, informe um nome e clique em Salvar campanha.'}
+            ? 'Campanha salva aberta. Altere publico, texto ou fila e clique em Atualizar campanha para manter tudo salvo.'
+            : 'Campanha nova ainda nao salva. Informe um nome e clique em Salvar campanha para reabrir depois no seletor do topo.'}
         </span>
-        <button className="button primary" disabled={isSaving || Boolean(activeCampanhaId)} onClick={saveCurrentCampaign} type="button">
-          {isSaving ? 'Salvando...' : 'Salvar campanha'}
+        <button className="button primary" disabled={isSaving} onClick={saveCurrentCampaign} type="button">
+          {isSaving ? 'Salvando...' : activeCampanhaId ? 'Atualizar campanha' : 'Salvar campanha'}
         </button>
         {activeCampanhaId && (
           <button className="button danger" disabled={isSaving} onClick={deleteCurrentCampaign} type="button">
@@ -11823,53 +11851,51 @@ function Campanhas({
                 >
                   <MessageCircle size={16} /> Abrir
                 </button>
-                <button
-                  className="button"
-                  type="button"
-                  disabled={!canResend}
-                  onClick={() => openCampaignWhatsapp(cliente, finalMessage, { forceRegister: true })}
-                  title="Reabre o WhatsApp e volta o envio para pendente, mesmo quando ha contato recente."
-                >
-                  Reenviar
-                </button>
                 <button className="button" type="button" onClick={() => openCampaignContactEdit(cliente)}>
                   Editar contato
                 </button>
                 <button className="button" type="button" disabled={!canOpenNormally} onClick={() => markStatus(cliente, 'enviado', finalMessage)}>
-                  Enviado
-                </button>
-                <button className="button" type="button" onClick={() => markStatus(cliente, 'pendente', finalMessage)}>
-                  Voltar p/ pendente
+                  Marcar enviado
                 </button>
                 <button className="button" type="button" onClick={() => markStatus(cliente, 'respondeu', finalMessage)}>
                   Respondeu
                 </button>
-                <button className="button" type="button" onClick={() => markStatus(cliente, 'nao_respondeu', finalMessage)}>
-                  Sem resposta
-                </button>
-                <button className="button" type="button" onClick={() => markStatus(cliente, 'virou_orcamento', finalMessage)}>
-                  Virou orc.
-                </button>
                 <button
                   className="button primary"
                   type="button"
-                  onClick={() => onOpenBudgetEditor(cliente, {
-                    kind: 'campanha',
-                    sourceId: activeCampanhaId || undefined,
-                    label: activeCampanhaId ? saveName || segmento.campanhaNome : segmento.campanhaNome,
-                  })}
+                  onClick={() => {
+                    void markStatus(cliente, 'virou_orcamento', finalMessage)
+                    onOpenBudgetEditor(cliente, {
+                      kind: 'campanha',
+                      sourceId: activeCampanhaId || undefined,
+                      label: activeCampanhaId ? saveName || segmento.campanhaNome : segmento.campanhaNome,
+                    })
+                  }}
                 >
-                  Orcamento
+                  Fazer orcamento
                 </button>
-                <button className="button" type="button" onClick={() => markStatus(cliente, 'ganhou', finalMessage)}>
-                  Ganhou
-                </button>
-                <button className="button" type="button" onClick={() => markStatus(cliente, 'perdido', finalMessage)}>
-                  Perdido
-                </button>
-                <button className="button" type="button" onClick={() => markCampaignOptOut(cliente, finalMessage)}>
-                  Nao contatar
-                </button>
+                <select
+                  className="compact-select"
+                  value=""
+                  onChange={(event) => {
+                    const nextAction = event.target.value
+                    event.target.value = ''
+                    if (nextAction === 'reenviar') void openCampaignWhatsapp(cliente, finalMessage, { forceRegister: true })
+                    if (nextAction === 'pendente') void markStatus(cliente, 'pendente', finalMessage)
+                    if (nextAction === 'sem_resposta') void markStatus(cliente, 'nao_respondeu', finalMessage)
+                    if (nextAction === 'ganhou') void markStatus(cliente, 'ganhou', finalMessage)
+                    if (nextAction === 'perdido') void markStatus(cliente, 'perdido', finalMessage)
+                    if (nextAction === 'nao_contatar') void markCampaignOptOut(cliente, finalMessage)
+                  }}
+                >
+                  <option value="">Mais acoes</option>
+                  <option value="reenviar" disabled={!canResend}>Reenviar WhatsApp</option>
+                  <option value="pendente">Voltar para pendente</option>
+                  <option value="sem_resposta">Marcar sem resposta</option>
+                  <option value="ganhou">Marcar ganho</option>
+                  <option value="perdido">Marcar perdido</option>
+                  <option value="nao_contatar">Nao contatar</option>
+                </select>
               </span>
             </div>
           )
