@@ -185,6 +185,7 @@ import type {
   OrcamentoAprovacao,
   OrcamentoCondicaoInput,
   OrcamentoInput,
+  OrcamentoItem,
   OrcamentoItemInput,
   OrcamentoVersao,
   Oportunidade,
@@ -7330,6 +7331,25 @@ function quoteConditionValueLabel(total: number, parcelas = 1) {
   return `${money(roundedTotal)} (${parcelas}x de ${moneyWithCents(roundedTotal / parcelas)})`
 }
 
+function quoteForecastWeight(status: Orcamento['status']) {
+  const weights: Record<Orcamento['status'], number> = {
+    aberto: 0.35,
+    aguardando_aprovacao: 0.25,
+    enviado: 0.55,
+    negociando: 0.75,
+    ganho: 1,
+    perdido: 0,
+  }
+  return weights[status] ?? 0
+}
+
+function forecastItemLabel(item: OrcamentoItem) {
+  const normalized = item.descricao.replace(/\s+/g, ' ').trim()
+  const medida = normalized.match(/\b\d{3}\/\d{2}\s*R?\s*\d{2}(?:[.,]\d)?\b/i)?.[0]
+  if (medida) return medida.toUpperCase().replace(',', '.')
+  return normalized.split(' ').slice(0, 5).join(' ') || 'Item sem descricao'
+}
+
 function quotePdfFileName(clienteNome: string, date?: string) {
   const datePart = quotePdfDatePart(date)
   const safeCliente = clienteNome
@@ -12797,6 +12817,35 @@ function Relatorios({
     ? rankingServicos.map((item) => ({ label: item.label, count: item.itens }))
     : rankBy(servicosItens, (servico) => servico.servicoNome)
   const metasBySeller = new Map(metasVendedores.map((meta) => [meta.vendedorId, meta]))
+  const openQuoteStatuses: Orcamento['status'][] = ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando']
+  const openForecastQuotes = orcamentos.filter((orcamento) => openQuoteStatuses.includes(orcamento.status))
+  type ForecastBreakdownRow = { label: string; propostas: number; valor: number; forecast: number; itens?: number }
+  const forecastBySource = Array.from(openForecastQuotes.reduce((acc, orcamento) => {
+    const cliente = clientes.find((item) => item.id === orcamento.clienteId)
+    const label = origemLabel(cliente?.origemBase)
+    const current = acc.get(label) ?? { label, propostas: 0, valor: 0, forecast: 0 }
+    current.propostas += 1
+    current.valor += orcamento.valorTotal
+    current.forecast += orcamento.valorTotal * quoteForecastWeight(orcamento.status)
+    acc.set(label, current)
+    return acc
+  }, new Map<string, ForecastBreakdownRow>()).values())
+    .sort((a, b) => b.forecast - a.forecast)
+  const forecastByProduct = Array.from(openForecastQuotes.reduce((acc, orcamento) => {
+    const items = orcamento.itens ?? []
+    for (const item of items) {
+      const label = item.tipo === 'servico' ? item.descricao : forecastItemLabel(item)
+      const current = acc.get(label) ?? { label, propostas: 0, valor: 0, forecast: 0, itens: 0 }
+      current.propostas += 1
+      current.itens = (current.itens ?? 0) + item.quantidade
+      current.valor += item.valorTotal
+      current.forecast += item.valorTotal * quoteForecastWeight(orcamento.status)
+      acc.set(label, current)
+    }
+    return acc
+  }, new Map<string, ForecastBreakdownRow>()).values())
+    .sort((a, b) => b.forecast - a.forecast)
+    .slice(0, 8)
   const commercialDisciplineRows = usuarios
     .filter((usuario) => usuario.role === 'vendedor')
     .map((usuario) => {
@@ -12972,7 +13021,6 @@ function Relatorios({
     tarefaDescricao: string
     tarefaOrigem: TarefaInput['origem']
   }
-  const openQuoteStatuses: Orcamento['status'][] = ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando']
   const managementAlertRows: ManagementAlertRow[] = [
     ...orcamentos
       .filter((orcamento) =>
@@ -13256,6 +13304,52 @@ function Relatorios({
             </div>
           ))}
           {forecastVendedor.length === 0 && <div className="empty-state">Sem dados de forecast ainda.</div>}
+        </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Forecast por origem e mix</h2>
+            <p>Concentracao do pipeline aberto por origem da base e por produto, medida ou servico cotado.</p>
+          </div>
+          <BarChart3 size={18} />
+        </div>
+        <div className="forecast-breakdown-grid">
+          <div className="table">
+            <div className="table-head forecast-breakdown-row">
+              <span>Origem</span>
+              <span>Propostas</span>
+              <span>Aberto</span>
+              <span>Forecast</span>
+            </div>
+            {forecastBySource.map((row) => (
+              <div className="table-row forecast-breakdown-row" key={row.label}>
+                <span><strong>{row.label}</strong></span>
+                <span>{row.propostas}</span>
+                <span>{money(row.valor)}</span>
+                <span><strong>{money(row.forecast)}</strong></span>
+              </div>
+            ))}
+            {forecastBySource.length === 0 && <div className="empty-state compact">Sem propostas abertas por origem.</div>}
+          </div>
+          <div className="table">
+            <div className="table-head forecast-breakdown-row">
+              <span>Produto / medida</span>
+              <span>Itens</span>
+              <span>Aberto</span>
+              <span>Forecast</span>
+            </div>
+            {forecastByProduct.map((row) => (
+              <div className="table-row forecast-breakdown-row" key={row.label}>
+                <span><strong>{row.label}</strong><small>{row.propostas} propostas</small></span>
+                <span>{row.itens ?? 0}</span>
+                <span>{money(row.valor)}</span>
+                <span><strong>{money(row.forecast)}</strong></span>
+              </div>
+            ))}
+            {forecastByProduct.length === 0 && <div className="empty-state compact">Sem itens cotados em propostas abertas.</div>}
+          </div>
         </div>
       </section>
 

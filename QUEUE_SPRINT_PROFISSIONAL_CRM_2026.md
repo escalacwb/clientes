@@ -122,9 +122,9 @@ Entregue nesta rodada:
 - Indicador previsto vs realizado no painel de forecast.
 - Alertas comerciais agora permitem criar tarefa e abrir proposta/ficha diretamente pelo painel gerencial.
 - Alertas de proposta agora permitem marcar perda com motivo obrigatorio direto no painel gerencial.
+- Forecast por origem da base e por produto/medida cotada no pipeline aberto.
 
 Proximos pontos:
-- Forecast por origem e por produto/medida.
 - Exportacao PDF da reuniao semanal.
 
 ## Ordem de execucao continua

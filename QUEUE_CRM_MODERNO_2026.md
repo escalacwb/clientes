@@ -370,6 +370,7 @@ Ja entregue:
 - Forecast mostra previsto vs realizado com ganho do mes comparado ao forecast ponderado.
 - Alertas comerciais viraram acionaveis: criam tarefa e abrem proposta ou ficha do cliente direto do painel.
 - Propostas paradas podem ser marcadas como perdidas direto dos alertas, exigindo motivo.
+- Relatorios mostra forecast por origem da base e por produto/medida cotada no pipeline aberto.
 
 Pronto quando:
 - Gerente consegue conduzir reuniao semanal pelo forecast do CRM.
