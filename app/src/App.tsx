@@ -471,6 +471,7 @@ function App() {
   const [patioFeedbackTotal, setPatioFeedbackTotal] = useState(0)
   const [patioFeedbackPage, setPatioFeedbackPage] = useState(1)
   const [patioFeedbackQuery, setPatioFeedbackQuery] = useState('')
+  const [patioFeedbackRefreshKey, setPatioFeedbackRefreshKey] = useState(0)
   const [isLoadingPatioFeedback, setIsLoadingPatioFeedback] = useState(false)
   const [patioEntradaQuery, setPatioEntradaQuery] = useState('')
   const [patioEntradaResults, setPatioEntradaResults] = useState<PatioVeiculoBusca[]>([])
@@ -504,6 +505,7 @@ function App() {
   const [patioRevisaoKmMin, setPatioRevisaoKmMin] = useState(20000)
   const [patioRevisaoDiasMin, setPatioRevisaoDiasMin] = useState(180)
   const [isLoadingPatioRevisao, setIsLoadingPatioRevisao] = useState(false)
+  const [patioRevisaoRefreshKey, setPatioRevisaoRefreshKey] = useState(0)
   const [possiveisDuplicados, setPossiveisDuplicados] = useState<PossivelDuplicado[]>(isSupabaseConfigured ? [] : seedPossiveisDuplicados)
   const [mesclagens, setMesclagens] = useState<ClienteMesclagem[]>(isSupabaseConfigured ? [] : seedMesclagens)
   const [catalogo, setCatalogo] = useState<CatalogoItem[]>([])
@@ -1157,7 +1159,7 @@ function App() {
       isMounted = false
       window.clearTimeout(handle)
     }
-  }, [isCheckingSession, patioFeedbackPage, patioFeedbackQuery, session, view])
+  }, [isCheckingSession, patioFeedbackPage, patioFeedbackQuery, patioFeedbackRefreshKey, session, view])
 
   useEffect(() => {
     let isMounted = true
@@ -1198,7 +1200,7 @@ function App() {
       isMounted = false
       window.clearTimeout(handle)
     }
-  }, [isCheckingSession, patioRevisaoDiasMin, patioRevisaoKmMin, patioRevisaoMode, patioRevisaoPage, patioRevisaoQuery, session, view])
+  }, [isCheckingSession, patioRevisaoDiasMin, patioRevisaoKmMin, patioRevisaoMode, patioRevisaoPage, patioRevisaoQuery, patioRevisaoRefreshKey, session, view])
 
   useEffect(() => {
     let isMounted = true
@@ -2117,6 +2119,7 @@ function App() {
               setPatioFeedbackQuery(nextQuery)
               setPatioFeedbackPage(1)
             }}
+            onRefresh={() => setPatioFeedbackRefreshKey((current) => current + 1)}
             onPageChange={setPatioFeedbackPage}
             onOpenClient={async (clienteId) => {
               await ensureClientInMemory(clienteId)
@@ -2180,6 +2183,19 @@ function App() {
             onDiasMinChange={(value) => {
               setPatioRevisaoDiasMin(value)
               setPatioRevisaoPage(1)
+            }}
+            onRefresh={() => setPatioRevisaoRefreshKey((current) => current + 1)}
+            onAdjustMedia={(item) => {
+              setPatioEntradaQuery(item.placa ?? item.clienteNome)
+              setAppMode('gestao')
+              localStorage.setItem('capital-crm:mode', 'gestao')
+              setView('patio-km-medio')
+            }}
+            onEditVehicle={(item) => {
+              setPatioEntradaQuery(item.placa ?? item.clienteNome)
+              setAppMode('patio')
+              localStorage.setItem('capital-crm:mode', 'patio')
+              setView('patio-dados')
             }}
             onPageChange={setPatioRevisaoPage}
             onOpenClient={async (clienteId) => {
@@ -10953,6 +10969,7 @@ function PatioFeedback({
   query,
   isLoading,
   onQueryChange,
+  onRefresh,
   onPageChange,
   onOpenClient,
   onMarkDone,
@@ -10965,6 +10982,7 @@ function PatioFeedback({
   query: string
   isLoading: boolean
   onQueryChange: (query: string) => void
+  onRefresh: () => void
   onPageChange: (page: number) => void
   onOpenClient: (clienteId: string) => void
   onMarkDone: (item: PatioFeedbackPendente, observacao: string) => Promise<void>
@@ -10990,7 +11008,12 @@ function PatioFeedback({
           <h2>Feedback pos-servico</h2>
           <p>Atendimentos finalizados no patio que ainda precisam de retorno simples pelo WhatsApp.</p>
         </div>
-        <strong>{total} pendentes</strong>
+        <div className="row-actions">
+          <strong>{total} pendentes</strong>
+          <button className="button" type="button" onClick={onRefresh} disabled={isLoading}>
+            Atualizar Dados
+          </button>
+        </div>
       </div>
       <div className="filters-grid">
         <label>
@@ -11064,6 +11087,9 @@ function PatioRevisao({
   onModeChange,
   onKmMinChange,
   onDiasMinChange,
+  onRefresh,
+  onAdjustMedia,
+  onEditVehicle,
   onPageChange,
   onOpenClient,
   onMarkDone,
@@ -11082,6 +11108,9 @@ function PatioRevisao({
   onModeChange: (mode: 'km' | 'tempo') => void
   onKmMinChange: (value: number) => void
   onDiasMinChange: (value: number) => void
+  onRefresh: () => void
+  onAdjustMedia: (item: PatioRevisaoProativa) => void
+  onEditVehicle: (item: PatioRevisaoProativa) => void
   onPageChange: (page: number) => void
   onOpenClient: (clienteId: string) => void
   onMarkDone: (item: PatioRevisaoProativa, observacao: string) => Promise<void>
@@ -11107,7 +11136,12 @@ function PatioRevisao({
           <h2>Revisao proativa</h2>
           <p>Veiculos priorizados por KM estimado e tempo desde a ultima passagem no patio.</p>
         </div>
-        <strong>{total} veiculos</strong>
+        <div className="row-actions">
+          <strong>{total} veiculos</strong>
+          <button className="button" type="button" onClick={onRefresh} disabled={isLoading}>
+            Atualizar Dados
+          </button>
+        </div>
       </div>
       <div className="filters-grid">
         <label>
@@ -11134,9 +11168,8 @@ function PatioRevisao({
       {!isLoading && items.length === 0 && <div className="empty-state">Nenhum veiculo encontrado com esses criterios.</div>}
       <div className="table-list">
         {items.map((item) => {
-          const phone = item.contatoRecomendado || item.contatoMotorista
-          const message = buildPatioRevisaoMessage(item)
-          const whatsappUrl = waMeUrl(phone, message)
+          const motoristaUrl = waMeUrl(item.contatoMotorista, buildPatioRevisaoMessage(item, 'motorista'))
+          const gestorUrl = waMeUrl(item.contatoRecomendado, buildPatioRevisaoMessage(item, 'gestor'))
           return (
             <article className="panel subtle" key={item.patioVeiculoId}>
               <div className="panel-header">
@@ -11145,9 +11178,14 @@ function PatioRevisao({
                   <p>{numberLabel(item.kmEstimadoDesdeVisita)} km rodados desde a ultima visita - {item.diasDesdeUltimaVisita} dias sem visita - ultimo KM {item.ultimoKm ? numberLabel(item.ultimoKm) : 'n/d'}</p>
                 </div>
                 <div className="row-actions">
-                  {whatsappUrl && (
-                    <a className="button primary" href={whatsappUrl} target="_blank" rel="noreferrer">
-                      WhatsApp
+                  {motoristaUrl && (
+                    <a className="button primary" href={motoristaUrl} target="_blank" rel="noreferrer">
+                      Falar com Motorista
+                    </a>
+                  )}
+                  {gestorUrl && gestorUrl !== motoristaUrl && (
+                    <a className="button primary" href={gestorUrl} target="_blank" rel="noreferrer">
+                      Falar com Gestor
                     </a>
                   )}
                   <button className="button" type="button" onClick={() => onOpenClient(item.clienteId)}>Ficha</button>
@@ -11164,6 +11202,12 @@ function PatioRevisao({
               <div className="row-actions">
                 <button className="button primary" type="button" disabled={busyId === item.patioVeiculoId} onClick={() => void run(item, () => onMarkDone(item, notes[item.patioVeiculoId] ?? ''))}>
                   Marcar contato feito
+                </button>
+                <button className="button" type="button" onClick={() => onAdjustMedia(item)}>
+                  Ajustar Media
+                </button>
+                <button className="button" type="button" onClick={() => onEditVehicle(item)}>
+                  Alt. Veiculo/Empresa
                 </button>
                 <button className="button" type="button" disabled={busyId === item.patioVeiculoId} onClick={() => void run(item, () => onCreateOpportunity(item))}>
                   Criar oportunidade
@@ -11207,8 +11251,10 @@ Atenciosamente,
 Equipe de Qualidade | Capital Truck Center`
 }
 
-function buildPatioRevisaoMessage(item: PatioRevisaoProativa) {
-  const contato = item.contatoNome || item.nomeMotorista || 'Cliente'
+function buildPatioRevisaoMessage(item: PatioRevisaoProativa, target: 'motorista' | 'gestor' = 'motorista') {
+  const contato = target === 'motorista'
+    ? item.nomeMotorista || 'Cliente'
+    : item.contatoNome || 'Cliente'
   const kmUltimaVisita = item.ultimoKm ? numberLabel(item.ultimoKm) : 'nao informado'
   const kmRodados = numberLabel(item.kmEstimadoDesdeVisita)
   const kmAtual = item.ultimoKm ? numberLabel(item.ultimoKm + item.kmEstimadoDesdeVisita) : 'nao estimado'
