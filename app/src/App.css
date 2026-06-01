@@ -3568,6 +3568,81 @@ h3 {
   gap: 8px;
 }
 
+.client360-command-center {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(260px, 0.65fr);
+  gap: 12px;
+}
+
+.client360-routine-card {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  border: 1px solid #d9e5dd;
+  border-radius: 8px;
+  background: #fbfdfa;
+  padding: 14px;
+}
+
+.client360-routine-card.warn {
+  border-color: #ead28a;
+  background: #fffdf2;
+}
+
+.client360-routine-card.danger {
+  border-color: #f1b4ad;
+  background: #fff7f6;
+}
+
+.client360-routine-card h3,
+.client360-routine-card p {
+  margin: 0;
+}
+
+.client360-routine-card h3 {
+  color: #0d2f2b;
+  font-size: 18px;
+}
+
+.client360-routine-card p,
+.client360-approach-list span {
+  color: #4f625c;
+  line-height: 1.4;
+}
+
+.client360-routine-card > strong {
+  color: #0d3b35;
+}
+
+.client360-routine-tags,
+.client360-guidance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.client360-approach-list,
+.client360-score-list {
+  display: grid;
+  gap: 6px;
+}
+
+.client360-score-list {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin: 0 12px 12px;
+}
+
+.client360-score-list span {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid #e2ebe5;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 8px 10px;
+  color: #4f625c;
+}
+
 .client360-workbench {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.75fr);
@@ -5213,6 +5288,7 @@ h3 {
   .pipeline-kanban,
   .import-timeline-item,
   .forecast-summary,
+  .client360-command-center,
   .client360-workbench,
   .client360-filters,
   .detail-grid {

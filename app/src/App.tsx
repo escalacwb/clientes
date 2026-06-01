@@ -8208,6 +8208,84 @@ function Cliente360({
   const whatsappUrl = cliente.whatsapp
     ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(buildServiceOpeningMessage(cliente))}`
     : undefined
+  const latestInteraction = recentContactHistory[0]
+  const latestCampaign = [...clienteCampanhas].sort((a, b) =>
+    (b.dataAberturaWhatsapp ?? b.dataMarcadoEnviado ?? '').localeCompare(a.dataAberturaWhatsapp ?? a.dataMarcadoEnviado ?? ''),
+  )[0]
+  const opportunityDetails = opportunityScoreDetails(cliente, clienteOrcamentos)
+  const clienteScore = opportunityScore(cliente, clienteOrcamentos)
+  const routineReasons = uniqueBy([
+    ...tarefasAbertas
+      .slice()
+      .sort((a, b) => a.dataVencimento.localeCompare(b.dataVencimento))
+      .map((tarefa) => ({
+        tone: daysSince(tarefa.dataVencimento) > 0 ? 'danger' : 'warn',
+        label: daysSince(tarefa.dataVencimento) > 0 ? 'Tarefa atrasada' : 'Tarefa aberta',
+        detail: `${tarefa.titulo} - vence em ${dateLabel(tarefa.dataVencimento)}`,
+        action: tarefa.descricao || 'Concluir, reagendar ou registrar o atendimento.',
+      })),
+    ...orcamentosAbertos
+      .slice()
+      .sort((a, b) => a.validade.localeCompare(b.validade))
+      .map((orcamento) => ({
+        tone: isExpiredBudget(orcamento) ? 'danger' : 'warn',
+        label: isExpiredBudget(orcamento) ? 'Proposta vencida' : 'Proposta aberta',
+        detail: `${money(orcamento.valorTotal)} - validade ${dateLabel(orcamento.validade)}`,
+        action: 'Retomar proposta, revisar condicao ou registrar perda/ganho.',
+      })),
+    ...clienteCampanhas
+      .filter((envio) => ['respondeu', 'virou_orcamento'].includes(envio.status))
+      .map((envio) => ({
+        tone: 'warn',
+        label: envio.status === 'virou_orcamento' ? 'Campanha virou orcamento' : 'Resposta de campanha',
+        detail: `${envio.campanhaNome ?? 'Campanha'} - ${campaignStatusLabel(envio.status)}`,
+        action: 'Responder o cliente e registrar o proximo passo.',
+      })),
+    cliente.status === 'Reativar' ? {
+      tone: 'warn',
+      label: 'Cliente para reativar',
+      detail: `Ultima compra em ${dateLabel(cliente.ultimaCompraEm)}`,
+      action: 'Enviar abordagem de recompra ou criar uma tarefa de retorno.',
+    } : undefined,
+    daysSince(cliente.ultimaCompraEm) > 90 ? {
+      tone: 'warn',
+      label: 'Janela de recompra',
+      detail: `${daysSince(cliente.ultimaCompraEm)} dias sem compra`,
+      action: bestNextAction(cliente),
+    } : undefined,
+    daysSince(cliente.ultimoContatoEm) > 60 ? {
+      tone: 'warn',
+      label: 'Sem contato recente',
+      detail: `${daysSince(cliente.ultimoContatoEm)} dias desde o ultimo contato registrado`,
+      action: 'Fazer contato e salvar o resultado para tirar o cliente da fila.',
+    } : undefined,
+    !cliente.whatsapp ? {
+      tone: 'danger',
+      label: 'WhatsApp ausente',
+      detail: 'Nao ha numero principal para acionar pelo app.',
+      action: 'Atualizar cadastro antes de executar campanha ou rotina.',
+    } : undefined,
+    !cliente.vendedorId ? {
+      tone: 'danger',
+      label: 'Sem vendedor responsavel',
+      detail: 'Cliente ainda nao esta em uma carteira definida.',
+      action: 'Distribuir carteira ou assumir atendimento.',
+    } : undefined,
+  ].filter(Boolean) as Array<{ tone: string; label: string; detail: string; action: string }>, (item) => item.label)
+  const primaryRoutineReason = routineReasons[0] ?? {
+    tone: 'neutral',
+    label: 'Consulta sem pendencia automatica',
+    detail: 'Nao encontramos tarefa aberta, proposta pendente ou campanha respondida agora.',
+    action: 'Use esta ficha para consultar historico, registrar atendimento ou criar uma proposta.',
+  }
+  const guidanceEyebrow = routineReasons.length > 0 ? 'Motivo da prioridade' : 'Consulta livre'
+  const approachFacts = [
+    latestInteraction ? `Ultimo atendimento: ${latestInteraction.resultado || interactionTypeLabel(latestInteraction.tipo)} em ${dateLabel(latestInteraction.data)}` : 'Sem atendimento registrado no CRM.',
+    produtoPrincipal || cliente.produtoPrincipal ? `Produto principal: ${produtoPrincipal || cliente.produtoPrincipal}` : undefined,
+    servicoRecorrente ? `Servico recorrente: ${servicoRecorrente}` : undefined,
+    latestCampaign ? `Ultima campanha: ${latestCampaign.campanhaNome ?? 'Campanha'} - ${campaignStatusLabel(latestCampaign.status)}` : undefined,
+    proximaRecompra ? `Recompra estimada: ${dateLabel(proximaRecompra)}` : undefined,
+  ].filter(Boolean)
 
   useEffect(() => {
     setClientDraft({
@@ -8411,14 +8489,63 @@ function Cliente360({
             {isEditingClient ? 'Fechar cadastro' : 'Editar cadastro'}
           </button>
         </div>
+        <section className="client360-command-center">
+          <article className={`client360-routine-card ${primaryRoutineReason.tone}`}>
+            <span className="next-action-label">{guidanceEyebrow}</span>
+            <h3>{primaryRoutineReason.label}</h3>
+            <p>{primaryRoutineReason.detail}</p>
+            <strong>{primaryRoutineReason.action}</strong>
+            {routineReasons.length > 1 && (
+              <div className="client360-routine-tags">
+                {routineReasons.slice(1, 5).map((reason) => (
+                  <span className={`status-pill compact ${reason.tone === 'danger' ? 'danger' : reason.tone === 'warn' ? 'warn' : ''}`} key={reason.label}>
+                    {reason.label}
+                  </span>
+                ))}
+              </div>
+            )}
+          </article>
+          <article className="client360-routine-card">
+            <span className="next-action-label">Antes de chamar</span>
+            <h3>{cliente.whatsapp || cliente.telefone || 'Contato nao informado'}</h3>
+            <div className="client360-approach-list">
+              {approachFacts.slice(0, 5).map((fact) => <span key={fact}>{fact}</span>)}
+            </div>
+            <div className="client360-guidance-actions">
+              <button className="button compact-button" type="button" onClick={() => setActiveTab('timeline')}>Linha do tempo</button>
+              <button className="button compact-button" type="button" onClick={() => setActiveTab('vendas')}>Vendas</button>
+              <button className="button compact-button" type="button" onClick={() => setActiveTab('orcamentos')}>Propostas</button>
+              <button className="button compact-button" type="button" onClick={() => setIsEditingClient(true)}>Cadastro</button>
+            </div>
+          </article>
+          <article className="client360-routine-card compact">
+            <span className="next-action-label">Saude comercial</span>
+            <div className="status-list">
+              <div className="status-row"><span>Score</span><strong>{Math.round(clienteScore)}</strong></div>
+              <div className="status-row"><span>Tarefas</span><strong>{tarefasAbertas.length}</strong></div>
+              <div className="status-row"><span>Propostas</span><strong>{orcamentosAbertos.length}</strong></div>
+              <div className="status-row"><span>Total historico</span><strong>{money(cliente.totalComprado + cliente.totalServicos)}</strong></div>
+            </div>
+          </article>
+        </section>
+        {opportunityDetails.length > 0 && (
+          <details className="client360-contact-tools client360-score-details">
+            <summary>{routineReasons.length > 0 ? 'Ver criterios que ajudam a priorizar' : 'Ver criterios de potencial comercial'}</summary>
+            <div className="client360-score-list">
+              {opportunityDetails.map((item) => (
+                <span key={item.label}>{item.label} <strong>+{item.points}</strong></span>
+              ))}
+            </div>
+          </details>
+        )}
         <div className="info-grid">
-          <Info label="CPF/CNPJ" value={cliente.cpfCnpj || 'Nao informado'} />
-          <Info label="Codigo ERP" value={cliente.codigoErp || 'Nao informado'} />
-          <Info label="WhatsApp" value={cliente.whatsapp || 'Nao informado'} />
-          <Info label="Email" value={cliente.email || 'Nao informado'} />
-          <Info label="Total vendas" value={money(cliente.totalComprado)} />
-          <Info label="Total servicos" value={money(cliente.totalServicos)} />
+          <Info label="Ultima compra" value={dateLabel(cliente.ultimaCompraEm)} />
+          <Info label="Produto principal" value={produtoPrincipal || cliente.produtoPrincipal || 'Sem historico'} />
+          <Info label="Ultimo contato" value={latestInteraction ? dateLabel(latestInteraction.data) : 'Sem registro'} />
+          <Info label="WhatsApp" value={cliente.whatsapp || 'Atualizar cadastro'} />
           <Info label="Propostas abertas" value={orcamentosAbertos.length.toString()} />
+          <Info label="Tarefas abertas" value={tarefasAbertas.length.toString()} />
+          <Info label="Total historico" value={money(cliente.totalComprado + cliente.totalServicos)} />
           <Info label="Ultima proposta" value={ultimoOrcamento ? `${money(ultimoOrcamento.valorTotal)} · ${ultimoOrcamento.status}` : 'Sem historico'} />
         </div>
         {clientFeedback && <div className="readiness ok">{clientFeedback}</div>}
