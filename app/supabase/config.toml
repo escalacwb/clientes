@@ -140,6 +140,9 @@ verify_jwt = false
 [functions.analyze-whatsapp-contact]
 verify_jwt = false
 
+[functions.analyze-tire-inspection]
+verify_jwt = false
+
 # Analytics Buckets is available to Supabase Pro plan.
 # [storage.analytics.buckets.my-warehouse]
 

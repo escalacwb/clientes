@@ -58,7 +58,7 @@ import { buildOportunidades } from './lib/oportunidades'
 import { carteiraFiltros, filterClientes } from './lib/filtros'
 import { getCurrentSession, signInWithPassword, signOut } from './repositories/authRepository'
 import { listAutomacaoRegras, setAutomacaoRegraAtiva, type AutomacaoRegra } from './repositories/automacoesRepository'
-import { analyzeWhatsAppContact, type WhatsAppContactAnalysis } from './repositories/aiRepository'
+import { analyzeTireInspection, analyzeWhatsAppContact, type TireInspectionAnalysis, type WhatsAppContactAnalysis } from './repositories/aiRepository'
 import { listAuditoriaEventos, listClienteAlteracoes, type AuditoriaEvento } from './repositories/auditoriaRepository'
 import {
   campanhaSegmentos,
@@ -270,6 +270,7 @@ const navSectionsByMode: Record<AppMode, Array<{ title: string; items: Array<{ i
         { id: 'patio-boxes', label: 'Boxes', icon: Gauge },
         { id: 'patio-concluidos', label: 'Servicos Concluidos', icon: CheckCircle2 },
         { id: 'patio-historico', label: 'Historico placa', icon: Search },
+        { id: 'patio-pneus', label: 'Analise de Pneus', icon: Activity },
         { id: 'patio-contatos', label: 'Exportar contatos', icon: FileUp },
       ],
     },
@@ -2053,6 +2054,10 @@ function App() {
           <PatioExportarContatos onLoadContatos={listPatioContatosExportacao} />
         )}
 
+        {appMode === 'patio' && view === 'patio-pneus' && (
+          <PatioAnalisePneus onAnalyze={analyzeTireInspection} />
+        )}
+
         {appMode === 'crm' && view === 'patio-feedback' && (
           <PatioFeedback
             items={patioFeedbackItems}
@@ -3365,6 +3370,7 @@ function titleFor(view: string) {
     'patio-boxes': 'Visao dos Boxes',
     'patio-concluidos': 'Servicos concluidos',
     'patio-historico': 'Historico por placa',
+    'patio-pneus': 'Analise de Pneus',
     'patio-contatos': 'Exportar contatos',
     'patio-feedback': 'Feedback pos-servico',
     'patio-revisao': 'Revisao proativa',
@@ -9540,6 +9546,138 @@ function PatioExportarContatos({
         </>
       )}
       {!isLoading && items.length === 0 && <div className="empty-state">Gere a lista para visualizar e baixar contatos validos.</div>}
+    </section>
+  )
+}
+
+function PatioAnalisePneus({
+  onAnalyze,
+}: {
+  onAnalyze: (input: {
+    placa?: string
+    clienteNome?: string
+    observacao?: string
+    images: Array<{ name: string; mimeType: string; dataUrl: string }>
+  }) => Promise<TireInspectionAnalysis>
+}) {
+  const [placa, setPlaca] = useState('')
+  const [clienteNome, setClienteNome] = useState('')
+  const [observacao, setObservacao] = useState('')
+  const [images, setImages] = useState<Array<{ name: string; mimeType: string; dataUrl: string }>>([])
+  const [analysis, setAnalysis] = useState<TireInspectionAnalysis | null>(null)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files) return
+    setError('')
+    try {
+      const prepared = await Promise.all(Array.from(files).slice(0, 6).map(async (file) => {
+        const image = await optimizeCampaignImage(file)
+        return { name: image.nome, mimeType: image.mimeType, dataUrl: image.dataUrl }
+      }))
+      setImages(prepared)
+      setAnalysis(null)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel preparar as fotos.')
+    }
+  }
+
+  const run = async () => {
+    if (images.length === 0) {
+      setError('Selecione ao menos uma foto do pneu.')
+      return
+    }
+    setIsAnalyzing(true)
+    setError('')
+    try {
+      setAnalysis(await onAnalyze({ placa, clienteNome, observacao, images }))
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel analisar as fotos.')
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Analise de pneus</h2>
+          <p>Envie fotos do pneu para gerar um parecer tecnico/comercial rapido com IA.</p>
+        </div>
+        <button className="button primary" type="button" onClick={() => void run()} disabled={isAnalyzing}>
+          {isAnalyzing ? 'Analisando...' : 'Analisar fotos'}
+        </button>
+      </div>
+      {error && <div className="inline-error">{error}</div>}
+      <div className="filters-grid">
+        <label>
+          Placa
+          <input value={placa} onChange={(event) => setPlaca(event.target.value.toUpperCase())} placeholder="Ex.: ABC1D23" />
+        </label>
+        <label>
+          Cliente
+          <input value={clienteNome} onChange={(event) => setClienteNome(event.target.value)} placeholder="Nome do cliente ou frota" />
+        </label>
+        <label className="wide-field">
+          Observacao do atendente
+          <textarea value={observacao} onChange={(event) => setObservacao(event.target.value)} placeholder="Ex.: desgaste irregular no eixo dianteiro, cliente sente vibracao..." />
+        </label>
+        <label className="wide-field">
+          Fotos do pneu
+          <input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => void handleFiles(event.target.files)} />
+        </label>
+      </div>
+      {images.length > 0 && (
+        <div className="tire-image-grid">
+          {images.map((image) => (
+            <figure key={image.name}>
+              <img src={image.dataUrl} alt={image.name} />
+              <figcaption>{image.name}</figcaption>
+            </figure>
+          ))}
+        </div>
+      )}
+      {analysis && (
+        <div className="patio-analysis-result">
+          <div className="panel subtle">
+            <div className="panel-header">
+              <div>
+                <h3>Resultado tecnico</h3>
+                <p>Confianca: {Math.round(analysis.confidence * 100)}% - severidade {analysis.severity}</p>
+              </div>
+              <strong>{analysis.severity.toUpperCase()}</strong>
+            </div>
+            <p>{analysis.summary}</p>
+            <div className="status-list">
+              <div className="status-row"><span>Risco imediato</span><strong>{analysis.immediateRisk}</strong></div>
+              <div className="status-row"><span>Oportunidade</span><strong>{analysis.commercialOpportunity}</strong></div>
+            </div>
+          </div>
+          <div className="panel subtle">
+            <h3>Acoes recomendadas</h3>
+            <ul className="clean-list">
+              {analysis.recommendedActions.map((item) => <li key={item}>{item}</li>)}
+            </ul>
+            {analysis.likelyCauses.length > 0 && (
+              <>
+                <h3>Causas provaveis</h3>
+                <ul className="clean-list">
+                  {analysis.likelyCauses.map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              </>
+            )}
+          </div>
+          <div className="panel subtle">
+            <h3>Mensagem WhatsApp</h3>
+            <textarea value={analysis.whatsappMessage} readOnly />
+            <a className="button primary" href={`https://wa.me/?text=${encodeURIComponent(analysis.whatsappMessage)}`} target="_blank" rel="noreferrer">
+              Abrir WhatsApp
+            </a>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
