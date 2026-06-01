@@ -157,6 +157,7 @@ import { reviseOrcamento } from './repositories/orcamentosRepository'
 import { updateOrcamentoFollowup } from './repositories/orcamentosRepository'
 import { updateOrcamentoStatus, type PedidoConfirmadoInput } from './repositories/orcamentosRepository'
 import { listOportunidadesPage, listOportunidadesResumo, markOportunidadeComTarefa, refreshOportunidadesCache, type OportunidadeFilter, type OportunidadeResumo } from './repositories/oportunidadesRepository'
+import { getClienteContatoRecomendado, listClientePatioAtendimentoItens, listClientePatioAtendimentos } from './repositories/patioRepository'
 import { createPipelineFromSuggestion, listPipelineOportunidades, updatePipelineOportunidade, updatePipelineStage } from './repositories/pipelineRepository'
 import { escalateStaleCommercialSequences, listDefaultCommercialSequenceSteps, listSequenciaExecucoes, startDefaultCommercialSequence, updateSequenceStep, type SequenciaEtapaConfig } from './repositories/sequenciasRepository'
 import {
@@ -178,6 +179,7 @@ import type {
   CatalogoRegraDesconto,
   Cliente,
   ClienteAlteracao,
+  ClienteContatoRecomendado,
   ClienteMesclagem,
   ClienteStatus,
   ClienteVeiculoResumo,
@@ -196,6 +198,8 @@ import type {
   Oportunidade,
   OportunidadeEstagio,
   OportunidadePipeline,
+  PatioAtendimentoItemResumo,
+  PatioAtendimentoResumo,
   PossivelDuplicado,
   ServicoItem,
   SessaoUsuario,
@@ -375,6 +379,9 @@ function App() {
   const [clienteVeiculos, setClienteVeiculos] = useState<ClienteVeiculoResumo[]>([])
   const [clienteTarefas, setClienteTarefas] = useState<Tarefa[]>([])
   const [clienteCampanhas, setClienteCampanhas] = useState<CampanhaEnvio[]>([])
+  const [clienteContatoRecomendado, setClienteContatoRecomendado] = useState<ClienteContatoRecomendado | undefined>()
+  const [clientePatioAtendimentos, setClientePatioAtendimentos] = useState<PatioAtendimentoResumo[]>([])
+  const [clientePatioItens, setClientePatioItens] = useState<PatioAtendimentoItemResumo[]>([])
   const [possiveisDuplicados, setPossiveisDuplicados] = useState<PossivelDuplicado[]>(isSupabaseConfigured ? [] : seedPossiveisDuplicados)
   const [mesclagens, setMesclagens] = useState<ClienteMesclagem[]>(isSupabaseConfigured ? [] : seedMesclagens)
   const [catalogo, setCatalogo] = useState<CatalogoItem[]>([])
@@ -966,12 +973,24 @@ function App() {
 
       setIsLoadingHistory(true)
       try {
-        const [loadedVendas, loadedServicos, loadedVeiculos, loadedTarefas, loadedCampanhas] = await Promise.all([
+        const [
+          loadedVendas,
+          loadedServicos,
+          loadedVeiculos,
+          loadedTarefas,
+          loadedCampanhas,
+          loadedContatoRecomendado,
+          loadedPatioAtendimentos,
+          loadedPatioItens,
+        ] = await Promise.all([
           listClienteVendasItens(selectedClientId),
           listClienteServicosItens(selectedClientId),
           listClienteVeiculos(selectedClientId),
           listClienteTarefas(selectedClientId),
           listClienteCampanhaEnvios(selectedClientId),
+          getClienteContatoRecomendado(selectedClientId),
+          listClientePatioAtendimentos(selectedClientId),
+          listClientePatioAtendimentoItens(selectedClientId),
         ])
         if (!isMounted) return
         setVendasItens(loadedVendas)
@@ -979,6 +998,9 @@ function App() {
         setClienteVeiculos(loadedVeiculos)
         setClienteTarefas(loadedTarefas)
         setClienteCampanhas(loadedCampanhas)
+        setClienteContatoRecomendado(loadedContatoRecomendado)
+        setClientePatioAtendimentos(loadedPatioAtendimentos)
+        setClientePatioItens(loadedPatioItens)
         clearModuleError('cliente360')
       } catch (exception) {
         if (isMounted) setModuleError('cliente360', exception instanceof Error ? exception.message : 'Nao foi possivel carregar o historico do cliente.')
@@ -1665,6 +1687,9 @@ function App() {
             veiculos={clienteVeiculos}
             tarefas={clienteTarefas}
             campanhaEnvios={clienteCampanhas}
+            contatoRecomendado={clienteContatoRecomendado}
+            patioAtendimentos={clientePatioAtendimentos}
+            patioItens={clientePatioItens}
             currentUser={session}
             onUpdateClient={async (patch) => {
               await updateClienteComercial(selectedClient.id, patch)
@@ -8075,6 +8100,20 @@ function campaignStatusLabel(status: CampanhaEnvioStatus) {
   return labels[status] ?? status
 }
 
+function contactTypeLabel(tipo?: string) {
+  const labels: Record<string, string> = {
+    responsavel: 'Responsavel',
+    motorista: 'Motorista',
+    operacional: 'Operacional',
+    cadastro: 'Cadastro',
+  }
+  return tipo ? labels[tipo] ?? tipo : 'Contato'
+}
+
+function numberLabel(value: number) {
+  return value.toLocaleString('pt-BR')
+}
+
 function Cliente360({
   cliente,
   interacoes,
@@ -8084,6 +8123,9 @@ function Cliente360({
   veiculos,
   tarefas,
   campanhaEnvios,
+  contatoRecomendado,
+  patioAtendimentos,
+  patioItens,
   currentUser,
   onUpdateClient,
   onAddInteraction,
@@ -8104,6 +8146,9 @@ function Cliente360({
   veiculos: ClienteVeiculoResumo[]
   tarefas: Tarefa[]
   campanhaEnvios: CampanhaEnvio[]
+  contatoRecomendado?: ClienteContatoRecomendado
+  patioAtendimentos: PatioAtendimentoResumo[]
+  patioItens: PatioAtendimentoItemResumo[]
   currentUser: SessaoUsuario
   onUpdateClient: (patch: Partial<Cliente>) => Promise<void>
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
@@ -8205,13 +8250,31 @@ function Cliente360({
     .slice()
     .sort((a, b) => a.dataVencimento.localeCompare(b.dataVencimento))
     .slice(0, 5)
-  const whatsappUrl = cliente.whatsapp
-    ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(buildServiceOpeningMessage(cliente))}`
-    : undefined
   const latestInteraction = recentContactHistory[0]
   const latestCampaign = [...clienteCampanhas].sort((a, b) =>
     (b.dataAberturaWhatsapp ?? b.dataMarcadoEnviado ?? '').localeCompare(a.dataAberturaWhatsapp ?? a.dataMarcadoEnviado ?? ''),
   )[0]
+  const ultimoAtendimentoPatio = [...patioAtendimentos].sort((a, b) =>
+    (b.fimExecucao ?? b.inicioExecucao ?? '').localeCompare(a.fimExecucao ?? a.inicioExecucao ?? ''),
+  )[0]
+  const patioServicosRecentes = patioItens.slice(0, 8)
+  const contatoOperacional = contatoRecomendado?.whatsapp
+    ? contatoRecomendado
+    : ultimoAtendimentoPatio?.contatoMotorista
+      ? {
+          clienteId: cliente.id,
+          nome: ultimoAtendimentoPatio.nomeMotorista,
+          tipo: 'motorista',
+          whatsapp: ultimoAtendimentoPatio.contatoMotorista,
+          origemSistema: 'patio',
+          prioridade: 80,
+          atualizadoEm: ultimoAtendimentoPatio.fimExecucao,
+      } satisfies ClienteContatoRecomendado
+      : undefined
+  const whatsappNumber = contatoOperacional?.whatsapp || cliente.whatsapp
+  const whatsappUrl = whatsappNumber
+    ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(buildServiceOpeningMessage(cliente))}`
+    : undefined
   const opportunityDetails = opportunityScoreDetails(cliente, clienteOrcamentos)
   const clienteScore = opportunityScore(cliente, clienteOrcamentos)
   const routineReasons = uniqueBy([
@@ -8284,6 +8347,8 @@ function Cliente360({
     produtoPrincipal || cliente.produtoPrincipal ? `Produto principal: ${produtoPrincipal || cliente.produtoPrincipal}` : undefined,
     servicoRecorrente ? `Servico recorrente: ${servicoRecorrente}` : undefined,
     latestCampaign ? `Ultima campanha: ${latestCampaign.campanhaNome ?? 'Campanha'} - ${campaignStatusLabel(latestCampaign.status)}` : undefined,
+    ultimoAtendimentoPatio ? `Ultimo patio: ${dateLabel(ultimoAtendimentoPatio.fimExecucao ?? ultimoAtendimentoPatio.inicioExecucao)}${ultimoAtendimentoPatio.placa ? ` - placa ${ultimoAtendimentoPatio.placa}` : ''}` : undefined,
+    contatoOperacional?.whatsapp ? `Contato recomendado: ${contatoOperacional.nome || contatoOperacional.tipo} (${contatoOperacional.origemSistema})` : undefined,
     proximaRecompra ? `Recompra estimada: ${dateLabel(proximaRecompra)}` : undefined,
   ].filter(Boolean)
 
@@ -8507,7 +8572,13 @@ function Cliente360({
           </article>
           <article className="client360-routine-card">
             <span className="next-action-label">Antes de chamar</span>
-            <h3>{cliente.whatsapp || cliente.telefone || 'Contato nao informado'}</h3>
+            <h3>{contatoOperacional?.whatsapp || cliente.whatsapp || cliente.telefone || 'Contato nao informado'}</h3>
+            {contatoOperacional && (
+              <p>
+                {contatoOperacional.nome || contactTypeLabel(contatoOperacional.tipo)} - {contactTypeLabel(contatoOperacional.tipo)}
+                {' '}via {contatoOperacional.origemSistema === 'patio' ? 'patio' : 'cadastro'}
+              </p>
+            )}
             <div className="client360-approach-list">
               {approachFacts.slice(0, 5).map((fact) => <span key={fact}>{fact}</span>)}
             </div>
@@ -8528,6 +8599,32 @@ function Cliente360({
             </div>
           </article>
         </section>
+        {(ultimoAtendimentoPatio || patioServicosRecentes.length > 0) && (
+          <section className="client360-command-center">
+            <article className="client360-routine-card">
+              <span className="next-action-label">Sinal do patio</span>
+              <h3>{ultimoAtendimentoPatio ? `Ultimo atendimento ${dateLabel(ultimoAtendimentoPatio.fimExecucao ?? ultimoAtendimentoPatio.inicioExecucao)}` : 'Sem atendimento recente'}</h3>
+              <div className="client360-approach-list">
+                {ultimoAtendimentoPatio?.placa && <span>Placa: {ultimoAtendimentoPatio.placa}</span>}
+                {ultimoAtendimentoPatio?.quilometragem && <span>KM: {numberLabel(ultimoAtendimentoPatio.quilometragem)}</span>}
+                {ultimoAtendimentoPatio?.nomeMotorista && <span>Motorista: {ultimoAtendimentoPatio.nomeMotorista}</span>}
+                {ultimoAtendimentoPatio?.dataFeedback ? <span>Feedback registrado</span> : <span>Feedback ainda nao registrado</span>}
+              </div>
+            </article>
+            <article className="client360-routine-card">
+              <span className="next-action-label">Servicos do patio</span>
+              <h3>{patioServicosRecentes.length} itens recentes</h3>
+              <div className="client360-approach-list">
+                {patioServicosRecentes.slice(0, 5).map((item) => (
+                  <span key={item.id}>
+                    {dateLabel(item.solicitadoEm)} - {item.servicoNome || item.descricao || item.area}
+                    {item.quilometragem ? ` - KM ${numberLabel(item.quilometragem)}` : ''}
+                  </span>
+                ))}
+              </div>
+            </article>
+          </section>
+        )}
         {opportunityDetails.length > 0 && (
           <details className="client360-contact-tools client360-score-details">
             <summary>{routineReasons.length > 0 ? 'Ver criterios que ajudam a priorizar' : 'Ver criterios de potencial comercial'}</summary>

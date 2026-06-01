@@ -20,6 +20,7 @@
     "export:workbook-json": "node scripts/export-workbook-json.mjs ../sell_out_final_com_vendas_e_servicos.xlsx",
     "import:workbook:supabase": "node scripts/import-workbook-to-supabase.mjs ../sell_out_final_com_vendas_e_servicos.xlsx",
     "import:references:supabase": "node scripts/import-reference-files-to-supabase.mjs",
+    "sync:patio:crm": "node scripts/sync-patio-to-crm.mjs",
     "analyze:references": "node scripts/analyze-reference-import.mjs",
     "import:catalog:supabase": "node scripts/import-catalog-to-supabase.mjs",
     "supabase:create-auth-users": "node scripts/create-supabase-auth-users.mjs",

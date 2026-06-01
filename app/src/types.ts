@@ -351,6 +351,48 @@ export type ClienteVeiculoResumo = {
   origem?: string
 }
 
+export type ClienteContatoRecomendado = {
+  clienteId: string
+  contatoId?: string
+  nome?: string
+  tipo: string
+  whatsapp?: string
+  email?: string
+  origemSistema: string
+  prioridade: number
+  atualizadoEm?: string
+}
+
+export type PatioAtendimentoResumo = {
+  patioExecucaoId: number
+  clienteId?: string
+  veiculoId?: string
+  placa?: string
+  clienteNome?: string
+  quilometragem?: number
+  status?: string
+  inicioExecucao?: string
+  fimExecucao?: string
+  nomeMotorista?: string
+  contatoMotorista?: string
+  dataFeedback?: string
+}
+
+export type PatioAtendimentoItemResumo = {
+  id: string
+  patioExecucaoId?: number
+  clienteId?: string
+  veiculoId?: string
+  area: 'borracharia' | 'alinhamento' | 'manutencao'
+  servicoNome?: string
+  descricao?: string
+  quantidade?: number
+  status?: string
+  quilometragem?: number
+  solicitadoEm?: string
+  tipoAtendimento?: string
+}
+
 export type CarteiraFiltro =
   | 'todos'
   | 'origem-capital'
