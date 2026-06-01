@@ -377,7 +377,7 @@ export async function registerPatioEntrada(input: PatioEntradaInput): Promise<nu
       quantidade: Math.max(1, Math.round(Number(servico.quantidade) || 1)),
       observacao: servico.observacao?.trim() ?? '',
     })),
-    p_observacao: null,
+    p_observacao: input.observacaoGeral?.trim() || null,
   })
 
   if (error) throw error

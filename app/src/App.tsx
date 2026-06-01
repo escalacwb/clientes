@@ -8781,6 +8781,26 @@ function areaLabel(area?: string) {
   return area ? labels[area] ?? area : 'Area'
 }
 
+function buildPatioDiagnostico(input: {
+  numEixos: number
+  eixosAlinhar: Record<number, boolean>
+  puxando: string
+  volante: string
+  vibracao: string
+  observacaoGeral: string
+}) {
+  const eixos = Array.from({ length: Math.min(9, Math.max(2, input.numEixos || 2)) }, (_, index) => index + 1)
+    .filter((eixo) => input.eixosAlinhar[eixo])
+  const lines = [
+    eixos.length > 0 ? `Alinhamento solicitado nos eixos: ${eixos.join(', ')}.` : 'Nenhum eixo marcado para alinhamento.',
+    `Caminhao puxando: ${input.puxando}.`,
+    `Volante: ${input.volante}.`,
+    `Vibracao: ${input.vibracao}.`,
+  ]
+  if (input.observacaoGeral.trim()) lines.push(`Observacao: ${input.observacaoGeral.trim()}`)
+  return lines.join('\n')
+}
+
 function PatioEntrada({
   query,
   results,
@@ -8813,9 +8833,28 @@ function PatioEntrada({
   const [servicoArea, setServicoArea] = useState<PatioEntradaServicoInput['area']>('borracharia')
   const [servicoQuantidade, setServicoQuantidade] = useState('1')
   const [servicoObservacao, setServicoObservacao] = useState('')
+  const [observacaoGeral, setObservacaoGeral] = useState('')
+  const [numEixos, setNumEixos] = useState('2')
+  const [eixosAlinhar, setEixosAlinhar] = useState<Record<number, boolean>>({})
+  const [puxando, setPuxando] = useState('Nao')
+  const [volante, setVolante] = useState('Normal')
+  const [vibracao, setVibracao] = useState('Nao')
   const [isSaving, setIsSaving] = useState(false)
   const [formError, setFormError] = useState('')
   const catalogoDaArea = catalogoServicos.filter((servico) => servico.area === servicoArea)
+  const areasEntrada: Array<{ area: PatioEntradaServicoInput['area']; label: string }> = [
+    { area: 'borracharia', label: 'Borracharia' },
+    { area: 'alinhamento', label: 'Alinhamento' },
+    { area: 'manutencao', label: 'Mecanica' },
+  ]
+  const diagnostico = buildPatioDiagnostico({
+    numEixos: Number(numEixos) || 2,
+    eixosAlinhar,
+    puxando,
+    volante,
+    vibracao,
+    observacaoGeral,
+  })
 
   useEffect(() => {
     if (!selected) return
@@ -8862,11 +8901,13 @@ function PatioEntrada({
         quilometragem: quilometragem ? Number(quilometragem) : undefined,
         nomeMotorista,
         contatoMotorista,
+        observacaoGeral: diagnostico,
         servicos,
       })
       setSelected(undefined)
       setServicos([])
       setServicoNome('')
+      setObservacaoGeral('')
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Nao foi possivel registrar a entrada.')
     } finally {
@@ -8917,45 +8958,112 @@ function PatioEntrada({
               <input value={contatoMotorista} onChange={(event) => setContatoMotorista(event.target.value)} placeholder="Contato atualizado" />
             </label>
           </div>
-          <div className="filters-grid">
-            <label>
-              Servico
-              <input
-                list={`patio-servicos-${servicoArea}`}
-                value={servicoNome}
-                onChange={(event) => setServicoNome(event.target.value)}
-                placeholder="Selecione ou digite o servico"
-              />
-              <datalist id={`patio-servicos-${servicoArea}`}>
-                {catalogoDaArea.map((servico) => <option value={servico.nome} key={`${servico.area}-${servico.nome}`} />)}
-              </datalist>
-            </label>
-            <label>
-              Area
-              <select value={servicoArea} onChange={(event) => setServicoArea(event.target.value as PatioEntradaServicoInput['area'])}>
-                <option value="borracharia">Borracharia</option>
-                <option value="alinhamento">Alinhamento</option>
-                <option value="manutencao">Manutencao</option>
-              </select>
-            </label>
-            <label>
-              Qtde.
-              <input inputMode="numeric" value={servicoQuantidade} onChange={(event) => setServicoQuantidade(event.target.value.replace(/\D/g, '') || '1')} />
-            </label>
-            <label>
-              Observacao
-              <input value={servicoObservacao} onChange={(event) => setServicoObservacao(event.target.value)} placeholder="Opcional" />
-            </label>
-          </div>
-          <div className="inline-actions">
-            <button className="button" type="button" onClick={addServico}>Adicionar servico</button>
-            <button className="button ghost" type="button" onClick={() => setSelected(undefined)}>Cancelar entrada</button>
+          <div className="patio-entry-steps">
+            <article className="panel subtle">
+              <h3>2. Diagnostico rapido</h3>
+              <div className="filters-grid">
+                <label>
+                  Numero de eixos
+                  <input inputMode="numeric" value={numEixos} onChange={(event) => setNumEixos(event.target.value.replace(/\D/g, '') || '2')} />
+                </label>
+                <label>
+                  Puxando
+                  <select value={puxando} onChange={(event) => setPuxando(event.target.value)}>
+                    <option value="Nao">Nao</option>
+                    <option value="Esquerda">Esquerda</option>
+                    <option value="Direita">Direita</option>
+                  </select>
+                </label>
+                <label>
+                  Volante
+                  <select value={volante} onChange={(event) => setVolante(event.target.value)}>
+                    <option value="Normal">Normal</option>
+                    <option value="Passarinhando">Passarinhando</option>
+                    <option value="Pesado">Pesado</option>
+                  </select>
+                </label>
+                <label>
+                  Vibracao
+                  <select value={vibracao} onChange={(event) => setVibracao(event.target.value)}>
+                    <option value="Nao">Nao</option>
+                    <option value="Sim">Sim</option>
+                  </select>
+                </label>
+              </div>
+              <div className="patio-axis-grid">
+                {Array.from({ length: Math.min(9, Math.max(2, Number(numEixos) || 2)) }, (_, index) => index + 1).map((eixo) => (
+                  <label className="checkbox-line" key={eixo}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(eixosAlinhar[eixo])}
+                      onChange={(event) => setEixosAlinhar((current) => ({ ...current, [eixo]: event.target.checked }))}
+                    />
+                    Alinhar eixo {eixo}
+                  </label>
+                ))}
+              </div>
+              <label>
+                Observacoes gerais
+                <textarea value={observacaoGeral} onChange={(event) => setObservacaoGeral(event.target.value)} placeholder="Ex.: desgaste irregular, cliente pediu urgencia, conferir calibragem..." />
+              </label>
+              <div className="patio-diagnostic-preview">
+                {diagnostico.split('\n').map((line) => <span key={line}>{line}</span>)}
+              </div>
+            </article>
+            <article className="panel subtle">
+              <h3>3. Selecao de servicos</h3>
+              <div className="patio-service-areas">
+                {areasEntrada.map((areaInfo) => (
+                  <button
+                    className={servicoArea === areaInfo.area ? 'button primary' : 'button'}
+                    type="button"
+                    onClick={() => setServicoArea(areaInfo.area)}
+                    key={areaInfo.area}
+                  >
+                    {areaInfo.label}
+                  </button>
+                ))}
+              </div>
+              <div className="filters-grid">
+                <label>
+                  Servico de {areaLabel(servicoArea)}
+                  <input
+                    list={`patio-servicos-${servicoArea}`}
+                    value={servicoNome}
+                    onChange={(event) => setServicoNome(event.target.value)}
+                    placeholder="Selecione ou digite o servico"
+                  />
+                  <datalist id={`patio-servicos-${servicoArea}`}>
+                    {catalogoDaArea.map((servico) => <option value={servico.nome} key={`${servico.area}-${servico.nome}`} />)}
+                  </datalist>
+                </label>
+                <label>
+                  Qtde.
+                  <input inputMode="numeric" value={servicoQuantidade} onChange={(event) => setServicoQuantidade(event.target.value.replace(/\D/g, '') || '1')} />
+                </label>
+                <label>
+                  Observacao do servico
+                  <input value={servicoObservacao} onChange={(event) => setServicoObservacao(event.target.value)} placeholder="Opcional" />
+                </label>
+              </div>
+              <div className="patio-service-suggestions">
+                {catalogoDaArea.slice(0, 12).map((servico) => (
+                  <button className="button tiny-button" type="button" onClick={() => setServicoNome(servico.nome)} key={`${servico.area}-${servico.nome}`}>
+                    {servico.nome}
+                  </button>
+                ))}
+              </div>
+              <div className="inline-actions">
+                <button className="button" type="button" onClick={addServico}>Adicionar servico</button>
+                <button className="button ghost" type="button" onClick={() => setSelected(undefined)}>Cancelar entrada</button>
+              </div>
+            </article>
           </div>
           {servicos.length > 0 && (
             <div className="table-list compact-list">
               {servicos.map((servico, index) => (
                 <div className="status-row" key={`${servico.servicoNome}-${index}`}>
-                  <span>{servico.area} - {servico.quantidade}x {servico.servicoNome}</span>
+                  <span>{areaLabel(servico.area)} - {servico.quantidade}x {servico.servicoNome}</span>
                   <button className="button tiny-button" type="button" onClick={() => setServicos((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remover</button>
                 </div>
               ))}

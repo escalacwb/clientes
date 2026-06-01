@@ -466,6 +466,7 @@ export type PatioEntradaInput = {
   quilometragem?: number
   nomeMotorista?: string
   contatoMotorista?: string
+  observacaoGeral?: string
   servicos: PatioEntradaServicoInput[]
 }
 
