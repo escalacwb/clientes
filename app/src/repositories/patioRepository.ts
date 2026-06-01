@@ -517,6 +517,18 @@ export async function updatePatioVeiculoDados(input: {
   }
 }
 
+export async function updatePatioVeiculoMediaKm(input: {
+  patioVeiculoId: number
+  veiculoId?: string
+  mediaKmDiaria: number
+}): Promise<void> {
+  await updatePatioVeiculoDados({
+    patioVeiculoId: input.patioVeiculoId,
+    veiculoId: input.veiculoId,
+    mediaKmDiaria: input.mediaKmDiaria,
+  })
+}
+
 export async function listPatioContatosExportacao(queryText?: string): Promise<PatioContatoExportacao[]> {
   const supabase = await getSupabase()
   if (!supabase) return []

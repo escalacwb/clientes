@@ -186,6 +186,7 @@ import {
   searchPatioVeiculos,
   unassignPatioBox,
   updatePatioClienteDados,
+  updatePatioVeiculoMediaKm,
   updatePatioVeiculoDados,
   type PatioContatoExportacao,
   type PatioRelatorioServico,
@@ -303,6 +304,7 @@ const navSectionsByMode: Record<AppMode, Array<{ title: string; items: Array<{ i
       items: [
         { id: 'importacoes', label: 'Importacoes', icon: FileUp },
         { id: 'relatorio-patio', label: 'Relatorio Patio', icon: BarChart3 },
+        { id: 'patio-km-medio', label: 'KM medio placa', icon: Gauge },
         { id: 'vendedores', label: 'Equipe', icon: UserRound },
         { id: 'usuarios', label: 'Usuarios', icon: ShieldCheck },
         { id: 'auditoria', label: 'Auditoria', icon: CheckCircle2 },
@@ -325,7 +327,7 @@ const hiddenViewRedirects: Record<string, string> = {
   'campanhas-inbox': 'campanhas',
 }
 
-const adminOnlyViews = new Set(['importacoes', 'conflitos', 'mesclagem', 'relatorios', 'relatorio-patio', 'vendedores', 'usuarios', 'auditoria'])
+const adminOnlyViews = new Set(['importacoes', 'conflitos', 'mesclagem', 'relatorios', 'relatorio-patio', 'patio-km-medio', 'vendedores', 'usuarios', 'auditoria'])
 const sellerPrimaryViews = new Set(['cockpit', 'clientes', 'campanhas', 'orcamentos', 'catalogo'])
 const mobilePrimaryViews = new Set(['cockpit', 'clientes', 'campanhas', 'orcamentos'])
 const mobileAllowedViews = new Set(['cockpit', 'clientes', 'campanhas', 'orcamentos', 'cliente360', 'orcamento-editor', 'orcamento-detalhe'])
@@ -924,7 +926,7 @@ function App() {
     let isMounted = true
 
     async function loadPatioEntrada() {
-      if (isCheckingSession || !session || !['patio-entrada', 'patio-historico', 'patio-dados'].includes(view)) return
+      if (isCheckingSession || !session || !['patio-entrada', 'patio-historico', 'patio-dados', 'patio-km-medio'].includes(view)) return
       if (patioEntradaQuery.trim().length < 2) {
         setPatioEntradaResults([])
         return
@@ -3292,6 +3294,23 @@ function App() {
         {session.role === 'admin' && view === 'relatorio-patio' && (
           <PatioRelatorioGestao onLoad={listPatioRelatorioServicos} />
         )}
+        {session.role === 'admin' && view === 'patio-km-medio' && (
+          <PatioKmMedio
+            query={patioEntradaQuery}
+            results={patioEntradaResults}
+            isLoading={isLoadingPatioEntrada}
+            onQueryChange={setPatioEntradaQuery}
+            onLoadHistorico={async (patioVeiculoId) => {
+              const atendimentos = await listPatioVeiculoAtendimentos(patioVeiculoId)
+              const itens = await listPatioVeiculoAtendimentoItens(atendimentos.map((item) => item.patioExecucaoId))
+              return { atendimentos, itens }
+            }}
+            onSaveMedia={async (input) => {
+              await updatePatioVeiculoMediaKm(input)
+              setPatioEntradaResults(await searchPatioVeiculos(patioEntradaQuery))
+            }}
+          />
+        )}
         {session.role === 'admin' && view === 'vendedores' && (
           <VendedoresCarteira
             clientes={clientes}
@@ -3367,6 +3386,7 @@ function titleFor(view: string) {
     catalogo: 'Catalogo e precos',
     relatorios: 'Relatorios gerenciais',
     'relatorio-patio': 'Relatorio Patio',
+    'patio-km-medio': 'KM medio por placa',
     usuarios: 'Usuarios e permissoes',
     auditoria: 'Auditoria',
     cliente360: 'Ficha completa do cliente',
@@ -9762,6 +9782,132 @@ function PatioRelatorioGestao({
         <RankPanel title="Clientes por volume" items={topClientes} />
         <RankPanel title="Equipe por volume" items={topEquipe} />
       </div>
+    </section>
+  )
+}
+
+function PatioKmMedio({
+  query,
+  results,
+  isLoading,
+  onQueryChange,
+  onLoadHistorico,
+  onSaveMedia,
+}: {
+  query: string
+  results: PatioVeiculoBusca[]
+  isLoading: boolean
+  onQueryChange: (query: string) => void
+  onLoadHistorico: (patioVeiculoId: number) => Promise<{ atendimentos: PatioAtendimentoResumo[]; itens: PatioAtendimentoItemResumo[] }>
+  onSaveMedia: (input: { patioVeiculoId: number; veiculoId?: string; mediaKmDiaria: number }) => Promise<void>
+}) {
+  const [selected, setSelected] = useState<PatioVeiculoBusca | undefined>()
+  const [atendimentos, setAtendimentos] = useState<PatioAtendimentoResumo[]>([])
+  const [isLoadingHistorico, setIsLoadingHistorico] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [feedback, setFeedback] = useState('')
+
+  const selectVehicle = async (vehicle: PatioVeiculoBusca) => {
+    setSelected(vehicle)
+    setFeedback('')
+    setIsLoadingHistorico(true)
+    try {
+      const result = await onLoadHistorico(vehicle.patioVeiculoId)
+      setAtendimentos(result.atendimentos)
+    } finally {
+      setIsLoadingHistorico(false)
+    }
+  }
+
+  const visits = useMemo(() => {
+    const unique = new Map<string, PatioAtendimentoResumo>()
+    for (const item of atendimentos) {
+      if (!item.fimExecucao || !item.quilometragem || item.quilometragem <= 0) continue
+      const key = `${item.fimExecucao.slice(0, 10)}-${item.quilometragem}`
+      if (!unique.has(key)) unique.set(key, item)
+    }
+    return Array.from(unique.values()).sort((a, b) => String(a.fimExecucao).localeCompare(String(b.fimExecucao)))
+  }, [atendimentos])
+  const baseVisits = visits.slice(-3)
+  const first = baseVisits[0]
+  const last = baseVisits[baseVisits.length - 1]
+  const days = first?.fimExecucao && last?.fimExecucao
+    ? Math.max(0, Math.round((new Date(last.fimExecucao).getTime() - new Date(first.fimExecucao).getTime()) / 86400000))
+    : 0
+  const deltaKm = first?.quilometragem && last?.quilometragem ? last.quilometragem - first.quilometragem : 0
+  const calculated = days > 0 && deltaKm >= 0 ? deltaKm / days : 0
+
+  const save = async () => {
+    if (!selected || !calculated) return
+    setIsSaving(true)
+    setFeedback('')
+    try {
+      await onSaveMedia({ patioVeiculoId: selected.patioVeiculoId, veiculoId: selected.veiculoId, mediaKmDiaria: Number(calculated.toFixed(2)) })
+      setFeedback(`Media atualizada para ${calculated.toFixed(2)} km/dia.`)
+    } catch (exception) {
+      setFeedback(exception instanceof Error ? exception.message : 'Nao foi possivel salvar a media.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>KM medio por placa</h2>
+          <p>Calcule a media usando visitas finalizadas e salve para melhorar revisao proativa.</p>
+        </div>
+      </div>
+      {feedback && <div className={feedback.includes('Nao') ? 'inline-error' : 'inline-success'}>{feedback}</div>}
+      <div className="filters-grid">
+        <label>
+          Placa, cliente ou motorista
+          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Ex.: ABC1D23" />
+        </label>
+      </div>
+      {isLoading && <div className="empty-state">Buscando veiculos...</div>}
+      {results.length > 0 && (
+        <div className="patio-history-results">
+          {results.slice(0, 10).map((item) => (
+            <button className={selected?.patioVeiculoId === item.patioVeiculoId ? 'button primary' : 'button'} type="button" key={item.patioVeiculoId} onClick={() => void selectVehicle(item)}>
+              {item.placa ?? 'Sem placa'} - {item.clienteNome ?? 'Cliente sem vinculo'}
+            </button>
+          ))}
+        </div>
+      )}
+      {selected && (
+        <div className="panel subtle">
+          <div className="panel-header">
+            <div>
+              <h3>{selected.placa ?? 'Sem placa'} - {selected.clienteNome ?? 'Cliente sem vinculo'}</h3>
+              <p>Media atual: {selected.mediaKmDiaria ? `${numberLabel(Math.round(selected.mediaKmDiaria))} km/dia` : 'sem media'}</p>
+            </div>
+            <button className="button primary" type="button" disabled={!calculated || isSaving} onClick={() => void save()}>
+              {isSaving ? 'Salvando...' : 'Salvar nova media'}
+            </button>
+          </div>
+          {isLoadingHistorico && <div className="empty-state">Carregando visitas...</div>}
+          {!isLoadingHistorico && (
+            <>
+              <div className="metric-grid">
+                <Metric icon={ClipboardList} label="Visitas validas" value={numberLabel(visits.length)} tone="blue" />
+                <Metric icon={CalendarClock} label="Periodo usado" value={days ? `${days} dias` : 'Sem periodo'} tone="amber" />
+                <Metric icon={Gauge} label="Delta KM" value={numberLabel(Math.max(0, deltaKm))} tone="blue" />
+                <Metric icon={RefreshCw} label="Nova media" value={calculated ? `${calculated.toFixed(2)} km/dia` : 'Nao calculada'} tone="green" />
+              </div>
+              <div className="status-list">
+                {visits.slice(-8).map((visit) => (
+                  <div className="status-row" key={visit.patioExecucaoId}>
+                    <span>{dateLabel(visit.fimExecucao)}</span>
+                    <strong>{visit.quilometragem ? `${numberLabel(visit.quilometragem)} km` : 'KM nao informado'}</strong>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </section>
   )
 }
