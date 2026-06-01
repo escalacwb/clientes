@@ -9088,16 +9088,32 @@ function PatioEntrada({
       setFormError('Informe o servico antes de adicionar.')
       return
     }
-    setServicos((current) => [
-      ...current,
-      {
-        area: servicoArea,
-        servicoNome: nome,
-        descricao: nome,
-        quantidade: Math.max(1, Number(servicoQuantidade) || 1),
-        observacao: servicoObservacao.trim() || undefined,
-      },
-    ])
+    const quantidade = Math.max(1, Number(servicoQuantidade) || 1)
+    const observacao = servicoObservacao.trim()
+    setServicos((current) => {
+      const existingIndex = current.findIndex((servico) =>
+        servico.area === servicoArea &&
+        servico.servicoNome.trim().toLowerCase() === nome.toLowerCase() &&
+        (servico.observacao ?? '') === observacao,
+      )
+      if (existingIndex === -1) {
+        return [
+          ...current,
+          {
+            area: servicoArea,
+            servicoNome: nome,
+            descricao: nome,
+            quantidade,
+            observacao: observacao || undefined,
+          },
+        ]
+      }
+      return current.map((servico, index) =>
+        index === existingIndex
+          ? { ...servico, quantidade: Math.max(1, servico.quantidade) + quantidade }
+          : servico,
+      )
+    })
     setServicoNome('')
     setServicoQuantidade('1')
     setServicoObservacao('')
