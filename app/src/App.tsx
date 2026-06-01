@@ -10097,7 +10097,7 @@ function PatioKmMedio({
   onQueryChange: (query: string) => void
   onLoadHistorico: (patioVeiculoId: number) => Promise<{ atendimentos: PatioAtendimentoResumo[]; itens: PatioAtendimentoItemResumo[] }>
   onSaveMedia: (input: { patioVeiculoId: number; veiculoId?: string; mediaKmDiaria: number }) => Promise<void>
-  onSaveAtendimentoKm: (input: { patioExecucaoId: number; quilometragem: number }) => Promise<void>
+  onSaveAtendimentoKm: (input: { patioExecucaoId: number; quilometragem: number }) => Promise<number | undefined>
 }) {
   const [selected, setSelected] = useState<PatioVeiculoBusca | undefined>()
   const [atendimentos, setAtendimentos] = useState<PatioAtendimentoResumo[]>([])
@@ -10167,12 +10167,16 @@ function PatioKmMedio({
     setSavingKmId(visit.patioExecucaoId)
     setFeedback('')
     try {
-      await onSaveAtendimentoKm({ patioExecucaoId: visit.patioExecucaoId, quilometragem: nextKm })
+      const nextMedia = await onSaveAtendimentoKm({ patioExecucaoId: visit.patioExecucaoId, quilometragem: nextKm })
       const changedDay = visitDayKey(visit)
       setAtendimentos((current) => current.map((item) =>
         visitDayKey(item) === changedDay ? { ...item, quilometragem: Math.round(nextKm) } : item,
       ))
-      setFeedback('KM da visita atualizado. Confira a nova media calculada antes de salvar.')
+      if (nextMedia && selected) {
+        setSelected({ ...selected, mediaKmDiaria: nextMedia })
+        setManualMedia('')
+      }
+      setFeedback(nextMedia ? `KM atualizado e media recalculada para ${nextMedia.toFixed(2)} km/dia.` : 'KM da visita atualizado.')
     } catch (exception) {
       setFeedback(exception instanceof Error ? exception.message : 'Nao foi possivel corrigir o KM da visita.')
     } finally {

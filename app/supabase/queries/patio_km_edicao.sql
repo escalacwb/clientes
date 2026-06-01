@@ -1,8 +1,10 @@
+drop function if exists public.corrigir_km_atendimento_patio_crm(bigint, integer);
+
 create or replace function public.corrigir_km_atendimento_patio_crm(
   p_patio_execucao_id bigint,
   p_quilometragem integer
 )
-returns void
+returns numeric
 language plpgsql
 security definer
 set search_path = public
@@ -10,6 +12,11 @@ as $$
 declare
   v_atendimento public.patio_atendimentos%rowtype;
   v_data_visita date;
+  v_visitas integer;
+  v_dias integer;
+  v_primeiro_km integer;
+  v_ultimo_km integer;
+  v_media numeric;
 begin
   if not public.patio_usuario_operacional() then
     raise exception 'Sem permissao para corrigir KM do patio.';
@@ -55,6 +62,54 @@ begin
   set raw_data = coalesce(raw_data, '{}'::jsonb) || jsonb_build_object('ultima_correcao_km_em', now()),
       sincronizado_em = now()
   where patio_veiculo_id = v_atendimento.patio_veiculo_id;
+
+  with visitas_por_dia as (
+    select
+      coalesce(fim_execucao, inicio_execucao)::date as data_visita,
+      max(quilometragem) as quilometragem
+    from public.patio_atendimentos
+    where patio_veiculo_id = v_atendimento.patio_veiculo_id
+      and status = 'finalizado'
+      and quilometragem is not null
+      and quilometragem > 0
+      and coalesce(fim_execucao, inicio_execucao) is not null
+    group by coalesce(fim_execucao, inicio_execucao)::date
+  ),
+  ultimas as (
+    select *
+    from visitas_por_dia
+    order by data_visita desc
+    limit 3
+  ),
+  base as (
+    select
+      count(*)::integer as visitas,
+      greatest(0, (max(data_visita) - min(data_visita)))::integer as dias,
+      (array_agg(quilometragem order by data_visita asc))[1]::integer as primeiro_km,
+      (array_agg(quilometragem order by data_visita desc))[1]::integer as ultimo_km
+    from ultimas
+  )
+  select visitas, dias, primeiro_km, ultimo_km
+  into v_visitas, v_dias, v_primeiro_km, v_ultimo_km
+  from base;
+
+  if coalesce(v_visitas, 0) >= 2 and v_dias > 0 and v_ultimo_km >= v_primeiro_km then
+    v_media := round(((v_ultimo_km - v_primeiro_km)::numeric / v_dias::numeric), 2);
+
+    update public.patio_veiculos_snapshot
+    set media_km_diaria = v_media,
+        raw_data = coalesce(raw_data, '{}'::jsonb) || jsonb_build_object('media_recalculada_em', now()),
+        sincronizado_em = now()
+    where patio_veiculo_id = v_atendimento.patio_veiculo_id;
+
+    return v_media;
+  end if;
+
+  select media_km_diaria into v_media
+  from public.patio_veiculos_snapshot
+  where patio_veiculo_id = v_atendimento.patio_veiculo_id;
+
+  return v_media;
 end;
 $$;
 

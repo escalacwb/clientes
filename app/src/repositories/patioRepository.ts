@@ -586,16 +586,17 @@ export async function updatePatioVeiculoMediaKm(input: {
 export async function updatePatioAtendimentoKm(input: {
   patioExecucaoId: number
   quilometragem: number
-}): Promise<void> {
+}): Promise<number | undefined> {
   const supabase = await getSupabase()
   if (!supabase) throw new Error('Supabase nao configurado.')
 
-  const { error } = await supabase.rpc('corrigir_km_atendimento_patio_crm', {
+  const { data, error } = await supabase.rpc('corrigir_km_atendimento_patio_crm', {
     p_patio_execucao_id: input.patioExecucaoId,
     p_quilometragem: Math.round(Number(input.quilometragem) || 0),
   })
 
   if (error) throw error
+  return data == null ? undefined : Number(data)
 }
 
 export async function listPatioContatosExportacao(input?: { query?: string; reExportAll?: boolean }): Promise<PatioContatoExportacao[]> {
