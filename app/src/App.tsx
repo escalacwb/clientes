@@ -1938,6 +1938,10 @@ function App() {
               setPatioFilaPage(1)
               setView('patio-fila')
             }}
+            onEditVehicle={(vehicle) => {
+              setPatioEntradaQuery(vehicle.placa ?? vehicle.clienteNome ?? '')
+              setView('patio-dados')
+            }}
             onOpenClient={async (clienteId) => {
               await ensureClientInMemory(clienteId)
               setSelectedClientId(clienteId)
@@ -8997,6 +9001,7 @@ function PatioEntrada({
   catalogoServicos,
   onQueryChange,
   onRegisterEntrada,
+  onEditVehicle,
   onOpenClient,
   title = 'Entrada de veiculo',
   description = 'Busque por placa, cliente ou motorista usando a base ja sincronizada do patio.',
@@ -9008,6 +9013,7 @@ function PatioEntrada({
   catalogoServicos: PatioCatalogoServico[]
   onQueryChange: (query: string) => void
   onRegisterEntrada?: (input: PatioEntradaInput) => Promise<void>
+  onEditVehicle?: (vehicle: PatioVeiculoBusca) => void
   onOpenClient: (clienteId: string) => void | Promise<void>
   title?: string
   description?: string
@@ -9128,9 +9134,13 @@ function PatioEntrada({
               <h3>Registrar entrada: {selected.placa ?? 'Sem placa'}</h3>
               <p>{selected.clienteNome ?? 'Cliente sem vinculo'} - {selected.veiculoDescricao ?? 'Veiculo sem descricao'}</p>
             </div>
-            <button className="button primary" type="submit" disabled={isSaving || servicos.length === 0}>
-              {isSaving ? 'Registrando...' : 'Registrar e enviar para fila'}
-            </button>
+            <div className="inline-actions">
+              {onEditVehicle && <button className="button" type="button" onClick={() => onEditVehicle(selected)}>Alterar Veiculo</button>}
+              {onEditVehicle && <button className="button" type="button" onClick={() => onEditVehicle(selected)}>Alterar Empresa/Responsavel</button>}
+              <button className="button primary" type="submit" disabled={isSaving || servicos.length === 0}>
+                {isSaving ? 'Registrando...' : 'Registrar e enviar para fila'}
+              </button>
+            </div>
           </div>
           {formError && <div className="inline-error">{formError}</div>}
           <div className="filters-grid">
@@ -9270,6 +9280,7 @@ function PatioEntrada({
               </div>
               <div className="inline-actions">
                 {allowRegister && <button className="button primary" type="button" onClick={() => setSelected(item)}>Registrar entrada</button>}
+                {allowRegister && onEditVehicle && <button className="button" type="button" onClick={() => onEditVehicle(item)}>Alterar dados</button>}
                 {item.clienteId && <button className="button" type="button" onClick={() => onOpenClient(item.clienteId!)}>Abrir ficha CRM</button>}
               </div>
             </div>
