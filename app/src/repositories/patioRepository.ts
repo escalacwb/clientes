@@ -264,6 +264,36 @@ export async function listClientePatioAtendimentoItens(clienteId: string): Promi
   return (data as AtendimentoItemRow[] | null ?? []).map(mapAtendimentoItem)
 }
 
+export async function listPatioVeiculoAtendimentos(patioVeiculoId: number): Promise<PatioAtendimentoResumo[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('patio_atendimentos')
+    .select('patio_execucao_id,cliente_id,veiculo_id,placa_snapshot,cliente_nome_snapshot,quilometragem,status,inicio_execucao,fim_execucao,nome_motorista,contato_motorista,data_feedback')
+    .eq('patio_veiculo_id', patioVeiculoId)
+    .order('inicio_execucao', { ascending: false, nullsFirst: false })
+    .limit(80)
+
+  if (error) throw error
+  return (data as AtendimentoRow[] | null ?? []).map(mapAtendimento)
+}
+
+export async function listPatioVeiculoAtendimentoItens(patioExecucaoIds: number[]): Promise<PatioAtendimentoItemResumo[]> {
+  const supabase = await getSupabase()
+  if (!supabase || patioExecucaoIds.length === 0) return []
+
+  const { data, error } = await supabase
+    .from('patio_atendimento_itens')
+    .select('id,patio_execucao_id,cliente_id,veiculo_id,area,servico_nome,descricao,quantidade,status,quilometragem,solicitado_em,tipo_atendimento')
+    .in('patio_execucao_id', patioExecucaoIds)
+    .order('area', { ascending: true })
+    .order('servico_nome', { ascending: true })
+
+  if (error) throw error
+  return (data as AtendimentoItemRow[] | null ?? []).map(mapAtendimentoItem)
+}
+
 export async function listPatioFeedbackPendente(input: {
   page: number
   pageSize: number

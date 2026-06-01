@@ -175,6 +175,8 @@ import {
   listPatioFilaPainel,
   listPatioFuncionarios,
   listPatioRevisaoProativa,
+  listPatioVeiculoAtendimentoItens,
+  listPatioVeiculoAtendimentos,
   markPatioFeedbackDone,
   markPatioRevisaoDone,
   registerPatioEntrada,
@@ -912,7 +914,7 @@ function App() {
     let isMounted = true
 
     async function loadPatioEntrada() {
-      if (isCheckingSession || !session || view !== 'patio-entrada') return
+      if (isCheckingSession || !session || !['patio-entrada', 'patio-historico'].includes(view)) return
       if (patioEntradaQuery.trim().length < 2) {
         setPatioEntradaResults([])
         return
@@ -1992,13 +1994,16 @@ function App() {
         )}
 
         {appMode === 'patio' && view === 'patio-historico' && (
-          <PatioEntrada
+          <PatioHistoricoVeiculo
             query={patioEntradaQuery}
             results={patioEntradaResults}
             isLoading={isLoadingPatioEntrada}
-            catalogoServicos={patioCatalogoServicos}
             onQueryChange={setPatioEntradaQuery}
-            allowRegister={false}
+            onLoadHistorico={async (patioVeiculoId) => {
+              const atendimentos = await listPatioVeiculoAtendimentos(patioVeiculoId)
+              const itens = await listPatioVeiculoAtendimentoItens(atendimentos.map((item) => item.patioExecucaoId))
+              return { atendimentos, itens }
+            }}
             onOpenClient={async (clienteId) => {
               await ensureClientInMemory(clienteId)
               setSelectedClientId(clienteId)
@@ -2006,8 +2011,6 @@ function App() {
               localStorage.setItem('capital-crm:mode', 'crm')
               setView('cliente360')
             }}
-            title="Historico por placa"
-            description="Busque uma placa, motorista ou cliente para ver o ultimo atendimento e abrir a ficha completa."
           />
         )}
 
@@ -9093,6 +9096,108 @@ function PatioEntrada({
           </article>
         ))}
       </div>
+    </section>
+  )
+}
+
+function PatioHistoricoVeiculo({
+  query,
+  results,
+  isLoading,
+  onQueryChange,
+  onLoadHistorico,
+  onOpenClient,
+}: {
+  query: string
+  results: PatioVeiculoBusca[]
+  isLoading: boolean
+  onQueryChange: (query: string) => void
+  onLoadHistorico: (patioVeiculoId: number) => Promise<{ atendimentos: PatioAtendimentoResumo[]; itens: PatioAtendimentoItemResumo[] }>
+  onOpenClient: (clienteId: string) => void | Promise<void>
+}) {
+  const [selected, setSelected] = useState<PatioVeiculoBusca | undefined>()
+  const [atendimentos, setAtendimentos] = useState<PatioAtendimentoResumo[]>([])
+  const [itens, setItens] = useState<PatioAtendimentoItemResumo[]>([])
+  const [isLoadingHistorico, setIsLoadingHistorico] = useState(false)
+  const [error, setError] = useState('')
+
+  const selectVehicle = async (vehicle: PatioVeiculoBusca) => {
+    setSelected(vehicle)
+    setIsLoadingHistorico(true)
+    setError('')
+    try {
+      const result = await onLoadHistorico(vehicle.patioVeiculoId)
+      setAtendimentos(result.atendimentos)
+      setItens(result.itens)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar o historico da placa.')
+    } finally {
+      setIsLoadingHistorico(false)
+    }
+  }
+
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Historico por placa</h2>
+          <p>Consulte visitas, quilometragens, motorista e servicos executados no patio.</p>
+        </div>
+        {selected?.clienteId && <button className="button" type="button" onClick={() => onOpenClient(selected.clienteId!)}>Abrir ficha CRM</button>}
+      </div>
+      <div className="filters-grid">
+        <label>
+          Placa, cliente ou motorista
+          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Ex.: ABC1D23, cliente ou motorista" />
+        </label>
+      </div>
+      {error && <div className="inline-error">{error}</div>}
+      {isLoading && <div className="empty-state">Buscando veiculos...</div>}
+      {!isLoading && query.trim().length >= 2 && results.length === 0 && <div className="empty-state">Nenhum veiculo encontrado.</div>}
+      {query.trim().length < 2 && <div className="empty-state">Digite ao menos 2 caracteres para consultar.</div>}
+      {results.length > 0 && (
+        <div className="patio-history-results">
+          {results.slice(0, 8).map((item) => (
+            <button
+              className={selected?.patioVeiculoId === item.patioVeiculoId ? 'button primary' : 'button'}
+              type="button"
+              onClick={() => void selectVehicle(item)}
+              key={item.patioVeiculoId}
+            >
+              {item.placa ?? 'Sem placa'} - {item.clienteNome ?? 'Cliente sem vinculo'}
+            </button>
+          ))}
+        </div>
+      )}
+      {isLoadingHistorico && <div className="empty-state">Carregando historico da placa...</div>}
+      {!isLoadingHistorico && selected && atendimentos.length === 0 && <div className="empty-state">Nenhuma visita encontrada para esta placa.</div>}
+      {!isLoadingHistorico && atendimentos.length > 0 && (
+        <div className="table-list">
+          {atendimentos.map((atendimento) => {
+            const servicosDaVisita = itens.filter((item) => item.patioExecucaoId === atendimento.patioExecucaoId)
+            return (
+              <article className="panel subtle" key={atendimento.patioExecucaoId}>
+                <div className="panel-header">
+                  <div>
+                    <h3>{dateLabel(atendimento.inicioExecucao || atendimento.fimExecucao)} - KM {atendimento.quilometragem ? numberLabel(atendimento.quilometragem) : 'nao informado'}</h3>
+                    <p>{atendimento.status ?? 'sem status'} - {atendimento.nomeMotorista || 'Motorista nao informado'} {atendimento.contatoMotorista ? `(${atendimento.contatoMotorista})` : ''}</p>
+                  </div>
+                  <strong>{servicosDaVisita.length} servicos</strong>
+                </div>
+                <div className="status-list">
+                  {servicosDaVisita.map((servico) => (
+                    <div className="status-row" key={servico.id}>
+                      <span>{areaLabel(servico.area)} - {servico.quantidade ?? 1}x {servico.servicoNome || servico.descricao || 'Servico'}</span>
+                      <strong>{servico.status ?? 'sem status'}</strong>
+                    </div>
+                  ))}
+                  {servicosDaVisita.length === 0 && <div className="empty-state">Nenhum item detalhado nesta visita.</div>}
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      )}
     </section>
   )
 }
