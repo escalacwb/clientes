@@ -55,9 +55,7 @@ Views por modo:
 - Fila;
 - Boxes;
 - Concluidos;
-- Historico placa;
-- Feedback;
-- Revisao.
+- Historico placa.
 
 ### CRM
 
@@ -67,6 +65,8 @@ Views por modo:
 - Campanhas;
 - Oportunidades;
 - Catalogo.
+- Feedback pos-servico;
+- Revisao proativa.
 
 ### Gestao
 
@@ -120,7 +120,7 @@ Objetivo:
 
 Transformar Feedback em fluxo simples dentro do modo Patio, e sinal comercial dentro do CRM.
 
-Tela Patio/Feedback:
+Tela CRM/Feedback:
 
 - lista atendimentos finalizados sem feedback;
 - filtros por data, vendedor, cidade, placa;
@@ -148,7 +148,7 @@ Objetivo:
 
 Usar KM e historico do patio para gerar contatos uteis, sem virar tela tecnica demais.
 
-Tela Patio/Revisao:
+Tela CRM/Revisao:
 
 - lista veiculos por KM estimado;
 - lista veiculos por dias sem visita;
@@ -298,7 +298,29 @@ Criterio de pronto:
 - menus limpos;
 - usuario pequeno consegue operar sem treinamento pesado.
 
-## Fase 9: migracao final
+## Fase 9: controle de resultado comercial
+
+Objetivo:
+
+Medir se as ferramentas comerciais baseadas no patio realmente geram retorno, sem atrapalhar a entrega da fusao.
+
+Entregas:
+
+- registrar cada revisao proativa enviada por placa, cliente, vendedor, contato e data;
+- identificar automaticamente se a mesma placa retornou ao patio em ate 15 dias;
+- classificar resultado como `retornou`, `orcamento`, `sem_retorno`, `nao_contatar` ou `sem_contato`;
+- exibir resumo simples por vendedor e por periodo;
+- mostrar na ficha 360 o historico de revisoes proativas e retornos;
+- evitar novo disparo para a mesma placa dentro da janela configurada.
+
+Criterio de pronto:
+
+- usuario sabe quantos contatos foram feitos;
+- usuario sabe quantas placas retornaram;
+- resultado nao depende de planilha externa;
+- a rotina operacional do patio continua igual.
+
+## Fase 10: migracao final
 
 Objetivo:
 
@@ -324,7 +346,8 @@ Passos:
 5. Entrada/Fila/Boxes.
 6. Campanhas usando sinais do patio.
 7. Homologacao.
-8. Migracao final.
+8. Controle de resultado comercial.
+9. Migracao final.
 
 ## Riscos
 

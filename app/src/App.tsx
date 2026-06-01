@@ -157,17 +157,29 @@ import { updateOrcamentoFollowup } from './repositories/orcamentosRepository'
 import { updateOrcamentoStatus, type PedidoConfirmadoInput } from './repositories/orcamentosRepository'
 import { listOportunidadesPage, listOportunidadesResumo, markOportunidadeComTarefa, refreshOportunidadesCache, type OportunidadeFilter, type OportunidadeResumo } from './repositories/oportunidadesRepository'
 import {
+  allocatePatioServices,
+  addPatioBoxServico,
+  finishPatioBox,
   getClienteContatoRecomendado,
+  listPatioAlocacaoVeiculos,
+  listPatioAreasPendentes,
+  listPatioBoxServicos,
   listClientePatioAtendimentoItens,
   listClientePatioAtendimentos,
-  listPatioBoxesAtivos,
+  listPatioBoxesPainel,
+  listPatioBoxesLivres,
+  listPatioCatalogoServicos,
   listPatioConcluidos,
   listPatioFeedbackPendente,
   listPatioFilaItens,
+  listPatioFilaPainel,
+  listPatioFuncionarios,
   listPatioRevisaoProativa,
   markPatioFeedbackDone,
   markPatioRevisaoDone,
+  registerPatioEntrada,
   searchPatioVeiculos,
+  unassignPatioBox,
 } from './repositories/patioRepository'
 import { createPipelineFromSuggestion, listPipelineOportunidades, updatePipelineOportunidade, updatePipelineStage } from './repositories/pipelineRepository'
 import { escalateStaleCommercialSequences, listDefaultCommercialSequenceSteps, listSequenciaExecucoes, startDefaultCommercialSequence, updateSequenceStep, type SequenciaEtapaConfig } from './repositories/sequenciasRepository'
@@ -211,8 +223,18 @@ import type {
   OportunidadePipeline,
   PatioAtendimentoItemResumo,
   PatioAtendimentoResumo,
+  PatioAlocacaoVeiculo,
+  PatioAreaPendente,
+  PatioBox,
+  PatioBoxServico,
+  PatioCatalogoServico,
+  PatioEntradaInput,
+  PatioEntradaServicoInput,
   PatioFeedbackPendente,
+  PatioFilaPainel,
   PatioFilaItem,
+  PatioFuncionario,
+  PatioPainelBox,
   PatioRevisaoProativa,
   PatioVeiculoBusca,
   PossivelDuplicado,
@@ -234,10 +256,11 @@ const navSectionsByMode: Record<AppMode, Array<{ title: string; items: Array<{ i
     {
       title: 'Operacao',
       items: [
-        { id: 'patio-entrada', label: 'Entrada', icon: Truck },
-        { id: 'patio-fila', label: 'Fila', icon: ClipboardList },
+        { id: 'patio-entrada', label: 'Cadastro de Servico', icon: Truck },
+        { id: 'patio-alocacao', label: 'Alocar Servicos', icon: ClipboardList },
+        { id: 'patio-fila', label: 'Filas de Servico', icon: BarChart3 },
         { id: 'patio-boxes', label: 'Boxes', icon: Gauge },
-        { id: 'patio-concluidos', label: 'Concluidos', icon: CheckCircle2 },
+        { id: 'patio-concluidos', label: 'Servicos Concluidos', icon: CheckCircle2 },
         { id: 'patio-historico', label: 'Historico placa', icon: Search },
       ],
     },
@@ -433,14 +456,22 @@ function App() {
   const [patioEntradaQuery, setPatioEntradaQuery] = useState('')
   const [patioEntradaResults, setPatioEntradaResults] = useState<PatioVeiculoBusca[]>([])
   const [isLoadingPatioEntrada, setIsLoadingPatioEntrada] = useState(false)
+  const [patioAlocacaoVeiculos, setPatioAlocacaoVeiculos] = useState<PatioAlocacaoVeiculo[]>([])
+  const [patioAreasPendentes, setPatioAreasPendentes] = useState<PatioAreaPendente[]>([])
+  const [patioFuncionarios, setPatioFuncionarios] = useState<PatioFuncionario[]>([])
+  const [patioBoxesLivres, setPatioBoxesLivres] = useState<PatioBox[]>([])
+  const [isLoadingPatioAlocacao, setIsLoadingPatioAlocacao] = useState(false)
   const [patioFilaItems, setPatioFilaItems] = useState<PatioFilaItem[]>([])
   const [patioFilaTotal, setPatioFilaTotal] = useState(0)
   const [patioFilaPage, setPatioFilaPage] = useState(1)
   const [patioFilaQuery, setPatioFilaQuery] = useState('')
   const [patioFilaArea, setPatioFilaArea] = useState<PatioFilaItem['area'] | 'todas'>('todas')
   const [isLoadingPatioFila, setIsLoadingPatioFila] = useState(false)
-  const [patioBoxesAtivos, setPatioBoxesAtivos] = useState<PatioAtendimentoResumo[]>([])
+  const [patioPainelBoxes, setPatioPainelBoxes] = useState<PatioPainelBox[]>([])
+  const [patioPainelFila, setPatioPainelFila] = useState<PatioFilaPainel[]>([])
+  const [patioBoxesAtivos, setPatioBoxesAtivos] = useState<PatioPainelBox[]>([])
   const [isLoadingPatioBoxes, setIsLoadingPatioBoxes] = useState(false)
+  const [patioCatalogoServicos, setPatioCatalogoServicos] = useState<PatioCatalogoServico[]>([])
   const [patioConcluidos, setPatioConcluidos] = useState<PatioAtendimentoResumo[]>([])
   const [patioConcluidosTotal, setPatioConcluidosTotal] = useState(0)
   const [patioConcluidosPage, setPatioConcluidosPage] = useState(1)
@@ -858,6 +889,27 @@ function App() {
   useEffect(() => {
     let isMounted = true
 
+    async function loadPatioCatalogo() {
+      if (isCheckingSession || !session || appMode !== 'patio') return
+      if (!['patio-entrada', 'patio-boxes'].includes(view)) return
+
+      try {
+        const rows = await listPatioCatalogoServicos()
+        if (isMounted) setPatioCatalogoServicos(rows)
+      } catch (exception) {
+        if (isMounted) setModuleError(view, exception instanceof Error ? exception.message : 'Nao foi possivel carregar catalogo do patio.')
+      }
+    }
+
+    void loadPatioCatalogo()
+    return () => {
+      isMounted = false
+    }
+  }, [appMode, isCheckingSession, session, view])
+
+  useEffect(() => {
+    let isMounted = true
+
     async function loadPatioEntrada() {
       if (isCheckingSession || !session || view !== 'patio-entrada') return
       if (patioEntradaQuery.trim().length < 2) {
@@ -899,9 +951,15 @@ function App() {
           query: patioFilaQuery,
           area: patioFilaArea,
         })
+        const [boxesPainel, filaPainel] = await Promise.all([
+          listPatioBoxesPainel(),
+          listPatioFilaPainel(),
+        ])
         if (!isMounted) return
         setPatioFilaItems(result.items)
         setPatioFilaTotal(result.total)
+        setPatioPainelBoxes(boxesPainel)
+        setPatioPainelFila(filaPainel)
         clearModuleError('patio-fila')
       } catch (exception) {
         if (isMounted) setModuleError('patio-fila', exception instanceof Error ? exception.message : 'Nao foi possivel carregar a fila do patio.')
@@ -920,12 +978,44 @@ function App() {
   useEffect(() => {
     let isMounted = true
 
+    async function loadPatioAlocacao() {
+      if (isCheckingSession || !session || view !== 'patio-alocacao') return
+
+      setIsLoadingPatioAlocacao(true)
+      try {
+        const [veiculos, funcionarios, boxes] = await Promise.all([
+          listPatioAlocacaoVeiculos(),
+          listPatioFuncionarios(),
+          listPatioBoxesLivres(),
+        ])
+        if (!isMounted) return
+        setPatioAlocacaoVeiculos(veiculos)
+        setPatioFuncionarios(funcionarios)
+        setPatioBoxesLivres(boxes)
+        setPatioAreasPendentes(veiculos[0] ? await listPatioAreasPendentes(veiculos[0].patioVeiculoId) : [])
+        clearModuleError('patio-alocacao')
+      } catch (exception) {
+        if (isMounted) setModuleError('patio-alocacao', exception instanceof Error ? exception.message : 'Nao foi possivel carregar alocacao do patio.')
+      } finally {
+        if (isMounted) setIsLoadingPatioAlocacao(false)
+      }
+    }
+
+    void loadPatioAlocacao()
+    return () => {
+      isMounted = false
+    }
+  }, [isCheckingSession, session, view])
+
+  useEffect(() => {
+    let isMounted = true
+
     async function loadPatioBoxes() {
       if (isCheckingSession || !session || view !== 'patio-boxes') return
 
       setIsLoadingPatioBoxes(true)
       try {
-        const rows = await listPatioBoxesAtivos()
+        const rows = await listPatioBoxesPainel()
         if (!isMounted) return
         setPatioBoxesAtivos(rows)
         clearModuleError('patio-boxes')
@@ -1771,7 +1861,13 @@ function App() {
             query={patioEntradaQuery}
             results={patioEntradaResults}
             isLoading={isLoadingPatioEntrada}
+            catalogoServicos={patioCatalogoServicos}
             onQueryChange={setPatioEntradaQuery}
+            onRegisterEntrada={async (input) => {
+              await registerPatioEntrada(input)
+              setPatioFilaPage(1)
+              setView('patio-fila')
+            }}
             onOpenClient={async (clienteId) => {
               await ensureClientInMemory(clienteId)
               setSelectedClientId(clienteId)
@@ -1785,6 +1881,8 @@ function App() {
         {appMode === 'patio' && view === 'patio-fila' && (
           <PatioFila
             items={patioFilaItems}
+            boxesPainel={patioPainelBoxes}
+            filaPainel={patioPainelFila}
             total={patioFilaTotal}
             page={patioFilaPage}
             pageSize={50}
@@ -1810,10 +1908,44 @@ function App() {
           />
         )}
 
+        {appMode === 'patio' && view === 'patio-alocacao' && (
+          <PatioAlocacao
+            veiculos={patioAlocacaoVeiculos}
+            areas={patioAreasPendentes}
+            funcionarios={patioFuncionarios}
+            boxes={patioBoxesLivres}
+            isLoading={isLoadingPatioAlocacao}
+            onVehicleChange={async (patioVeiculoId) => {
+              setPatioAreasPendentes(await listPatioAreasPendentes(patioVeiculoId))
+            }}
+            onAllocate={async (input) => {
+              await allocatePatioServices(input)
+              setPatioAlocacaoVeiculos(await listPatioAlocacaoVeiculos())
+              setPatioBoxesLivres(await listPatioBoxesLivres())
+              setPatioAreasPendentes([])
+              setView('patio-boxes')
+            }}
+          />
+        )}
+
         {appMode === 'patio' && view === 'patio-boxes' && (
           <PatioBoxes
             items={patioBoxesAtivos}
             isLoading={isLoadingPatioBoxes}
+            catalogoServicos={patioCatalogoServicos}
+            onLoadServicos={listPatioBoxServicos}
+            onAddServico={async (input) => {
+              await addPatioBoxServico(input)
+              setPatioBoxesAtivos(await listPatioBoxesPainel())
+            }}
+            onRetirar={async (patioExecucaoId) => {
+              await unassignPatioBox(patioExecucaoId)
+              setPatioBoxesAtivos(await listPatioBoxesPainel())
+            }}
+            onFinalizar={async (input) => {
+              await finishPatioBox(input)
+              setPatioBoxesAtivos(await listPatioBoxesPainel())
+            }}
             onOpenClient={async (clienteId) => {
               await ensureClientInMemory(clienteId)
               setSelectedClientId(clienteId)
@@ -1852,7 +1984,9 @@ function App() {
             query={patioEntradaQuery}
             results={patioEntradaResults}
             isLoading={isLoadingPatioEntrada}
+            catalogoServicos={patioCatalogoServicos}
             onQueryChange={setPatioEntradaQuery}
+            allowRegister={false}
             onOpenClient={async (clienteId) => {
               await ensureClientInMemory(clienteId)
               setSelectedClientId(clienteId)
@@ -3170,9 +3304,10 @@ function titleFor(view: string) {
     usuarios: 'Usuarios e permissoes',
     auditoria: 'Auditoria',
     cliente360: 'Ficha completa do cliente',
-    'patio-entrada': 'Entrada de veiculo',
-    'patio-fila': 'Fila do patio',
-    'patio-boxes': 'Boxes em atendimento',
+    'patio-entrada': 'Cadastro de Servico',
+    'patio-alocacao': 'Alocar Servicos',
+    'patio-fila': 'Filas de Servico',
+    'patio-boxes': 'Visao dos Boxes',
     'patio-concluidos': 'Servicos concluidos',
     'patio-historico': 'Historico por placa',
     'patio-feedback': 'Feedback pos-servico',
@@ -8625,23 +8760,108 @@ function numberLabel(value: number) {
   return value.toLocaleString('pt-BR')
 }
 
+function areaLabel(area?: string) {
+  const labels: Record<string, string> = {
+    borracharia: 'Borracharia',
+    alinhamento: 'Alinhamento',
+    manutencao: 'Manutencao mecanica',
+  }
+  return area ? labels[area] ?? area : 'Area'
+}
+
 function PatioEntrada({
   query,
   results,
   isLoading,
+  catalogoServicos,
   onQueryChange,
+  onRegisterEntrada,
   onOpenClient,
   title = 'Entrada de veiculo',
   description = 'Busque por placa, cliente ou motorista usando a base ja sincronizada do patio.',
+  allowRegister = true,
 }: {
   query: string
   results: PatioVeiculoBusca[]
   isLoading: boolean
+  catalogoServicos: PatioCatalogoServico[]
   onQueryChange: (query: string) => void
-  onOpenClient: (clienteId: string) => void
+  onRegisterEntrada?: (input: PatioEntradaInput) => Promise<void>
+  onOpenClient: (clienteId: string) => void | Promise<void>
   title?: string
   description?: string
+  allowRegister?: boolean
 }) {
+  const [selected, setSelected] = useState<PatioVeiculoBusca | undefined>()
+  const [quilometragem, setQuilometragem] = useState('')
+  const [nomeMotorista, setNomeMotorista] = useState('')
+  const [contatoMotorista, setContatoMotorista] = useState('')
+  const [servicos, setServicos] = useState<PatioEntradaServicoInput[]>([])
+  const [servicoNome, setServicoNome] = useState('')
+  const [servicoArea, setServicoArea] = useState<PatioEntradaServicoInput['area']>('borracharia')
+  const [servicoQuantidade, setServicoQuantidade] = useState('1')
+  const [servicoObservacao, setServicoObservacao] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+  const [formError, setFormError] = useState('')
+  const catalogoDaArea = catalogoServicos.filter((servico) => servico.area === servicoArea)
+
+  useEffect(() => {
+    if (!selected) return
+    setQuilometragem(selected.ultimoKm ? String(selected.ultimoKm) : '')
+    setNomeMotorista(selected.nomeMotorista ?? selected.contatoNome ?? '')
+    setContatoMotorista(selected.contatoMotorista ?? selected.contatoRecomendado ?? '')
+    setFormError('')
+  }, [selected])
+
+  const addServico = () => {
+    const nome = servicoNome.trim()
+    if (!nome) {
+      setFormError('Informe o servico antes de adicionar.')
+      return
+    }
+    setServicos((current) => [
+      ...current,
+      {
+        area: servicoArea,
+        servicoNome: nome,
+        descricao: nome,
+        quantidade: Math.max(1, Number(servicoQuantidade) || 1),
+        observacao: servicoObservacao.trim() || undefined,
+      },
+    ])
+    setServicoNome('')
+    setServicoQuantidade('1')
+    setServicoObservacao('')
+    setFormError('')
+  }
+
+  const submitEntrada = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!selected || !onRegisterEntrada) return
+    if (servicos.length === 0) {
+      setFormError('Adicione pelo menos um servico para enviar o veiculo para a fila.')
+      return
+    }
+    setIsSaving(true)
+    setFormError('')
+    try {
+      await onRegisterEntrada({
+        patioVeiculoId: selected.patioVeiculoId,
+        quilometragem: quilometragem ? Number(quilometragem) : undefined,
+        nomeMotorista,
+        contatoMotorista,
+        servicos,
+      })
+      setSelected(undefined)
+      setServicos([])
+      setServicoNome('')
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Nao foi possivel registrar a entrada.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   return (
     <section className="panel wide">
       <div className="panel-header">
@@ -8659,6 +8879,78 @@ function PatioEntrada({
       {isLoading && <div className="empty-state">Buscando no historico do patio...</div>}
       {!isLoading && query.trim().length >= 2 && results.length === 0 && <div className="empty-state">Nenhum veiculo encontrado.</div>}
       {query.trim().length < 2 && <div className="empty-state">Digite ao menos 2 caracteres para consultar.</div>}
+      {allowRegister && selected && (
+        <form className="panel subtle" onSubmit={submitEntrada}>
+          <div className="panel-header">
+            <div>
+              <h3>Registrar entrada: {selected.placa ?? 'Sem placa'}</h3>
+              <p>{selected.clienteNome ?? 'Cliente sem vinculo'} - {selected.veiculoDescricao ?? 'Veiculo sem descricao'}</p>
+            </div>
+            <button className="button primary" type="submit" disabled={isSaving || servicos.length === 0}>
+              {isSaving ? 'Registrando...' : 'Registrar e enviar para fila'}
+            </button>
+          </div>
+          {formError && <div className="inline-error">{formError}</div>}
+          <div className="filters-grid">
+            <label>
+              KM atual
+              <input inputMode="numeric" value={quilometragem} onChange={(event) => setQuilometragem(event.target.value.replace(/\D/g, ''))} placeholder="Ex.: 185000" />
+            </label>
+            <label>
+              Motorista
+              <input value={nomeMotorista} onChange={(event) => setNomeMotorista(event.target.value)} placeholder="Nome do motorista" />
+            </label>
+            <label>
+              WhatsApp/contato
+              <input value={contatoMotorista} onChange={(event) => setContatoMotorista(event.target.value)} placeholder="Contato atualizado" />
+            </label>
+          </div>
+          <div className="filters-grid">
+            <label>
+              Servico
+              <input
+                list={`patio-servicos-${servicoArea}`}
+                value={servicoNome}
+                onChange={(event) => setServicoNome(event.target.value)}
+                placeholder="Selecione ou digite o servico"
+              />
+              <datalist id={`patio-servicos-${servicoArea}`}>
+                {catalogoDaArea.map((servico) => <option value={servico.nome} key={`${servico.area}-${servico.nome}`} />)}
+              </datalist>
+            </label>
+            <label>
+              Area
+              <select value={servicoArea} onChange={(event) => setServicoArea(event.target.value as PatioEntradaServicoInput['area'])}>
+                <option value="borracharia">Borracharia</option>
+                <option value="alinhamento">Alinhamento</option>
+                <option value="manutencao">Manutencao</option>
+              </select>
+            </label>
+            <label>
+              Qtde.
+              <input inputMode="numeric" value={servicoQuantidade} onChange={(event) => setServicoQuantidade(event.target.value.replace(/\D/g, '') || '1')} />
+            </label>
+            <label>
+              Observacao
+              <input value={servicoObservacao} onChange={(event) => setServicoObservacao(event.target.value)} placeholder="Opcional" />
+            </label>
+          </div>
+          <div className="inline-actions">
+            <button className="button" type="button" onClick={addServico}>Adicionar servico</button>
+            <button className="button ghost" type="button" onClick={() => setSelected(undefined)}>Cancelar entrada</button>
+          </div>
+          {servicos.length > 0 && (
+            <div className="table-list compact-list">
+              {servicos.map((servico, index) => (
+                <div className="status-row" key={`${servico.servicoNome}-${index}`}>
+                  <span>{servico.area} - {servico.quantidade}x {servico.servicoNome}</span>
+                  <button className="button tiny-button" type="button" onClick={() => setServicos((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remover</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </form>
+      )}
       <div className="table-list">
         {results.map((item) => (
           <article className="panel subtle" key={item.patioVeiculoId}>
@@ -8667,7 +8959,10 @@ function PatioEntrada({
                 <h3>{item.placa ?? 'Sem placa'} · {item.clienteNome ?? 'Cliente sem vinculo'}</h3>
                 <p>{item.veiculoDescricao ?? 'Veiculo sem descricao'} · ultimo atendimento {dateLabel(item.ultimoAtendimentoEm)}</p>
               </div>
-              {item.clienteId && <button className="button primary" type="button" onClick={() => onOpenClient(item.clienteId!)}>Abrir ficha CRM</button>}
+              <div className="inline-actions">
+                {allowRegister && <button className="button primary" type="button" onClick={() => setSelected(item)}>Registrar entrada</button>}
+                {item.clienteId && <button className="button" type="button" onClick={() => onOpenClient(item.clienteId!)}>Abrir ficha CRM</button>}
+              </div>
             </div>
             <div className="status-list">
               <div className="status-row"><span>Motorista</span><strong>{item.nomeMotorista || 'Nao informado'}</strong></div>
@@ -8684,6 +8979,8 @@ function PatioEntrada({
 
 function PatioFila({
   items,
+  boxesPainel,
+  filaPainel,
   total,
   page,
   pageSize,
@@ -8696,6 +8993,8 @@ function PatioFila({
   onOpenClient,
 }: {
   items: PatioFilaItem[]
+  boxesPainel: PatioPainelBox[]
+  filaPainel: PatioFilaPainel[]
   total: number
   page: number
   pageSize: number
@@ -8708,14 +9007,20 @@ function PatioFila({
   onOpenClient: (clienteId: string) => void
 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const boxesEmAtendimento = boxesPainel.filter((box) => box.patioExecucaoId)
+  const filteredFila = filaPainel.filter((item) => {
+    const term = query.trim().toLowerCase()
+    if (!term) return true
+    return [item.placa, item.clienteNome, item.listaServicos].some((value) => value?.toLowerCase().includes(term))
+  })
   return (
-    <section className="panel wide">
+    <section className="panel wide patio-tv-panel">
       <div className="panel-header">
         <div>
-          <h2>Fila do patio</h2>
-          <p>Servicos pendentes sincronizados do fluxo operacional existente.</p>
+          <h2>Painel Operacional do Patio</h2>
+          <p>Mesma visao de trabalho do controle de patio: atendimento atual e fila de espera.</p>
         </div>
-        <strong>{total} itens</strong>
+        <strong>{filaPainel.length} veiculos na fila</strong>
       </div>
       <div className="filters-grid">
         <label>
@@ -8733,6 +9038,39 @@ function PatioFila({
         </label>
       </div>
       {isLoading && <div className="empty-state">Carregando fila...</div>}
+      {!isLoading && (
+        <>
+          <h2 className="patio-section-title">EM ATENDIMENTO</h2>
+          {boxesEmAtendimento.length === 0 && <div className="empty-state">Nenhum veiculo em atendimento nos boxes no momento.</div>}
+          <div className="patio-tv-grid">
+            {boxesEmAtendimento.map((box) => (
+              <article className="patio-tv-card" key={box.boxId}>
+                <h3>BOX {box.boxId}</h3>
+                <strong className="patio-plate">{box.placa ?? 'SEM PLACA'}</strong>
+                <p><b>Empresa:</b> {box.clienteNome ?? 'N/A'}</p>
+                <p><b>Mecanico:</b> {box.funcionarioNome ?? 'N/A'}</p>
+                {box.listaServicos && <p className="patio-service-list" dangerouslySetInnerHTML={{ __html: box.listaServicos }} />}
+              </article>
+            ))}
+          </div>
+
+          <h2 className="patio-section-title">FILA DE ESPERA</h2>
+          {filteredFila.length === 0 && <div className="empty-state">Fila de espera vazia.</div>}
+          <div className="patio-tv-grid queue">
+            {filteredFila.map((item, index) => (
+              <article className="patio-tv-card" key={`${item.patioVeiculoId}-${item.placa}`}>
+                <h3><span className="queue-number">{index + 1}o</span> NA FILA</h3>
+                <strong className="patio-plate">{item.placa ?? 'SEM PLACA'}</strong>
+                <p><b>Empresa:</b> {item.clienteNome ?? 'N/A'}</p>
+                {item.listaServicos && <p className="patio-service-list" dangerouslySetInnerHTML={{ __html: item.listaServicos }} />}
+                {item.clienteId && <button className="button compact-button" type="button" onClick={() => onOpenClient(item.clienteId!)}>Ficha CRM</button>}
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+      <details className="panel subtle">
+        <summary>Detalhe tecnico da fila</summary>
       {!isLoading && items.length === 0 && <div className="empty-state">Nenhum item pendente.</div>}
       <div className="table-list">
         {items.map((item) => (
@@ -8747,6 +9085,7 @@ function PatioFila({
           </article>
         ))}
       </div>
+      </details>
       <div className="pagination-bar">
         <button className="button" type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>Anterior</button>
         <span>Pagina {page} de {totalPages}</span>
@@ -8756,34 +9095,420 @@ function PatioFila({
   )
 }
 
-function PatioBoxes({
-  items,
+function PatioAlocacao({
+  veiculos,
+  areas,
+  funcionarios,
+  boxes,
   isLoading,
-  onOpenClient,
+  onVehicleChange,
+  onAllocate,
 }: {
-  items: PatioAtendimentoResumo[]
+  veiculos: PatioAlocacaoVeiculo[]
+  areas: PatioAreaPendente[]
+  funcionarios: PatioFuncionario[]
+  boxes: PatioBox[]
   isLoading: boolean
-  onOpenClient: (clienteId: string) => void
+  onVehicleChange: (patioVeiculoId: number) => Promise<void>
+  onAllocate: (input: { patioVeiculoId: number; area: PatioAreaPendente['area']; boxId: number; funcionarioId: number }) => Promise<void>
 }) {
+  const [selectedVehicleId, setSelectedVehicleId] = useState('')
+  const [selectedArea, setSelectedArea] = useState<PatioAreaPendente['area'] | ''>('')
+  const [selectedBox, setSelectedBox] = useState('')
+  const [selectedFuncionario, setSelectedFuncionario] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!selectedVehicleId && veiculos[0]) setSelectedVehicleId(String(veiculos[0].patioVeiculoId))
+  }, [selectedVehicleId, veiculos])
+
+  useEffect(() => {
+    if (areas[0] && !selectedArea) setSelectedArea(areas[0].area)
+  }, [areas, selectedArea])
+
+  const selectedVehicle = veiculos.find((item) => String(item.patioVeiculoId) === selectedVehicleId)
+  const selectedAreaInfo = areas.find((item) => item.area === selectedArea)
+
+  const handleVehicleChange = async (value: string) => {
+    setSelectedVehicleId(value)
+    setSelectedArea('')
+    setError('')
+    if (value) await onVehicleChange(Number(value))
+  }
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!selectedVehicleId || !selectedArea || !selectedBox || !selectedFuncionario) {
+      setError('Selecione veiculo, area, box e funcionario.')
+      return
+    }
+
+    setIsSaving(true)
+    setError('')
+    try {
+      await onAllocate({
+        patioVeiculoId: Number(selectedVehicleId),
+        area: selectedArea,
+        boxId: Number(selectedBox),
+        funcionarioId: Number(selectedFuncionario),
+      })
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel alocar o servico.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   return (
     <section className="panel wide">
       <div className="panel-header">
         <div>
-          <h2>Boxes em atendimento</h2>
-          <p>Leitura dos atendimentos em andamento ja vindos do controle de patio.</p>
+          <h2>Alocacao de Servicos por Area</h2>
+          <p>Selecione um veiculo com servicos pendentes e aloque-o a um box e funcionario.</p>
         </div>
-        <strong>{items.length} ativos</strong>
+        <strong>{veiculos.length} veiculos aguardando</strong>
       </div>
+      {isLoading && <div className="empty-state">Carregando alocacao...</div>}
+      {!isLoading && veiculos.length === 0 && <div className="empty-state">Nenhum veiculo aguardando alocacao no momento.</div>}
+      {veiculos.length > 0 && (
+        <form className="panel subtle" onSubmit={submit}>
+          {error && <div className="inline-error">{error}</div>}
+          <div className="filters-grid">
+            <label>
+              Selecione o Veiculo para Alocar
+              <select value={selectedVehicleId} onChange={(event) => void handleVehicleChange(event.target.value)}>
+                {veiculos.map((veiculo) => (
+                  <option value={veiculo.patioVeiculoId} key={veiculo.patioVeiculoId}>
+                    {veiculo.placa ?? 'Sem placa'} ({veiculo.clienteNome ?? 'Empresa nao informada'})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Area do Servico a ser executado
+              <select value={selectedArea} onChange={(event) => setSelectedArea(event.target.value as PatioAreaPendente['area'])}>
+                <option value="">Selecione</option>
+                {areas.map((area) => (
+                  <option value={area.area} key={area.area}>{areaLabel(area.area)} ({area.totalItens})</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Box Disponivel
+              <select value={selectedBox} onChange={(event) => setSelectedBox(event.target.value)}>
+                <option value="">Selecione</option>
+                {boxes.map((box) => <option value={box.patioBoxId} key={box.patioBoxId}>Box {box.patioBoxId}</option>)}
+              </select>
+            </label>
+            <label>
+              Funcionario Responsavel
+              <select value={selectedFuncionario} onChange={(event) => setSelectedFuncionario(event.target.value)}>
+                <option value="">Selecione</option>
+                {funcionarios.map((funcionario) => (
+                  <option value={funcionario.patioFuncionarioId} key={funcionario.patioFuncionarioId}>
+                    {funcionario.patioFuncionarioId} - {funcionario.nome}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="status-list">
+            <div className="status-row"><span>Veiculo</span><strong>{selectedVehicle?.placa ?? 'Selecione'}</strong></div>
+            <div className="status-row"><span>Empresa</span><strong>{selectedVehicle?.clienteNome ?? 'Nao informada'}</strong></div>
+            <div className="status-row"><span>Quilometragem do cadastro</span><strong>{selectedAreaInfo?.quilometragem ? numberLabel(selectedAreaInfo.quilometragem) : 'Nao encontrada'}</strong></div>
+          </div>
+          <button className="button primary" type="submit" disabled={isSaving}>
+            {isSaving ? 'Alocando...' : 'Alocar Servicos e Iniciar Execucao'}
+          </button>
+        </form>
+      )}
+    </section>
+  )
+}
+
+function PatioBoxes({
+  items,
+  isLoading,
+  catalogoServicos,
+  onLoadServicos,
+  onAddServico,
+  onRetirar,
+  onFinalizar,
+  onOpenClient,
+}: {
+  items: PatioPainelBox[]
+  isLoading: boolean
+  catalogoServicos: PatioCatalogoServico[]
+  onLoadServicos: (patioExecucaoId: number) => Promise<PatioBoxServico[]>
+  onAddServico: (input: { patioExecucaoId: number; area: PatioBoxServico['area']; servicoNome: string; quantidade: number }) => Promise<void>
+  onRetirar: (patioExecucaoId: number) => Promise<void>
+  onFinalizar: (input: { patioExecucaoId: number; servicos: Array<{ id: string; quantidade: number; observacaoExecucao?: string }>; observacaoFinal?: string }) => Promise<void>
+  onOpenClient: (clienteId: string) => void
+}) {
+  const activeCount = items.filter((item) => item.patioExecucaoId).length
+  const [expanded, setExpanded] = useState<number | undefined>()
+  const [servicosByExecucao, setServicosByExecucao] = useState<Record<number, PatioBoxServico[]>>({})
+  const [extraServico, setExtraServico] = useState<Record<number, { nome: string; area: PatioBoxServico['area']; quantidade: string }>>({})
+  const [observacaoFinal, setObservacaoFinal] = useState<Record<number, string>>({})
+  const [savingAction, setSavingAction] = useState('')
+  const [error, setError] = useState('')
+
+  const loadServicos = async (patioExecucaoId: number) => {
+    const rows = await onLoadServicos(patioExecucaoId)
+    setServicosByExecucao((current) => ({ ...current, [patioExecucaoId]: rows }))
+    return rows
+  }
+
+  const toggleDetails = async (patioExecucaoId: number) => {
+    setError('')
+    if (expanded === patioExecucaoId) {
+      setExpanded(undefined)
+      return
+    }
+    setExpanded(patioExecucaoId)
+    if (!servicosByExecucao[patioExecucaoId]) {
+      await loadServicos(patioExecucaoId)
+    }
+  }
+
+  const updateServico = (patioExecucaoId: number, servicoId: string, patch: Partial<Pick<PatioBoxServico, 'quantidade' | 'observacaoExecucao'>>) => {
+    setServicosByExecucao((current) => ({
+      ...current,
+      [patioExecucaoId]: (current[patioExecucaoId] ?? []).map((servico) =>
+        servico.id === servicoId ? { ...servico, ...patch } : servico,
+      ),
+    }))
+  }
+
+  const handleAddServico = async (event: FormEvent, patioExecucaoId: number) => {
+    event.preventDefault()
+    const draft = extraServico[patioExecucaoId] ?? { nome: '', area: 'borracharia', quantidade: '1' }
+    const nome = draft.nome.trim()
+    if (!nome) {
+      setError('Informe o servico extra antes de adicionar.')
+      return
+    }
+    setSavingAction(`add-${patioExecucaoId}`)
+    setError('')
+    try {
+      await onAddServico({
+        patioExecucaoId,
+        area: draft.area,
+        servicoNome: nome,
+        quantidade: Math.max(1, Number(draft.quantidade) || 1),
+      })
+      setExtraServico((current) => ({ ...current, [patioExecucaoId]: { nome: '', area: draft.area, quantidade: '1' } }))
+      await loadServicos(patioExecucaoId)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel adicionar o servico extra.')
+    } finally {
+      setSavingAction('')
+    }
+  }
+
+  const handleRetirar = async (patioExecucaoId: number) => {
+    if (!window.confirm('Retirar este veiculo do box e devolver os servicos para a fila?')) return
+    setSavingAction(`retirar-${patioExecucaoId}`)
+    setError('')
+    try {
+      await onRetirar(patioExecucaoId)
+      setExpanded(undefined)
+      setServicosByExecucao((current) => {
+        const next = { ...current }
+        delete next[patioExecucaoId]
+        return next
+      })
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel retirar o box.')
+    } finally {
+      setSavingAction('')
+    }
+  }
+
+  const handleFinalizar = async (patioExecucaoId: number) => {
+    if (!window.confirm('Finalizar este box e gravar os servicos executados?')) return
+    setSavingAction(`finalizar-${patioExecucaoId}`)
+    setError('')
+    try {
+      const rows = servicosByExecucao[patioExecucaoId] ?? await loadServicos(patioExecucaoId)
+      await onFinalizar({
+        patioExecucaoId,
+        servicos: rows.map((servico) => ({
+          id: servico.id,
+          quantidade: servico.quantidade,
+          observacaoExecucao: servico.observacaoExecucao,
+        })),
+        observacaoFinal: observacaoFinal[patioExecucaoId],
+      })
+      setExpanded(undefined)
+      setServicosByExecucao((current) => {
+        const next = { ...current }
+        delete next[patioExecucaoId]
+        return next
+      })
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel finalizar o box.')
+    } finally {
+      setSavingAction('')
+    }
+  }
+
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Visao Geral dos Boxes</h2>
+          <p>Monitore, atualize e finalize os servicos em cada box.</p>
+        </div>
+        <strong>{activeCount} ativos</strong>
+      </div>
+      {error && <div className="inline-error">{error}</div>}
       {isLoading && <div className="empty-state">Carregando boxes...</div>}
-      {!isLoading && items.length === 0 && <div className="empty-state">Nenhum box ativo no snapshot atual.</div>}
-      <div className="metrics-grid">
+      {!isLoading && items.length === 0 && <div className="empty-state">Nenhum box cadastrado no snapshot atual.</div>}
+      <div className="patio-box-grid">
         {items.map((item) => (
-          <article className="metric-card" key={item.patioExecucaoId}>
-            <small>{item.status ?? 'em andamento'}</small>
-            <strong>{item.placa ?? 'Sem placa'}</strong>
-            <span>{item.clienteNome ?? 'Cliente sem vinculo'}</span>
-            <span>{item.inicioExecucao ? `Inicio ${dateLabel(item.inicioExecucao)}` : 'Inicio nao informado'}</span>
-            {item.clienteId && <button className="button compact-button" type="button" onClick={() => onOpenClient(item.clienteId!)}>Ficha CRM</button>}
+          <article className={item.patioExecucaoId ? 'panel subtle patio-box-card active' : 'panel subtle patio-box-card free'} key={item.boxId}>
+            {!item.patioExecucaoId ? (
+              <h3>BOX {item.boxId} - Livre</h3>
+            ) : (
+              <>
+                <div className="panel-header">
+                  <div>
+                    <h3>BOX {item.boxId}</h3>
+                    <p>{item.funcionarioNome ?? 'Funcionario nao informado'}</p>
+                  </div>
+                  {item.clienteId && <button className="button compact-button" type="button" onClick={() => onOpenClient(item.clienteId!)}>Ficha CRM</button>}
+                </div>
+                <div className="status-list">
+                  <div className="status-row"><span>Placa</span><strong>{item.placa ?? 'Sem placa'}</strong></div>
+                  <div className="status-row"><span>Empresa</span><strong>{item.clienteNome ?? 'N/A'}</strong></div>
+                  <div className="status-row"><span>Motorista</span><strong>{item.nomeMotorista || 'N/A'} {item.contatoMotorista ? `(${item.contatoMotorista})` : ''}</strong></div>
+                  <div className="status-row"><span>KM de Entrada</span><strong>{item.quilometragem ? numberLabel(item.quilometragem) : 'N/A'}</strong></div>
+                  {item.veiculoDescricao && <div className="status-row"><span>Modelo</span><strong>{item.veiculoDescricao}</strong></div>}
+                </div>
+                {item.listaServicos && <div className="patio-box-services" dangerouslySetInnerHTML={{ __html: item.listaServicos }} />}
+                <div className="row-actions">
+                  <button
+                    className="button"
+                    type="button"
+                    disabled={savingAction === `retirar-${item.patioExecucaoId}`}
+                    onClick={() => void handleRetirar(item.patioExecucaoId!)}
+                  >
+                    Retirar do Box
+                  </button>
+                  <button className="button" type="button" onClick={() => void toggleDetails(item.patioExecucaoId!)}>
+                    {expanded === item.patioExecucaoId ? 'Ocultar detalhes' : 'Detalhar servicos'}
+                  </button>
+                  <button
+                    className="button primary"
+                    type="button"
+                    disabled={savingAction === `finalizar-${item.patioExecucaoId}`}
+                    onClick={() => void handleFinalizar(item.patioExecucaoId!)}
+                  >
+                    {savingAction === `finalizar-${item.patioExecucaoId}` ? 'Finalizando...' : 'Finalizar Box'}
+                  </button>
+                </div>
+                {expanded === item.patioExecucaoId && (
+                  <div className="patio-box-detail">
+                    <h4>Servicos em execucao</h4>
+                    {(servicosByExecucao[item.patioExecucaoId] ?? []).map((servico) => (
+                      <div className="patio-box-service-row" key={servico.id}>
+                        <div>
+                          <strong>{servico.servicoNome ?? areaLabel(servico.area)}</strong>
+                          <span>{areaLabel(servico.area)}{servico.observacaoCadastro ? ` - ${servico.observacaoCadastro}` : ''}</span>
+                        </div>
+                        <label>
+                          Qtd.
+                          <input
+                            type="number"
+                            min="0"
+                            value={servico.quantidade}
+                            onChange={(event) => updateServico(item.patioExecucaoId!, servico.id, { quantidade: Number(event.target.value) })}
+                          />
+                        </label>
+                        <label>
+                          Obs. execucao
+                          <input
+                            value={servico.observacaoExecucao ?? ''}
+                            onChange={(event) => updateServico(item.patioExecucaoId!, servico.id, { observacaoExecucao: event.target.value })}
+                            placeholder="Opcional"
+                          />
+                        </label>
+                      </div>
+                    ))}
+                    <form className="patio-box-extra" onSubmit={(event) => void handleAddServico(event, item.patioExecucaoId!)}>
+                      <label>
+                        Servico extra
+                        <input
+                          list={`patio-box-extra-${item.patioExecucaoId}-${extraServico[item.patioExecucaoId!]?.area ?? 'borracharia'}`}
+                          value={extraServico[item.patioExecucaoId!]?.nome ?? ''}
+                          onChange={(event) => setExtraServico((current) => ({
+                            ...current,
+                            [item.patioExecucaoId!]: {
+                              area: current[item.patioExecucaoId!]?.area ?? 'borracharia',
+                              quantidade: current[item.patioExecucaoId!]?.quantidade ?? '1',
+                              nome: event.target.value,
+                            },
+                          }))}
+                          placeholder="Ex.: ALINHAMENTO"
+                        />
+                        <datalist id={`patio-box-extra-${item.patioExecucaoId}-${extraServico[item.patioExecucaoId!]?.area ?? 'borracharia'}`}>
+                          {catalogoServicos
+                            .filter((servico) => servico.area === (extraServico[item.patioExecucaoId!]?.area ?? 'borracharia'))
+                            .map((servico) => <option value={servico.nome} key={`${item.patioExecucaoId}-${servico.area}-${servico.nome}`} />)}
+                        </datalist>
+                      </label>
+                      <label>
+                        Area
+                        <select
+                          value={extraServico[item.patioExecucaoId!]?.area ?? 'borracharia'}
+                          onChange={(event) => setExtraServico((current) => ({
+                            ...current,
+                            [item.patioExecucaoId!]: {
+                              nome: current[item.patioExecucaoId!]?.nome ?? '',
+                              quantidade: current[item.patioExecucaoId!]?.quantidade ?? '1',
+                              area: event.target.value as PatioBoxServico['area'],
+                            },
+                          }))}
+                        >
+                          <option value="borracharia">Borracharia</option>
+                          <option value="alinhamento">Alinhamento</option>
+                          <option value="manutencao">Manutencao</option>
+                        </select>
+                      </label>
+                      <label>
+                        Qtd.
+                        <input
+                          type="number"
+                          min="1"
+                          value={extraServico[item.patioExecucaoId!]?.quantidade ?? '1'}
+                          onChange={(event) => setExtraServico((current) => ({
+                            ...current,
+                            [item.patioExecucaoId!]: {
+                              nome: current[item.patioExecucaoId!]?.nome ?? '',
+                              area: current[item.patioExecucaoId!]?.area ?? 'borracharia',
+                              quantidade: event.target.value,
+                            },
+                          }))}
+                        />
+                      </label>
+                      <button className="button" type="submit" disabled={savingAction === `add-${item.patioExecucaoId}`}>
+                        {savingAction === `add-${item.patioExecucaoId}` ? 'Adicionando...' : 'Adicionar extra'}
+                      </button>
+                    </form>
+                    <label className="patio-box-final-note">
+                      Observacao final do box
+                      <textarea
+                        value={observacaoFinal[item.patioExecucaoId] ?? ''}
+                        onChange={(event) => setObservacaoFinal((current) => ({ ...current, [item.patioExecucaoId!]: event.target.value }))}
+                        placeholder="Observacoes finais, avarias, itens nao executados..."
+                      />
+                    </label>
+                  </div>
+                )}
+              </>
+            )}
           </article>
         ))}
       </div>

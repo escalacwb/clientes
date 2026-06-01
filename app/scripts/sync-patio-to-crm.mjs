@@ -47,6 +47,8 @@ try {
 
   await upsertPatioClientes(patioClientes, clienteMap)
   await upsertPatioVeiculos(patioVeiculos, clienteMap, veiculoMap)
+  const patioFuncionariosCount = await upsertPatioFuncionarios()
+  const patioBoxesCount = await upsertPatioBoxes()
   await upsertPatioAtendimentos(clienteMap, veiculoMap)
   await upsertPatioAtendimentoItens(clienteMap, veiculoMap)
   await upsertPatioContatos(patioClientes, patioVeiculos, clienteMap)
@@ -58,6 +60,8 @@ try {
     patio_clientes_vinculados: [...clienteMap.values()].filter((match) => match.clienteId).length,
     patio_veiculos: patioVeiculos.length,
     patio_veiculos_vinculados: [...veiculoMap.values()].filter((match) => match.veiculoId).length,
+    patio_funcionarios: patioFuncionariosCount,
+    patio_boxes: patioBoxesCount,
   }, null, 2))
 } catch (error) {
   console.error(error instanceof Error ? error.message : error)
@@ -328,6 +332,89 @@ async function upsertPatioVeiculos(rows, clienteMap, veiculoMap) {
   })
 
   await runJsonBatches(sql, payload)
+}
+
+async function upsertPatioFuncionarios() {
+  const { rows } = await patio.query(`
+    select *
+    from public.funcionarios
+    where id > 0
+  `)
+
+  const sql = `
+    with payload as (
+      select *
+      from jsonb_to_recordset($1::jsonb) as row(
+        patio_funcionario_id bigint,
+        nome text,
+        ativo boolean,
+        raw_data jsonb
+      )
+    )
+    insert into public.patio_funcionarios_snapshot (
+      patio_funcionario_id, nome, ativo, raw_data, sincronizado_em
+    )
+    select patio_funcionario_id, nome, ativo, raw_data, now()
+    from payload
+    on conflict (patio_funcionario_id) do update set
+      nome = excluded.nome,
+      ativo = excluded.ativo,
+      raw_data = excluded.raw_data,
+      sincronizado_em = now()
+  `
+
+  const payload = rows.map((row) => ({
+    patio_funcionario_id: row.id,
+    nome: row.nome,
+    ativo: row.ativo ?? true,
+    raw_data: row,
+  }))
+
+  await runJsonBatches(sql, payload)
+  return rows.length
+}
+
+async function upsertPatioBoxes() {
+  const { rows } = await patio.query(`
+    select *
+    from public.boxes
+    where id > 0
+  `)
+
+  const sql = `
+    with payload as (
+      select *
+      from jsonb_to_recordset($1::jsonb) as row(
+        patio_box_id integer,
+        area text,
+        ocupado boolean,
+        ativo boolean,
+        raw_data jsonb
+      )
+    )
+    insert into public.patio_boxes_snapshot (
+      patio_box_id, area, ocupado, ativo, raw_data, sincronizado_em
+    )
+    select patio_box_id, area, ocupado, ativo, raw_data, now()
+    from payload
+    on conflict (patio_box_id) do update set
+      area = excluded.area,
+      ocupado = excluded.ocupado,
+      ativo = excluded.ativo,
+      raw_data = excluded.raw_data,
+      sincronizado_em = now()
+  `
+
+  const payload = rows.map((row) => ({
+    patio_box_id: row.id,
+    area: row.area ?? null,
+    ocupado: Boolean(row.ocupado),
+    ativo: row.ativo ?? true,
+    raw_data: row,
+  }))
+
+  await runJsonBatches(sql, payload)
+  return rows.length
 }
 
 async function upsertPatioAtendimentos(clienteMap, veiculoMap) {

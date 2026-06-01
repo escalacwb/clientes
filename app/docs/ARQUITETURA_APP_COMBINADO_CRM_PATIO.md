@@ -42,7 +42,7 @@ Objetivo:
 - controlar execucao;
 - finalizar atendimento;
 - manter dados de placa, KM, motorista e responsavel atualizados;
-- disparar feedback e revisao proativa sem atrapalhar a operacao.
+- alimentar sinais para feedback e revisao proativa no CRM sem atrapalhar a operacao.
 
 Telas:
 
@@ -79,18 +79,6 @@ Telas:
    - servicos;
    - cliente vinculado;
    - motorista mais recente.
-
-6. **Feedback**
-   - pendencias pos-servico;
-   - abrir WhatsApp;
-   - marcar feedback feito;
-   - registrar observacao simples.
-
-7. **Revisao proativa**
-   - veiculos por KM estimado ou tempo sem retorno;
-   - abrir WhatsApp;
-   - marcar contato realizado;
-   - criar oportunidade no CRM quando houver interesse.
 
 ### Modo CRM
 
@@ -164,6 +152,20 @@ Telas:
    - servicos;
    - listas de preco;
    - atualizacao separada.
+
+8. **Feedback pos-servico**
+   - pendencias geradas pelo patio;
+   - abrir WhatsApp;
+   - marcar feedback feito;
+   - registrar observacao simples;
+   - criar tarefa/oportunidade quando houver interesse.
+
+9. **Revisao proativa**
+   - veiculos por KM estimado ou tempo sem retorno;
+   - abrir WhatsApp;
+   - marcar contato realizado;
+   - medir retorno da placa em ate 15 dias em fase posterior;
+   - criar oportunidade/proposta quando houver interesse.
 
 ### Modo Gestao
 
@@ -454,7 +456,7 @@ Pode tudo, com auditoria.
 - Cockpit e Dashboard: virar `Minha rotina`.
 - Oportunidades e parte de tarefas: aparecer na rotina com filtros.
 - Clientes sem cadastro: virar filtro/origem dentro de Clientes e Campanhas, nao menu isolado no CRM principal.
-- Feedback e Revisao: entram no modo Patio e tambem geram itens na rotina CRM.
+- Feedback e Revisao: ficam no modo CRM; o Patio apenas gera os sinais operacionais.
 
 ### Manter
 

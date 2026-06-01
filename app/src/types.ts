@@ -453,6 +453,99 @@ export type PatioVeiculoBusca = {
   contatoTipo?: string
 }
 
+export type PatioEntradaServicoInput = {
+  area: 'borracharia' | 'alinhamento' | 'manutencao'
+  servicoNome: string
+  descricao?: string
+  quantidade: number
+  observacao?: string
+}
+
+export type PatioEntradaInput = {
+  patioVeiculoId: number
+  quilometragem?: number
+  nomeMotorista?: string
+  contatoMotorista?: string
+  servicos: PatioEntradaServicoInput[]
+}
+
+export type PatioAlocacaoVeiculo = {
+  patioVeiculoId: number
+  clienteId?: string
+  veiculoId?: string
+  placa?: string
+  clienteNome?: string
+  veiculoDescricao?: string
+  pendentes: number
+  emAndamento: number
+  primeiraSolicitacao?: string
+}
+
+export type PatioAreaPendente = {
+  patioVeiculoId: number
+  area: 'borracharia' | 'alinhamento' | 'manutencao'
+  quilometragem?: number
+  totalItens: number
+}
+
+export type PatioFuncionario = {
+  patioFuncionarioId: number
+  nome: string
+  ativo: boolean
+}
+
+export type PatioBox = {
+  patioBoxId: number
+  area?: string
+  ocupado: boolean
+  ativo: boolean
+}
+
+export type PatioPainelBox = {
+  boxId: number
+  boxArea?: string
+  patioExecucaoId?: number
+  patioVeiculoId?: number
+  clienteId?: string
+  veiculoId?: string
+  placa?: string
+  clienteNome?: string
+  nomeMotorista?: string
+  contatoMotorista?: string
+  quilometragem?: number
+  veiculoDescricao?: string
+  funcionarioNome?: string
+  listaServicos: string
+}
+
+export type PatioBoxServico = {
+  id: string
+  patioExecucaoId: number
+  area: 'borracharia' | 'alinhamento' | 'manutencao'
+  servicoNome?: string
+  quantidade: number
+  observacaoCadastro?: string
+  observacaoExecucao?: string
+  status?: string
+  boxId?: number
+}
+
+export type PatioCatalogoServico = {
+  area: 'borracharia' | 'alinhamento' | 'manutencao'
+  nome: string
+}
+
+export type PatioFilaPainel = {
+  patioVeiculoId?: number
+  clienteId?: string
+  veiculoId?: string
+  placa?: string
+  clienteNome?: string
+  primeiraSolicitacao?: string
+  listaServicos: string
+  totalItens: number
+}
+
 export type PatioFilaItem = {
   id: string
   patioItemId: number

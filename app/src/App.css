@@ -6,6 +6,156 @@
   color: #1b1f23;
 }
 
+.patio-tv-panel {
+  background: #1f1f1f;
+  color: #f6f8fb;
+  border-color: #3b3b3b;
+}
+
+.patio-tv-panel .panel-header,
+.patio-tv-panel .filters-grid,
+.patio-tv-panel details {
+  background: #292929;
+  border-color: #444;
+}
+
+.patio-tv-panel h2,
+.patio-tv-panel h3,
+.patio-tv-panel p,
+.patio-tv-panel span,
+.patio-tv-panel strong,
+.patio-tv-panel summary,
+.patio-tv-panel label {
+  color: #f6f8fb;
+}
+
+.patio-section-title {
+  margin: 28px 0 18px;
+  color: #22a7f0;
+  text-align: center;
+  font-size: 2rem;
+}
+
+.patio-tv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.patio-tv-card {
+  min-height: 220px;
+  padding: 16px;
+  border: 1px solid #444;
+  border-radius: 10px;
+  background: #292929;
+}
+
+.patio-tv-card h3 {
+  margin: 0 0 12px;
+  font-size: 1.25rem;
+}
+
+.patio-plate {
+  display: block;
+  margin-bottom: 12px;
+  padding: 10px;
+  border-radius: 6px;
+  background: #171717;
+  color: #fff;
+  text-align: center;
+  font-size: 1.8rem;
+  line-height: 1.1;
+}
+
+.patio-service-list {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #444;
+  color: #d5dce4;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.queue-number {
+  display: inline-block;
+  margin-right: 10px;
+  color: #22a7f0;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.patio-box-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.patio-box-card {
+  min-height: 120px;
+}
+
+.patio-box-card.free {
+  display: grid;
+  place-items: center;
+  background: #f6faf7;
+  color: #5b6b64;
+}
+
+.patio-box-card.active {
+  border-left: 4px solid #12312f;
+}
+
+.patio-box-services {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #dfe8e1;
+  border-radius: 8px;
+  background: #f8fbf8;
+  color: #25302c;
+  line-height: 1.5;
+}
+
+.patio-box-detail {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #dfe8e1;
+}
+
+.patio-box-detail h4 {
+  margin: 0 0 10px;
+}
+
+.patio-box-service-row,
+.patio-box-extra {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 90px minmax(180px, 1fr);
+  gap: 10px;
+  align-items: end;
+  padding: 10px 0;
+  border-bottom: 1px solid #edf2ee;
+}
+
+.patio-box-service-row > div span {
+  display: block;
+  margin-top: 4px;
+  color: #63746e;
+  font-size: 0.86rem;
+}
+
+.patio-box-extra {
+  grid-template-columns: minmax(200px, 1fr) 160px 90px auto;
+  border-bottom: 0;
+}
+
+.patio-box-final-note {
+  display: block;
+  margin-top: 12px;
+}
+
+.patio-box-final-note textarea {
+  min-height: 86px;
+}
+
 .sidebar {
   background: #12312f;
   color: #edf7f4;

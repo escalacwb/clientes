@@ -3,8 +3,17 @@ import type {
   ClienteContatoRecomendado,
   PatioAtendimentoItemResumo,
   PatioAtendimentoResumo,
+  PatioAlocacaoVeiculo,
+  PatioAreaPendente,
+  PatioBox,
+  PatioBoxServico,
+  PatioCatalogoServico,
+  PatioEntradaInput,
   PatioFeedbackPendente,
+  PatioFilaPainel,
   PatioFilaItem,
+  PatioFuncionario,
+  PatioPainelBox,
   PatioRevisaoProativa,
   PatioVeiculoBusca,
 } from '../types'
@@ -132,6 +141,83 @@ type FilaRow = {
   tipo_atendimento: string | null
   solicitado_em: string | null
   atualizado_em: string | null
+}
+
+type AlocacaoVeiculoRow = {
+  patio_veiculo_id: number
+  cliente_id: string | null
+  veiculo_id: string | null
+  placa: string | null
+  cliente_nome: string | null
+  veiculo_descricao: string | null
+  pendentes: number | null
+  em_andamento: number | null
+  primeira_solicitacao: string | null
+}
+
+type AreaPendenteRow = {
+  patio_veiculo_id: number
+  area: PatioAreaPendente['area']
+  quilometragem: number | null
+  total_itens: number | null
+}
+
+type FuncionarioRow = {
+  patio_funcionario_id: number
+  nome: string
+  ativo: boolean | null
+}
+
+type BoxRow = {
+  patio_box_id: number
+  area: string | null
+  ocupado: boolean | null
+  ativo: boolean | null
+}
+
+type PainelBoxRow = {
+  box_id: number
+  box_area: string | null
+  patio_execucao_id: number | null
+  patio_veiculo_id: number | null
+  cliente_id: string | null
+  veiculo_id: string | null
+  placa: string | null
+  cliente_nome: string | null
+  nome_motorista: string | null
+  contato_motorista: string | null
+  quilometragem: number | null
+  veiculo_descricao: string | null
+  funcionario_nome: string | null
+  lista_servicos: string | null
+}
+
+type BoxServicoRow = {
+  id: string
+  patio_execucao_id: number
+  area: PatioBoxServico['area']
+  servico_nome: string | null
+  quantidade: number | null
+  observacao_cadastro: string | null
+  observacao_execucao: string | null
+  status: string | null
+  box_id: number | null
+}
+
+type CatalogoServicoRow = {
+  area: PatioCatalogoServico['area']
+  nome: string
+}
+
+type FilaPainelRow = {
+  patio_veiculo_id: number | null
+  cliente_id: string | null
+  veiculo_id: string | null
+  placa: string | null
+  cliente_nome: string | null
+  primeira_solicitacao: string | null
+  lista_servicos: string | null
+  total_itens: number | null
 }
 
 export async function getClienteContatoRecomendado(clienteId: string): Promise<ClienteContatoRecomendado | undefined> {
@@ -273,6 +359,213 @@ export async function searchPatioVeiculos(queryText: string): Promise<PatioVeicu
 
   if (error) throw error
   return (data as VeiculoBuscaRow[] | null ?? []).map(mapVeiculoBusca)
+}
+
+export async function registerPatioEntrada(input: PatioEntradaInput): Promise<number> {
+  const supabase = await getSupabase()
+  if (!supabase) throw new Error('Supabase nao configurado.')
+
+  const { data, error } = await supabase.rpc('registrar_entrada_patio_crm', {
+    p_patio_veiculo_id: input.patioVeiculoId,
+    p_quilometragem: input.quilometragem ?? null,
+    p_nome_motorista: input.nomeMotorista?.trim() ?? '',
+    p_contato_motorista: input.contatoMotorista?.trim() ?? '',
+    p_servicos: input.servicos.map((servico) => ({
+      area: servico.area,
+      servico_nome: servico.servicoNome.trim(),
+      descricao: servico.descricao?.trim() || servico.servicoNome.trim(),
+      quantidade: Math.max(1, Math.round(Number(servico.quantidade) || 1)),
+      observacao: servico.observacao?.trim() ?? '',
+    })),
+    p_observacao: null,
+  })
+
+  if (error) throw error
+  return Number(data)
+}
+
+export async function listPatioAlocacaoVeiculos(): Promise<PatioAlocacaoVeiculo[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('vw_patio_alocacao_veiculos')
+    .select('*')
+    .order('primeira_solicitacao', { ascending: true, nullsFirst: false })
+
+  if (error) throw error
+  return (data as AlocacaoVeiculoRow[] | null ?? []).map(mapAlocacaoVeiculo)
+}
+
+export async function listPatioAreasPendentes(patioVeiculoId: number): Promise<PatioAreaPendente[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('vw_patio_areas_pendentes')
+    .select('*')
+    .eq('patio_veiculo_id', patioVeiculoId)
+    .order('area', { ascending: true })
+
+  if (error) throw error
+  return (data as AreaPendenteRow[] | null ?? []).map(mapAreaPendente)
+}
+
+export async function listPatioFuncionarios(): Promise<PatioFuncionario[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('patio_funcionarios_snapshot')
+    .select('patio_funcionario_id,nome,ativo')
+    .eq('ativo', true)
+    .order('nome', { ascending: true })
+
+  if (error) throw error
+  return (data as FuncionarioRow[] | null ?? []).map(mapFuncionario)
+}
+
+export async function listPatioBoxesLivres(): Promise<PatioBox[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('patio_boxes_snapshot')
+    .select('patio_box_id,area,ocupado,ativo')
+    .eq('ativo', true)
+    .eq('ocupado', false)
+    .order('patio_box_id', { ascending: true })
+
+  if (error) throw error
+  return (data as BoxRow[] | null ?? []).map(mapBox)
+}
+
+export async function listPatioCatalogoServicos(): Promise<PatioCatalogoServico[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('vw_patio_catalogo_servicos')
+    .select('area,nome')
+    .order('area', { ascending: true })
+    .order('nome', { ascending: true })
+
+  if (error) throw error
+  return (data as CatalogoServicoRow[] | null ?? []).map((row) => ({
+    area: row.area,
+    nome: row.nome,
+  }))
+}
+
+export async function listPatioBoxesPainel(): Promise<PatioPainelBox[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('vw_patio_boxes_painel')
+    .select('*')
+    .order('box_id', { ascending: true })
+
+  if (error) throw error
+  return (data as PainelBoxRow[] | null ?? []).map(mapPainelBox)
+}
+
+export async function listPatioFilaPainel(): Promise<PatioFilaPainel[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('vw_patio_fila_painel')
+    .select('*')
+    .order('primeira_solicitacao', { ascending: true, nullsFirst: false })
+
+  if (error) throw error
+  return (data as FilaPainelRow[] | null ?? []).map(mapFilaPainel)
+}
+
+export async function allocatePatioServices(input: {
+  patioVeiculoId: number
+  area: PatioAreaPendente['area']
+  boxId: number
+  funcionarioId: number
+}): Promise<number> {
+  const supabase = await getSupabase()
+  if (!supabase) throw new Error('Supabase nao configurado.')
+
+  const { data, error } = await supabase.rpc('alocar_servicos_patio_crm', {
+    p_patio_veiculo_id: input.patioVeiculoId,
+    p_area: input.area,
+    p_box_id: input.boxId,
+    p_funcionario_id: input.funcionarioId,
+  })
+
+  if (error) throw error
+  return Number(data)
+}
+
+export async function listPatioBoxServicos(patioExecucaoId: number): Promise<PatioBoxServico[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('vw_patio_box_servicos')
+    .select('*')
+    .eq('patio_execucao_id', patioExecucaoId)
+    .order('area', { ascending: true })
+    .order('servico_nome', { ascending: true })
+
+  if (error) throw error
+  return (data as BoxServicoRow[] | null ?? []).map(mapBoxServico)
+}
+
+export async function addPatioBoxServico(input: {
+  patioExecucaoId: number
+  area: PatioBoxServico['area']
+  servicoNome: string
+  quantidade: number
+}): Promise<string> {
+  const supabase = await getSupabase()
+  if (!supabase) throw new Error('Supabase nao configurado.')
+
+  const { data, error } = await supabase.rpc('adicionar_servico_box_patio_crm', {
+    p_patio_execucao_id: input.patioExecucaoId,
+    p_area: input.area,
+    p_servico_nome: input.servicoNome.trim(),
+    p_quantidade: Math.max(1, Math.round(Number(input.quantidade) || 1)),
+  })
+
+  if (error) throw error
+  return String(data)
+}
+
+export async function unassignPatioBox(patioExecucaoId: number): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase) throw new Error('Supabase nao configurado.')
+
+  const { error } = await supabase.rpc('retirar_box_patio_crm', {
+    p_patio_execucao_id: patioExecucaoId,
+  })
+  if (error) throw error
+}
+
+export async function finishPatioBox(input: {
+  patioExecucaoId: number
+  servicos: Array<{ id: string; quantidade: number; observacaoExecucao?: string }>
+  observacaoFinal?: string
+}): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase) throw new Error('Supabase nao configurado.')
+
+  const { error } = await supabase.rpc('finalizar_box_patio_crm', {
+    p_patio_execucao_id: input.patioExecucaoId,
+    p_servicos: input.servicos.map((servico) => ({
+      id: servico.id,
+      quantidade: Math.max(0, Math.round(Number(servico.quantidade) || 0)),
+      observacao_execucao: servico.observacaoExecucao?.trim() ?? '',
+    })),
+    p_observacao_final: input.observacaoFinal?.trim() || null,
+  })
+  if (error) throw error
 }
 
 export async function listPatioFilaItens(input: {
@@ -491,5 +784,91 @@ function mapFila(row: FilaRow): PatioFilaItem {
     tipoAtendimento: row.tipo_atendimento ?? undefined,
     solicitadoEm: row.solicitado_em ?? undefined,
     atualizadoEm: row.atualizado_em ?? undefined,
+  }
+}
+
+function mapAlocacaoVeiculo(row: AlocacaoVeiculoRow): PatioAlocacaoVeiculo {
+  return {
+    patioVeiculoId: Number(row.patio_veiculo_id),
+    clienteId: row.cliente_id ?? undefined,
+    veiculoId: row.veiculo_id ?? undefined,
+    placa: row.placa ?? undefined,
+    clienteNome: row.cliente_nome ?? undefined,
+    veiculoDescricao: row.veiculo_descricao ?? undefined,
+    pendentes: Number(row.pendentes ?? 0),
+    emAndamento: Number(row.em_andamento ?? 0),
+    primeiraSolicitacao: row.primeira_solicitacao ?? undefined,
+  }
+}
+
+function mapAreaPendente(row: AreaPendenteRow): PatioAreaPendente {
+  return {
+    patioVeiculoId: Number(row.patio_veiculo_id),
+    area: row.area,
+    quilometragem: row.quilometragem ?? undefined,
+    totalItens: Number(row.total_itens ?? 0),
+  }
+}
+
+function mapFuncionario(row: FuncionarioRow): PatioFuncionario {
+  return {
+    patioFuncionarioId: Number(row.patio_funcionario_id),
+    nome: row.nome,
+    ativo: Boolean(row.ativo ?? true),
+  }
+}
+
+function mapBox(row: BoxRow): PatioBox {
+  return {
+    patioBoxId: Number(row.patio_box_id),
+    area: row.area ?? undefined,
+    ocupado: Boolean(row.ocupado),
+    ativo: Boolean(row.ativo ?? true),
+  }
+}
+
+function mapPainelBox(row: PainelBoxRow): PatioPainelBox {
+  return {
+    boxId: Number(row.box_id),
+    boxArea: row.box_area ?? undefined,
+    patioExecucaoId: row.patio_execucao_id ?? undefined,
+    patioVeiculoId: row.patio_veiculo_id ?? undefined,
+    clienteId: row.cliente_id ?? undefined,
+    veiculoId: row.veiculo_id ?? undefined,
+    placa: row.placa ?? undefined,
+    clienteNome: row.cliente_nome ?? undefined,
+    nomeMotorista: row.nome_motorista ?? undefined,
+    contatoMotorista: row.contato_motorista ?? undefined,
+    quilometragem: row.quilometragem ?? undefined,
+    veiculoDescricao: row.veiculo_descricao ?? undefined,
+    funcionarioNome: row.funcionario_nome ?? undefined,
+    listaServicos: row.lista_servicos ?? '',
+  }
+}
+
+function mapBoxServico(row: BoxServicoRow): PatioBoxServico {
+  return {
+    id: row.id,
+    patioExecucaoId: Number(row.patio_execucao_id),
+    area: row.area,
+    servicoNome: row.servico_nome ?? undefined,
+    quantidade: Number(row.quantidade ?? 1),
+    observacaoCadastro: row.observacao_cadastro ?? undefined,
+    observacaoExecucao: row.observacao_execucao ?? undefined,
+    status: row.status ?? undefined,
+    boxId: row.box_id ?? undefined,
+  }
+}
+
+function mapFilaPainel(row: FilaPainelRow): PatioFilaPainel {
+  return {
+    patioVeiculoId: row.patio_veiculo_id ?? undefined,
+    clienteId: row.cliente_id ?? undefined,
+    veiculoId: row.veiculo_id ?? undefined,
+    placa: row.placa ?? undefined,
+    clienteNome: row.cliente_nome ?? undefined,
+    primeiraSolicitacao: row.primeira_solicitacao ?? undefined,
+    listaServicos: row.lista_servicos ?? '',
+    totalItens: Number(row.total_itens ?? 0),
   }
 }
