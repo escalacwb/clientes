@@ -24,7 +24,7 @@ select
   contato.whatsapp as contato_recomendado,
   contato.nome as contato_nome,
   contato.tipo as contato_tipo,
-  array_remove(array_agg(distinct pai.servico_nome) filter (where pai.servico_nome is not null), null) as servicos
+  array[]::text[] as servicos
 from public.patio_atendimentos pa
 join public.clientes c on c.id = pa.cliente_id
 left join public.veiculos v on v.id = pa.veiculo_id
@@ -58,25 +58,9 @@ left join lateral (
   order by contato_base.origem_ordem, contato_base.prioridade desc, contato_base.atualizado_em desc nulls last
   limit 1
 ) contato on true
-left join public.patio_atendimento_itens pai on pai.patio_execucao_id = pa.patio_execucao_id
 where pa.status = 'finalizado'
   and pa.data_feedback is null
   and pa.fim_execucao is not null
-group by
-  pa.patio_execucao_id,
-  pa.cliente_id,
-  c.nome,
-  c.vendedor_id,
-  pa.veiculo_id,
-  coalesce(v.placa, pa.placa_snapshot),
-  coalesce(v.descricao, pvs.modelo),
-  pa.quilometragem,
-  pa.fim_execucao,
-  pa.nome_motorista,
-  pa.contato_motorista,
-  contato.whatsapp,
-  contato.nome,
-  contato.tipo
 order by pa.fim_execucao asc;
 
 grant select on public.vw_patio_feedback_pendente to anon, authenticated, service_role;
