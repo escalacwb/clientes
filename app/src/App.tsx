@@ -1839,7 +1839,7 @@ function App() {
           {dataError && <strong>{dataError}</strong>}
         </div>
 
-        {session.role === 'admin' && vendedoresSemCarteira.length > 0 && (
+        {appMode === 'crm' && session.role === 'admin' && vendedoresSemCarteira.length > 0 && (
           <section className="panel wide seller-wallet-alert">
             <div className="panel-header">
               <div>
