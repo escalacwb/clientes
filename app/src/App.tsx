@@ -178,6 +178,7 @@ import {
   markPatioFeedbackDone,
   markPatioRevisaoDone,
   registerPatioEntrada,
+  revertPatioVisit,
   searchPatioVeiculos,
   unassignPatioBox,
 } from './repositories/patioRepository'
@@ -1969,6 +1970,17 @@ function App() {
               setPatioConcluidosPage(1)
             }}
             onPageChange={setPatioConcluidosPage}
+            onReverter={async (patioExecucaoId) => {
+              await revertPatioVisit(patioExecucaoId)
+              const result = await listPatioConcluidos({
+                page: patioConcluidosPage,
+                pageSize: 50,
+                query: patioConcluidosQuery,
+              })
+              setPatioConcluidos(result.items)
+              setPatioConcluidosTotal(result.total)
+              setView('patio-alocacao')
+            }}
             onOpenClient={async (clienteId) => {
               await ensureClientInMemory(clienteId)
               setSelectedClientId(clienteId)
@@ -9525,6 +9537,7 @@ function PatioConcluidos({
   isLoading,
   onQueryChange,
   onPageChange,
+  onReverter,
   onOpenClient,
 }: {
   items: PatioAtendimentoResumo[]
@@ -9535,9 +9548,26 @@ function PatioConcluidos({
   isLoading: boolean
   onQueryChange: (query: string) => void
   onPageChange: (page: number) => void
+  onReverter: (patioExecucaoId: number) => Promise<void>
   onOpenClient: (clienteId: string) => void
 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const [savingId, setSavingId] = useState<number | undefined>()
+  const [error, setError] = useState('')
+
+  const handleReverter = async (patioExecucaoId: number) => {
+    if (!window.confirm('Reverter esta visita concluida e devolver os servicos para alocacao?')) return
+    setSavingId(patioExecucaoId)
+    setError('')
+    try {
+      await onReverter(patioExecucaoId)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel reverter a visita.')
+    } finally {
+      setSavingId(undefined)
+    }
+  }
+
   return (
     <section className="panel wide">
       <div className="panel-header">
@@ -9547,6 +9577,7 @@ function PatioConcluidos({
         </div>
         <strong>{total} registros</strong>
       </div>
+      {error && <div className="inline-error">{error}</div>}
       <div className="filters-grid">
         <label>
           Buscar
@@ -9563,7 +9594,17 @@ function PatioConcluidos({
                 <h3>{item.placa ?? 'Sem placa'} · {item.clienteNome ?? 'Cliente sem vinculo'}</h3>
                 <p>{dateLabel(item.fimExecucao)} · {item.quilometragem ? `${numberLabel(item.quilometragem)} km` : 'KM nao informado'} · {item.status}</p>
               </div>
-              {item.clienteId && <button className="button" type="button" onClick={() => onOpenClient(item.clienteId!)}>Ficha CRM</button>}
+              <div className="inline-actions">
+                {item.clienteId && <button className="button" type="button" onClick={() => onOpenClient(item.clienteId!)}>Ficha CRM</button>}
+                <button
+                  className="button"
+                  type="button"
+                  disabled={savingId === item.patioExecucaoId}
+                  onClick={() => void handleReverter(item.patioExecucaoId)}
+                >
+                  {savingId === item.patioExecucaoId ? 'Revertendo...' : 'Reverter visita'}
+                </button>
+              </div>
             </div>
             <div className="status-list">
               <div className="status-row"><span>Motorista</span><strong>{item.nomeMotorista || 'Nao informado'}</strong></div>

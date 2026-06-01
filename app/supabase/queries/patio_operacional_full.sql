@@ -415,10 +415,16 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_box_id integer;
 begin
   if not public.current_user_is_admin() then
     raise exception 'Apenas admin pode reverter visita.';
   end if;
+
+  select box_id into v_box_id
+  from public.patio_atendimentos
+  where patio_execucao_id = p_patio_execucao_id;
 
   update public.patio_atendimento_itens
   set status = 'pendente',
@@ -434,6 +440,13 @@ begin
       funcionario_id = null,
       sincronizado_em = now()
   where patio_execucao_id = p_patio_execucao_id;
+
+  if v_box_id is not null then
+    update public.patio_boxes_snapshot
+    set ocupado = false,
+        sincronizado_em = now()
+    where patio_box_id = v_box_id;
+  end if;
 end;
 $$;
 
@@ -539,6 +552,29 @@ select
 from public.patio_atendimento_itens pai
 where pai.status = 'em_andamento';
 
+create or replace view public.vw_patio_concluidos
+with (security_invoker = true) as
+select
+  pa.patio_execucao_id,
+  pa.cliente_id,
+  coalesce(c.nome, pa.cliente_nome_snapshot) as cliente_nome,
+  c.vendedor_id,
+  pa.veiculo_id,
+  coalesce(v.placa, pa.placa_snapshot) as placa,
+  pa.box_id,
+  pa.quilometragem,
+  pa.status,
+  pa.inicio_execucao,
+  pa.fim_execucao,
+  pa.nome_motorista,
+  pa.contato_motorista,
+  pa.data_feedback,
+  array[]::text[] as servicos
+from public.patio_atendimentos pa
+left join public.clientes c on c.id = pa.cliente_id
+left join public.veiculos v on v.id = pa.veiculo_id
+where pa.status in ('finalizado', 'cancelado');
+
 create or replace view public.vw_patio_fila_painel
 with (security_invoker = true) as
 select
@@ -567,6 +603,7 @@ grant select on public.vw_patio_alocacao_veiculos to anon, authenticated, servic
 grant select on public.vw_patio_areas_pendentes to anon, authenticated, service_role;
 grant select on public.vw_patio_boxes_painel to anon, authenticated, service_role;
 grant select on public.vw_patio_box_servicos to anon, authenticated, service_role;
+grant select on public.vw_patio_concluidos to anon, authenticated, service_role;
 grant select on public.vw_patio_fila_painel to anon, authenticated, service_role;
 grant execute on function public.registrar_entrada_patio_crm(bigint, integer, text, text, jsonb, text) to anon, authenticated, service_role;
 grant execute on function public.alocar_servicos_patio_crm(bigint, text, integer, bigint) to anon, authenticated, service_role;

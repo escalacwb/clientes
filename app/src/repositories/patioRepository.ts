@@ -568,6 +568,16 @@ export async function finishPatioBox(input: {
   if (error) throw error
 }
 
+export async function revertPatioVisit(patioExecucaoId: number): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase) throw new Error('Supabase nao configurado.')
+
+  const { error } = await supabase.rpc('reverter_visita_patio_crm', {
+    p_patio_execucao_id: patioExecucaoId,
+  })
+  if (error) throw error
+}
+
 export async function listPatioFilaItens(input: {
   page: number
   pageSize: number
@@ -624,10 +634,10 @@ export async function listPatioConcluidos(input: {
   if (!supabase) return { items: [], total: 0 }
 
   const from = (input.page - 1) * input.pageSize
-  const to = from + input.pageSize - 1
+  const to = from + input.pageSize
   let query = supabase
     .from('vw_patio_concluidos')
-    .select('patio_execucao_id,cliente_id,veiculo_id,placa,cliente_nome,quilometragem,status,inicio_execucao,fim_execucao,nome_motorista,contato_motorista,data_feedback', { count: 'exact' })
+    .select('patio_execucao_id,cliente_id,veiculo_id,placa,cliente_nome,quilometragem,status,inicio_execucao,fim_execucao,nome_motorista,contato_motorista,data_feedback')
     .order('fim_execucao', { ascending: false, nullsFirst: false })
     .range(from, to)
 
@@ -636,15 +646,18 @@ export async function listPatioConcluidos(input: {
     query = query.or(`cliente_nome.ilike.${term},placa.ilike.${term},nome_motorista.ilike.${term}`)
   }
 
-  const { data, error, count } = await query
+  const { data, error } = await query
   if (error) throw error
+  const rows = data as Array<AtendimentoRow & { placa?: string | null; cliente_nome?: string | null }> | null ?? []
+  const hasMore = rows.length > input.pageSize
+  const pageRows = hasMore ? rows.slice(0, input.pageSize) : rows
   return {
-    items: (data as Array<AtendimentoRow & { placa?: string | null; cliente_nome?: string | null }> | null ?? []).map((row) => mapAtendimento({
+    items: pageRows.map((row) => mapAtendimento({
       ...row,
       placa_snapshot: row.placa ?? null,
       cliente_nome_snapshot: row.cliente_nome ?? null,
     })),
-    total: count ?? 0,
+    total: from + pageRows.length + (hasMore ? 1 : 0),
   }
 }
 
