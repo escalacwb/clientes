@@ -598,6 +598,42 @@ where pai.status = 'pendente'
 group by pa.patio_veiculo_id, pa.cliente_id, pa.veiculo_id, pa.placa_snapshot, pa.cliente_nome_snapshot
 order by min(pai.solicitado_em) asc nulls last;
 
+create or replace view public.vw_patio_relatorio_servicos
+with (security_invoker = true) as
+select
+  pai.id,
+  pai.patio_execucao_id,
+  pa.cliente_id,
+  coalesce(c.nome, pa.cliente_nome_snapshot) as cliente_nome,
+  pa.veiculo_id,
+  coalesce(v.placa, pa.placa_snapshot) as placa,
+  coalesce(v.descricao, pvs.modelo) as veiculo_descricao,
+  pai.area,
+  pai.servico_nome,
+  pai.quantidade,
+  pai.status as status_servico,
+  pa.status as status_execucao,
+  pa.box_id,
+  ('Box ' || coalesce(pbs.patio_box_id, pa.box_id)::text) as box_nome,
+  pai.funcionario_id,
+  pfs.nome as funcionario_nome,
+  pa.usuario_alocacao_id,
+  pa.usuario_finalizacao_id,
+  pa.inicio_execucao,
+  pa.fim_execucao,
+  extract(epoch from (pa.fim_execucao - pa.inicio_execucao)) / 60 as duracao_minutos,
+  pa.quilometragem
+from public.patio_atendimento_itens pai
+join public.patio_atendimentos pa on pa.patio_execucao_id = pai.patio_execucao_id
+left join public.clientes c on c.id = pa.cliente_id
+left join public.veiculos v on v.id = pa.veiculo_id
+left join public.patio_veiculos_snapshot pvs on pvs.patio_veiculo_id = pa.patio_veiculo_id
+left join public.patio_boxes_snapshot pbs on pbs.patio_box_id = pa.box_id
+left join public.patio_funcionarios_snapshot pfs on pfs.patio_funcionario_id = pai.funcionario_id
+where pa.status = 'finalizado'
+  and pai.status = 'finalizado'
+  and pa.fim_execucao is not null;
+
 grant select on public.patio_funcionarios_snapshot to anon, authenticated, service_role;
 grant select on public.patio_boxes_snapshot to anon, authenticated, service_role;
 grant select on public.vw_patio_catalogo_servicos to anon, authenticated, service_role;
@@ -607,6 +643,7 @@ grant select on public.vw_patio_boxes_painel to anon, authenticated, service_rol
 grant select on public.vw_patio_box_servicos to anon, authenticated, service_role;
 grant select on public.vw_patio_concluidos to anon, authenticated, service_role;
 grant select on public.vw_patio_fila_painel to anon, authenticated, service_role;
+grant select on public.vw_patio_relatorio_servicos to anon, authenticated, service_role;
 grant execute on function public.registrar_entrada_patio_crm(bigint, integer, text, text, jsonb, text) to anon, authenticated, service_role;
 grant execute on function public.alocar_servicos_patio_crm(bigint, text, integer, bigint) to anon, authenticated, service_role;
 grant execute on function public.adicionar_servico_box_patio_crm(bigint, text, text, integer) to anon, authenticated, service_role;

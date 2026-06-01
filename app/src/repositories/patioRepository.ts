@@ -138,6 +138,23 @@ type PatioContatoMotoristaRow = {
   contato_motorista: string | null
 }
 
+type PatioRelatorioServicoRow = {
+  id: string
+  patio_execucao_id: number
+  cliente_nome: string | null
+  placa: string | null
+  area: string | null
+  servico_nome: string | null
+  quantidade: number | null
+  box_id: number | null
+  box_nome: string | null
+  funcionario_nome: string | null
+  inicio_execucao: string | null
+  fim_execucao: string | null
+  duracao_minutos: number | null
+  quilometragem: number | null
+}
+
 export type PatioContatoExportacao = {
   tipo: 'Responsavel' | 'Motorista'
   nome: string
@@ -147,6 +164,23 @@ export type PatioContatoExportacao = {
   telefone: string
   telefonePadronizado: string
   observacao: string
+}
+
+export type PatioRelatorioServico = {
+  id: string
+  patioExecucaoId: number
+  clienteNome?: string
+  placa?: string
+  area?: string
+  servicoNome?: string
+  quantidade: number
+  boxId?: number
+  boxNome?: string
+  funcionarioNome?: string
+  inicioExecucao?: string
+  fimExecucao?: string
+  duracaoMinutos?: number
+  quilometragem?: number
 }
 
 type FilaRow = {
@@ -545,6 +579,43 @@ export async function listPatioContatosExportacao(queryText?: string): Promise<P
     .filter((item) => item.telefonePadronizado)
 
   return [...responsaveis, ...contatosMotoristas]
+}
+
+export async function listPatioRelatorioServicos(input: {
+  startDate: string
+  endDate: string
+}): Promise<PatioRelatorioServico[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const endExclusive = new Date(`${input.endDate}T00:00:00`)
+  endExclusive.setDate(endExclusive.getDate() + 1)
+
+  const { data, error } = await supabase
+    .from('vw_patio_relatorio_servicos')
+    .select('*')
+    .gte('fim_execucao', `${input.startDate}T00:00:00`)
+    .lt('fim_execucao', endExclusive.toISOString())
+    .order('fim_execucao', { ascending: false })
+    .limit(5000)
+
+  if (error) throw error
+  return (data as PatioRelatorioServicoRow[] | null ?? []).map((row) => ({
+    id: row.id,
+    patioExecucaoId: Number(row.patio_execucao_id),
+    clienteNome: row.cliente_nome ?? undefined,
+    placa: row.placa ?? undefined,
+    area: row.area ?? undefined,
+    servicoNome: row.servico_nome ?? undefined,
+    quantidade: Number(row.quantidade ?? 1),
+    boxId: row.box_id ?? undefined,
+    boxNome: row.box_nome ?? undefined,
+    funcionarioNome: row.funcionario_nome ?? undefined,
+    inicioExecucao: row.inicio_execucao ?? undefined,
+    fimExecucao: row.fim_execucao ?? undefined,
+    duracaoMinutos: row.duracao_minutos ? Number(row.duracao_minutos) : undefined,
+    quilometragem: row.quilometragem ?? undefined,
+  }))
 }
 
 export async function registerPatioEntrada(input: PatioEntradaInput): Promise<number> {

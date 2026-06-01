@@ -176,6 +176,7 @@ import {
   listPatioFilaPainel,
   listPatioFuncionarios,
   listPatioRevisaoProativa,
+  listPatioRelatorioServicos,
   listPatioVeiculoAtendimentoItens,
   listPatioVeiculoAtendimentos,
   markPatioFeedbackDone,
@@ -187,6 +188,7 @@ import {
   updatePatioClienteDados,
   updatePatioVeiculoDados,
   type PatioContatoExportacao,
+  type PatioRelatorioServico,
 } from './repositories/patioRepository'
 import { createPipelineFromSuggestion, listPipelineOportunidades, updatePipelineOportunidade, updatePipelineStage } from './repositories/pipelineRepository'
 import { escalateStaleCommercialSequences, listDefaultCommercialSequenceSteps, listSequenciaExecucoes, startDefaultCommercialSequence, updateSequenceStep, type SequenciaEtapaConfig } from './repositories/sequenciasRepository'
@@ -300,6 +302,7 @@ const navSectionsByMode: Record<AppMode, Array<{ title: string; items: Array<{ i
       title: 'Gestao',
       items: [
         { id: 'importacoes', label: 'Importacoes', icon: FileUp },
+        { id: 'relatorio-patio', label: 'Relatorio Patio', icon: BarChart3 },
         { id: 'vendedores', label: 'Equipe', icon: UserRound },
         { id: 'usuarios', label: 'Usuarios', icon: ShieldCheck },
         { id: 'auditoria', label: 'Auditoria', icon: CheckCircle2 },
@@ -322,7 +325,7 @@ const hiddenViewRedirects: Record<string, string> = {
   'campanhas-inbox': 'campanhas',
 }
 
-const adminOnlyViews = new Set(['importacoes', 'conflitos', 'mesclagem', 'relatorios', 'vendedores', 'usuarios', 'auditoria'])
+const adminOnlyViews = new Set(['importacoes', 'conflitos', 'mesclagem', 'relatorios', 'relatorio-patio', 'vendedores', 'usuarios', 'auditoria'])
 const sellerPrimaryViews = new Set(['cockpit', 'clientes', 'campanhas', 'orcamentos', 'catalogo'])
 const mobilePrimaryViews = new Set(['cockpit', 'clientes', 'campanhas', 'orcamentos'])
 const mobileAllowedViews = new Set(['cockpit', 'clientes', 'campanhas', 'orcamentos', 'cliente360', 'orcamento-editor', 'orcamento-detalhe'])
@@ -3286,6 +3289,9 @@ function App() {
             }}
           />
         )}
+        {session.role === 'admin' && view === 'relatorio-patio' && (
+          <PatioRelatorioGestao onLoad={listPatioRelatorioServicos} />
+        )}
         {session.role === 'admin' && view === 'vendedores' && (
           <VendedoresCarteira
             clientes={clientes}
@@ -3360,6 +3366,7 @@ function titleFor(view: string) {
     orcamentos: 'Propostas e conversao',
     catalogo: 'Catalogo e precos',
     relatorios: 'Relatorios gerenciais',
+    'relatorio-patio': 'Relatorio Patio',
     usuarios: 'Usuarios e permissoes',
     auditoria: 'Auditoria',
     cliente360: 'Ficha completa do cliente',
@@ -9679,6 +9686,111 @@ function PatioAnalisePneus({
         </div>
       )}
     </section>
+  )
+}
+
+function PatioRelatorioGestao({
+  onLoad,
+}: {
+  onLoad: (input: { startDate: string; endDate: string }) => Promise<PatioRelatorioServico[]>
+}) {
+  const today = new Date()
+  const defaultStart = new Date()
+  defaultStart.setDate(defaultStart.getDate() - 30)
+  const [startDate, setStartDate] = useState(defaultStart.toISOString().slice(0, 10))
+  const [endDate, setEndDate] = useState(today.toISOString().slice(0, 10))
+  const [items, setItems] = useState<PatioRelatorioServico[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const load = async () => {
+    setIsLoading(true)
+    setError('')
+    try {
+      setItems(await onLoad({ startDate, endDate }))
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar relatorio do patio.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void load()
+  }, [])
+
+  const visits = new Set(items.map((item) => item.patioExecucaoId)).size
+  const totalServicos = items.reduce((total, item) => total + Math.max(1, item.quantidade), 0)
+  const duracoes = items.map((item) => item.duracaoMinutos).filter((value): value is number => Boolean(value && value > 0))
+  const tempoMedio = duracoes.length ? Math.round(duracoes.reduce((total, value) => total + value, 0) / duracoes.length) : 0
+  const topBoxes = rankPatioReport(items, (item) => item.boxNome || (item.boxId ? `Box ${item.boxId}` : 'Sem box'))
+  const topServicos = rankPatioReport(items, (item) => item.servicoNome || 'Servico')
+  const topClientes = rankPatioReport(items, (item) => item.clienteNome || 'Cliente sem vinculo')
+  const topEquipe = rankPatioReport(items, (item) => item.funcionarioNome || 'Sem tecnico')
+
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Relatorio Patio</h2>
+          <p>Indicadores operacionais simples do patio consolidado no CRM.</p>
+        </div>
+        <button className="button primary" type="button" onClick={() => void load()} disabled={isLoading}>
+          {isLoading ? 'Carregando...' : 'Atualizar'}
+        </button>
+      </div>
+      {error && <div className="inline-error">{error}</div>}
+      <div className="filters-grid">
+        <label>
+          Inicio
+          <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+        </label>
+        <label>
+          Fim
+          <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+        </label>
+      </div>
+      <div className="metric-grid">
+        <Metric icon={CheckCircle2} label="Visitas finalizadas" value={numberLabel(visits)} tone="green" />
+        <Metric icon={ClipboardList} label="Itens executados" value={numberLabel(totalServicos)} tone="blue" />
+        <Metric icon={CalendarClock} label="Tempo medio" value={tempoMedio ? `${tempoMedio} min` : 'Sem media'} tone="amber" />
+        <Metric icon={BarChart3} label="Registros analisados" value={numberLabel(items.length)} tone="blue" />
+      </div>
+      <div className="patio-report-grid">
+        <RankPanel title="Servicos por box" items={topBoxes} />
+        <RankPanel title="Servicos mais feitos" items={topServicos} />
+        <RankPanel title="Clientes por volume" items={topClientes} />
+        <RankPanel title="Equipe por volume" items={topEquipe} />
+      </div>
+    </section>
+  )
+}
+
+function rankPatioReport(items: PatioRelatorioServico[], labeler: (item: PatioRelatorioServico) => string) {
+  return Array.from(items.reduce((acc, item) => {
+    const label = labeler(item)
+    acc.set(label, (acc.get(label) ?? 0) + Math.max(1, item.quantidade))
+    return acc
+  }, new Map<string, number>()).entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10)
+}
+
+function RankPanel({ title, items }: { title: string; items: Array<{ label: string; count: number }> }) {
+  return (
+    <article className="panel subtle">
+      <h3>{title}</h3>
+      <div className="status-list">
+        {items.map((item) => (
+          <div className="status-row" key={item.label}>
+            <span>{item.label}</span>
+            <strong>{numberLabel(item.count)}</strong>
+          </div>
+        ))}
+        {items.length === 0 && <div className="empty-state">Sem dados no periodo.</div>}
+      </div>
+    </article>
   )
 }
 
