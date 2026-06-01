@@ -727,6 +727,130 @@ select
 from acoes a
 left join retornos retorno on retorno.patio_veiculo_id = a.patio_veiculo_id;
 
+create or replace function public.listar_patio_revisao_proativa(
+  p_km_min numeric default null,
+  p_dias_min integer default null,
+  p_query text default null,
+  p_vendedor_id uuid default null,
+  p_limit integer default 50,
+  p_offset integer default 0
+)
+returns table (
+  patio_veiculo_id bigint,
+  cliente_id uuid,
+  cliente_nome text,
+  vendedor_id uuid,
+  veiculo_id uuid,
+  placa text,
+  veiculo_descricao text,
+  nome_motorista text,
+  contato_motorista text,
+  media_km_diaria numeric,
+  data_revisao_proativa date,
+  ultimo_km integer,
+  ultimo_atendimento_em timestamptz,
+  dias_desde_ultima_visita integer,
+  km_estimado_desde_visita integer,
+  contato_recomendado text,
+  contato_nome text,
+  contato_tipo text,
+  total_count bigint
+)
+language sql
+security invoker
+stable
+as $$
+with ultimos as (
+  select distinct on (pa.patio_veiculo_id)
+    pa.patio_veiculo_id,
+    pa.cliente_id,
+    pa.veiculo_id,
+    pa.quilometragem,
+    pa.fim_execucao
+  from public.patio_atendimentos pa
+  where pa.status = 'finalizado'
+    and pa.patio_veiculo_id is not null
+    and pa.quilometragem is not null
+  order by pa.patio_veiculo_id, pa.fim_execucao desc nulls last
+),
+base as (
+  select
+    pvs.patio_veiculo_id,
+    pvs.cliente_id,
+    c.nome as cliente_nome,
+    c.vendedor_id,
+    pvs.veiculo_id,
+    coalesce(v.placa, pvs.placa) as placa,
+    coalesce(v.descricao, pvs.modelo) as veiculo_descricao,
+    pvs.nome_motorista,
+    pvs.contato_motorista,
+    pvs.media_km_diaria,
+    pvs.data_revisao_proativa,
+    u.quilometragem as ultimo_km,
+    u.fim_execucao as ultimo_atendimento_em,
+    greatest(0, current_date - coalesce(u.fim_execucao::date, current_date))::integer as dias_desde_ultima_visita,
+    coalesce(round(pvs.media_km_diaria * greatest(0, current_date - coalesce(u.fim_execucao::date, current_date))), 0)::integer as km_estimado_desde_visita,
+    contato.whatsapp as contato_recomendado,
+    contato.nome as contato_nome,
+    contato.tipo as contato_tipo
+  from public.patio_veiculos_snapshot pvs
+  join ultimos u on u.patio_veiculo_id = pvs.patio_veiculo_id
+  join public.clientes c on c.id = pvs.cliente_id
+  left join public.veiculos v on v.id = pvs.veiculo_id
+  left join lateral (
+    select contato_base.nome, contato_base.tipo, contato_base.whatsapp
+    from (
+      select
+        cc.nome,
+        coalesce(cc.tipo, 'cadastro') as tipo,
+        nullif(coalesce(cc.whatsapp, cc.telefone), '') as whatsapp,
+        case cc.origem_sistema when 'patio' then 0 else 1 end as origem_ordem,
+        cc.prioridade,
+        cc.atualizado_em
+      from public.cliente_contatos cc
+      where cc.cliente_id = pvs.cliente_id
+        and cc.valido = true
+        and nullif(coalesce(cc.whatsapp, cc.telefone), '') is not null
+
+      union all
+
+      select
+        c.responsavel_nome,
+        'cadastro',
+        nullif(coalesce(c.whatsapp_principal, c.telefone_principal), ''),
+        1,
+        30,
+        c.atualizado_em
+      where nullif(coalesce(c.whatsapp_principal, c.telefone_principal), '') is not null
+    ) contato_base
+    order by contato_base.origem_ordem, contato_base.prioridade desc, contato_base.atualizado_em desc nulls last
+    limit 1
+  ) contato on true
+  where pvs.data_revisao_proativa is null
+    and c.excluido_em is null
+    and (p_vendedor_id is null or c.vendedor_id = p_vendedor_id)
+),
+filtrado as (
+  select *
+  from base
+  where (p_km_min is null or km_estimado_desde_visita >= p_km_min)
+    and (p_dias_min is null or dias_desde_ultima_visita >= p_dias_min)
+    and (
+      nullif(trim(coalesce(p_query, '')), '') is null
+      or unaccent(coalesce(cliente_nome, '')) ilike unaccent('%' || trim(p_query) || '%')
+      or unaccent(coalesce(placa, '')) ilike unaccent('%' || trim(p_query) || '%')
+      or unaccent(coalesce(nome_motorista, '')) ilike unaccent('%' || trim(p_query) || '%')
+    )
+)
+select
+  filtrado.*,
+  count(*) over() as total_count
+from filtrado
+order by km_estimado_desde_visita desc, dias_desde_ultima_visita desc
+limit greatest(1, least(coalesce(p_limit, 50), 200))
+offset greatest(0, coalesce(p_offset, 0));
+$$;
+
 grant select on public.patio_funcionarios_snapshot to anon, authenticated, service_role;
 grant select on public.patio_boxes_snapshot to anon, authenticated, service_role;
 grant select on public.patio_catalogo_servicos_snapshot to anon, authenticated, service_role;
@@ -745,6 +869,7 @@ grant execute on function public.adicionar_servico_box_patio_crm(bigint, text, t
 grant execute on function public.retirar_box_patio_crm(bigint) to anon, authenticated, service_role;
 grant execute on function public.finalizar_box_patio_crm(bigint, jsonb, text) to anon, authenticated, service_role;
 grant execute on function public.reverter_visita_patio_crm(bigint) to anon, authenticated, service_role;
+grant execute on function public.listar_patio_revisao_proativa(numeric, integer, text, uuid, integer, integer) to anon, authenticated, service_role;
 
 alter table public.patio_funcionarios_snapshot enable row level security;
 alter table public.patio_boxes_snapshot enable row level security;

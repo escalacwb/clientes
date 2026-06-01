@@ -98,6 +98,7 @@ type RevisaoRow = {
   contato_recomendado: string | null
   contato_nome: string | null
   contato_tipo: string | null
+  total_count?: number | null
 }
 
 type VeiculoBuscaRow = {
@@ -432,26 +433,18 @@ export async function listPatioRevisaoProativa(input: {
   const supabase = await getSupabase()
   if (!supabase) return { items: [], total: 0 }
 
-  const from = (input.page - 1) * input.pageSize
-  const to = from + input.pageSize - 1
-  let query = supabase
-    .from('vw_patio_revisao_proativa')
-    .select('*', { count: 'planned' })
-    .order('km_estimado_desde_visita', { ascending: false })
-    .order('dias_desde_ultima_visita', { ascending: false })
-    .range(from, to)
-
-  if (input.vendedorId) query = query.eq('vendedor_id', input.vendedorId)
-  if (input.kmMin) query = query.gte('km_estimado_desde_visita', input.kmMin)
-  if (input.diasMin) query = query.gte('dias_desde_ultima_visita', input.diasMin)
-  if (input.query?.trim()) {
-    const term = `%${input.query.trim()}%`
-    query = query.or(`cliente_nome.ilike.${term},placa.ilike.${term},nome_motorista.ilike.${term}`)
-  }
-
-  const { data, error, count } = await query
+  const offset = (input.page - 1) * input.pageSize
+  const { data, error } = await supabase.rpc('listar_patio_revisao_proativa', {
+    p_km_min: input.kmMin ?? null,
+    p_dias_min: input.diasMin ?? null,
+    p_query: input.query?.trim() || null,
+    p_vendedor_id: input.vendedorId ?? null,
+    p_limit: input.pageSize,
+    p_offset: offset,
+  })
   if (error) throw error
-  return { items: (data as RevisaoRow[] | null ?? []).map(mapRevisao), total: count ?? 0 }
+  const rows = data as RevisaoRow[] | null ?? []
+  return { items: rows.map(mapRevisao), total: Number(rows[0]?.total_count ?? 0) }
 }
 
 export async function markPatioFeedbackDone(patioExecucaoId: number): Promise<void> {

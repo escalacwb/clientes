@@ -500,8 +500,9 @@ function App() {
   const [patioRevisaoTotal, setPatioRevisaoTotal] = useState(0)
   const [patioRevisaoPage, setPatioRevisaoPage] = useState(1)
   const [patioRevisaoQuery, setPatioRevisaoQuery] = useState('')
-  const [patioRevisaoKmMin, setPatioRevisaoKmMin] = useState(80000)
-  const [patioRevisaoDiasMin, setPatioRevisaoDiasMin] = useState(120)
+  const [patioRevisaoMode, setPatioRevisaoMode] = useState<'km' | 'tempo'>('km')
+  const [patioRevisaoKmMin, setPatioRevisaoKmMin] = useState(20000)
+  const [patioRevisaoDiasMin, setPatioRevisaoDiasMin] = useState(180)
   const [isLoadingPatioRevisao, setIsLoadingPatioRevisao] = useState(false)
   const [possiveisDuplicados, setPossiveisDuplicados] = useState<PossivelDuplicado[]>(isSupabaseConfigured ? [] : seedPossiveisDuplicados)
   const [mesclagens, setMesclagens] = useState<ClienteMesclagem[]>(isSupabaseConfigured ? [] : seedMesclagens)
@@ -1177,8 +1178,8 @@ function App() {
           pageSize: 50,
           vendedorId: session.role === 'vendedor' ? session.id : undefined,
           query: patioRevisaoQuery,
-          kmMin: patioRevisaoKmMin,
-          diasMin: patioRevisaoDiasMin,
+          kmMin: patioRevisaoMode === 'km' ? patioRevisaoKmMin : undefined,
+          diasMin: patioRevisaoMode === 'tempo' ? patioRevisaoDiasMin : undefined,
         })
         if (!isMounted) return
         setPatioRevisaoItems(result.items)
@@ -1197,7 +1198,7 @@ function App() {
       isMounted = false
       window.clearTimeout(handle)
     }
-  }, [isCheckingSession, patioRevisaoDiasMin, patioRevisaoKmMin, patioRevisaoPage, patioRevisaoQuery, session, view])
+  }, [isCheckingSession, patioRevisaoDiasMin, patioRevisaoKmMin, patioRevisaoMode, patioRevisaoPage, patioRevisaoQuery, session, view])
 
   useEffect(() => {
     let isMounted = true
@@ -2160,11 +2161,16 @@ function App() {
             page={patioRevisaoPage}
             pageSize={50}
             query={patioRevisaoQuery}
+            mode={patioRevisaoMode}
             kmMin={patioRevisaoKmMin}
             diasMin={patioRevisaoDiasMin}
             isLoading={isLoadingPatioRevisao}
             onQueryChange={(nextQuery) => {
               setPatioRevisaoQuery(nextQuery)
+              setPatioRevisaoPage(1)
+            }}
+            onModeChange={(mode) => {
+              setPatioRevisaoMode(mode)
               setPatioRevisaoPage(1)
             }}
             onKmMinChange={(value) => {
@@ -8894,6 +8900,19 @@ function numberLabel(value: number) {
   return value.toLocaleString('pt-BR')
 }
 
+function waMeUrl(phone?: string, message?: string) {
+  if (!phone) return ''
+  let digits = phone.replace(/\D/g, '')
+  if (digits.startsWith('55')) digits = digits.slice(2)
+  if (digits.length > 11 && digits.startsWith('0')) digits = digits.slice(1)
+  if (digits.length === 10) {
+    const localNumber = digits.slice(2)
+    if (/^[6789]/.test(localNumber)) digits = `${digits.slice(0, 2)}9${localNumber}`
+  }
+  if (![10, 11].includes(digits.length)) return ''
+  return `https://wa.me/55${digits}${message ? `?text=${encodeURIComponent(message)}` : ''}`
+}
+
 function areaLabel(area?: string) {
   const labels: Record<string, string> = {
     borracharia: 'Borracharia',
@@ -10985,6 +11004,7 @@ function PatioFeedback({
         {items.map((item) => {
           const phone = item.contatoRecomendado || item.contatoMotorista
           const message = buildPatioFeedbackMessage(item)
+          const whatsappUrl = waMeUrl(phone, message)
           return (
             <article className="panel subtle" key={item.patioExecucaoId}>
               <div className="panel-header">
@@ -10993,8 +11013,8 @@ function PatioFeedback({
                   <p>{item.placa ?? 'Sem placa'} · {dateLabel(item.fimExecucao)} · {item.quilometragem ? `${numberLabel(item.quilometragem)} km` : 'KM nao informado'}</p>
                 </div>
                 <div className="row-actions">
-                  {phone && (
-                    <a className="button primary" href={`https://wa.me/${phone}?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer">
+                  {whatsappUrl && (
+                    <a className="button primary" href={whatsappUrl} target="_blank" rel="noreferrer">
                       WhatsApp
                     </a>
                   )}
@@ -11036,10 +11056,12 @@ function PatioRevisao({
   page,
   pageSize,
   query,
+  mode,
   kmMin,
   diasMin,
   isLoading,
   onQueryChange,
+  onModeChange,
   onKmMinChange,
   onDiasMinChange,
   onPageChange,
@@ -11052,10 +11074,12 @@ function PatioRevisao({
   page: number
   pageSize: number
   query: string
+  mode: 'km' | 'tempo'
   kmMin: number
   diasMin: number
   isLoading: boolean
   onQueryChange: (query: string) => void
+  onModeChange: (mode: 'km' | 'tempo') => void
   onKmMinChange: (value: number) => void
   onDiasMinChange: (value: number) => void
   onPageChange: (page: number) => void
@@ -11087,17 +11111,24 @@ function PatioRevisao({
       </div>
       <div className="filters-grid">
         <label>
+          Modo de busca
+          <select value={mode} onChange={(event) => onModeChange(event.target.value as 'km' | 'tempo')}>
+            <option value="km">Quilometragem rodada</option>
+            <option value="tempo">Tempo desde a ultima visita</option>
+          </select>
+        </label>
+        <label>
           Buscar
           <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Cliente, placa ou motorista" />
         </label>
-        <label>
+        {mode === 'km' && <label>
           KM minimo estimado
           <input type="number" value={kmMin} onChange={(event) => onKmMinChange(Number(event.target.value || 0))} />
-        </label>
-        <label>
+        </label>}
+        {mode === 'tempo' && <label>
           Dias minimos sem visita
           <input type="number" value={diasMin} onChange={(event) => onDiasMinChange(Number(event.target.value || 0))} />
-        </label>
+        </label>}
       </div>
       {isLoading && <div className="empty-state">Carregando revisoes...</div>}
       {!isLoading && items.length === 0 && <div className="empty-state">Nenhum veiculo encontrado com esses criterios.</div>}
@@ -11105,16 +11136,17 @@ function PatioRevisao({
         {items.map((item) => {
           const phone = item.contatoRecomendado || item.contatoMotorista
           const message = buildPatioRevisaoMessage(item)
+          const whatsappUrl = waMeUrl(phone, message)
           return (
             <article className="panel subtle" key={item.patioVeiculoId}>
               <div className="panel-header">
                 <div>
-                  <h3>{item.placa ?? 'Sem placa'} · {item.clienteNome}</h3>
-                  <p>{numberLabel(item.kmEstimadoDesdeVisita)} km estimados · {item.diasDesdeUltimaVisita} dias sem visita · ultimo KM {item.ultimoKm ? numberLabel(item.ultimoKm) : 'n/d'}</p>
+                  <h3>{item.placa ?? 'Sem placa'} - {item.clienteNome}</h3>
+                  <p>{numberLabel(item.kmEstimadoDesdeVisita)} km rodados desde a ultima visita - {item.diasDesdeUltimaVisita} dias sem visita - ultimo KM {item.ultimoKm ? numberLabel(item.ultimoKm) : 'n/d'}</p>
                 </div>
                 <div className="row-actions">
-                  {phone && (
-                    <a className="button primary" href={`https://wa.me/${phone}?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer">
+                  {whatsappUrl && (
+                    <a className="button primary" href={whatsappUrl} target="_blank" rel="noreferrer">
                       WhatsApp
                     </a>
                   )}
@@ -11152,11 +11184,43 @@ function PatioRevisao({
 
 function buildPatioFeedbackMessage(item: PatioFeedbackPendente) {
   const servicos = item.servicos.slice(0, 3).join(', ')
-  return `Ola, tudo bem? Aqui e da Capital Truck Center. Estamos passando para saber como foi o atendimento do veiculo ${item.placa ?? ''}${servicos ? ` (${servicos})` : ''}. Seu feedback ajuda muito nossa equipe.`
+  const contato = item.contatoNome || item.nomeMotorista || 'Cliente'
+  const dataServico = dateLabel(item.fimExecucao)
+  const km = item.quilometragem ? `${numberLabel(item.quilometragem)} km` : 'KM nao informado'
+  return `Ola ${contato},
+
+Somos da Capital Truck Center e estamos fazendo o acompanhamento do servico realizado no seu veiculo ${item.veiculoDescricao ?? ''}, placa ${item.placa ?? ''}, no dia ${dataServico}.
+
+Foi feito ${servicos || 'servico de patio'}, com ${km}.
+
+Gostariamos do seu feedback:
+
+1. O servico resolveu o problema?
+2. Como voce avalia a agilidade e o conhecimento da equipe?
+3. O atendimento e a estrutura da loja foram satisfatorios?
+
+Sua opiniao e muito importante para melhorarmos sempre.
+
+Agradecemos sua parceria e ficamos a disposicao no (67) 98417-3800.
+
+Atenciosamente,
+Equipe de Qualidade | Capital Truck Center`
 }
 
 function buildPatioRevisaoMessage(item: PatioRevisaoProativa) {
-  return `Ola, tudo bem? Aqui e da Capital Truck Center. Pelo historico do veiculo ${item.placa ?? ''}, ja pode ser um bom momento para revisar alinhamento, balanceamento ou pneus. Posso verificar uma condicao para voce?`
+  const contato = item.contatoNome || item.nomeMotorista || 'Cliente'
+  const kmUltimaVisita = item.ultimoKm ? numberLabel(item.ultimoKm) : 'nao informado'
+  const kmRodados = numberLabel(item.kmEstimadoDesdeVisita)
+  const kmAtual = item.ultimoKm ? numberLabel(item.ultimoKm + item.kmEstimadoDesdeVisita) : 'nao estimado'
+  return `Ola, ${contato}! Tudo bem?
+
+Aqui e da Capital Truck Center. Vimos que o veiculo ${item.veiculoDescricao ?? ''}, placa ${item.placa ?? ''}, pode estar precisando de uma nova revisao.
+
+A ultima visita foi com ${kmUltimaVisita} km e, com base no historico do nosso sistema, ja rodou aproximadamente ${kmRodados} km desde entao, estando agora com cerca de ${kmAtual} km.
+
+Nosso atendimento e por ordem de chegada, entao e so passar na loja quando puder.
+
+Se a quilometragem atual estiver diferente dessa estimativa, por favor nos envie a KM correta para atualizarmos no sistema.`
 }
 
 function Cliente360({
@@ -18884,3 +18948,4 @@ function Info({ label, value }: { label: string; value: string }) {
 }
 
 export default App
+
