@@ -621,30 +621,7 @@ function App() {
       clearModuleError('dashboard')
 
       try {
-        const [
-          loadedInteracoes,
-          loadedOrcamentos,
-          loadedImportacoes,
-          loadedConflitos,
-          loadedUsuarios,
-          loadedAlteracoes,
-          loadedAuditoriaEventos,
-          loadedTarefas,
-          loadedPossiveisDuplicados,
-          loadedMesclagens,
-          loadedCatalogo,
-          loadedCatalogoRegrasDesconto,
-          loadedDashboardResumo,
-          loadedVendedoresResumo,
-          loadedVendedoresHistoricosResumo,
-          loadedRankingMedidas,
-          loadedRankingServicos,
-          loadedFunilGerencial,
-          loadedMotivosPerda,
-          loadedAtividadesDia,
-          loadedForecastVendedor,
-          loadedMetasVendedores,
-        ] = await Promise.all([
+        const results = await Promise.allSettled([
           listInteracoes(),
           listOrcamentos(),
           listImportacoes(),
@@ -668,6 +645,34 @@ function App() {
           listForecastVendedor(),
           listMetasVendedores(),
         ])
+        const rejected = results.find((result) => result.status === 'rejected')
+        const valueAt = <T,>(index: number, fallback: T): T => {
+          const result = results[index]
+          return result?.status === 'fulfilled' ? result.value as T : fallback
+        }
+
+        const loadedInteracoes = valueAt(0, interacoes)
+        const loadedOrcamentos = valueAt(1, orcamentos)
+        const loadedImportacoes = valueAt(2, importacoes)
+        const loadedConflitos = valueAt(3, conflitos)
+        const loadedUsuarios = valueAt(4, usuarios.length ? usuarios : authUsuarios)
+        const loadedAlteracoes = valueAt(5, alteracoes)
+        const loadedAuditoriaEventos = valueAt(6, auditoriaEventos)
+        const loadedTarefas = valueAt(7, tarefas)
+        const loadedPossiveisDuplicados = valueAt(8, possiveisDuplicados)
+        const loadedMesclagens = valueAt(9, mesclagens)
+        const loadedCatalogo = valueAt(10, catalogo)
+        const loadedCatalogoRegrasDesconto = valueAt(11, catalogoRegrasDesconto)
+        const loadedDashboardResumo = valueAt(12, dashboardResumo)
+        const loadedVendedoresResumo = valueAt(13, vendedoresResumo)
+        const loadedVendedoresHistoricosResumo = valueAt(14, vendedoresHistoricosResumo)
+        const loadedRankingMedidas = valueAt(15, rankingMedidas)
+        const loadedRankingServicos = valueAt(16, rankingServicos)
+        const loadedFunilGerencial = valueAt(17, funilGerencial)
+        const loadedMotivosPerda = valueAt(18, motivosPerda)
+        const loadedAtividadesDia = valueAt(19, atividadesDia)
+        const loadedForecastVendedor = valueAt(20, forecastVendedor)
+        const loadedMetasVendedores = valueAt(21, metasVendedores)
 
         if (!isMounted) return
         setInteracoes(loadedInteracoes)
@@ -683,6 +688,9 @@ function App() {
         setCatalogo(loadedCatalogo)
         setCatalogoRegrasDesconto(loadedCatalogoRegrasDesconto)
         setDashboardResumo(loadedDashboardResumo)
+        if (loadedDashboardResumo?.clientesTotal && !query.trim() && clienteFiltro === 'todos') {
+          setClientesTotal(loadedDashboardResumo.clientesTotal)
+        }
         setVendedoresResumo(loadedVendedoresResumo)
         setVendedoresHistoricosResumo(loadedVendedoresHistoricosResumo)
         setRankingMedidas(loadedRankingMedidas)
@@ -692,6 +700,9 @@ function App() {
         setAtividadesDia(loadedAtividadesDia)
         setForecastVendedor(loadedForecastVendedor)
         setMetasVendedores(loadedMetasVendedores)
+        if (rejected) {
+          setModuleError('dashboard', rejected.reason instanceof Error ? rejected.reason.message : 'Alguns indicadores nao carregaram agora.')
+        }
       } catch (exception) {
         if (!isMounted) return
         setModuleError('dashboard', exception instanceof Error ? exception.message : 'Nao foi possivel carregar os dados.')

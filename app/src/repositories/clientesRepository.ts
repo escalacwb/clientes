@@ -121,7 +121,7 @@ export async function listClientesPage(input: {
   const to = from + input.pageSize - 1
   let query = supabase
     .from('clientes')
-    .select('*,users!clientes_vendedor_id_fkey(nome)', { count: 'exact' })
+    .select('*,users!clientes_vendedor_id_fkey(nome)', { count: 'planned' })
     .is('excluido_em', null)
 
   query = applyClienteFilters(query, input)

@@ -450,21 +450,39 @@ begin
 end;
 $$;
 
-create or replace view public.vw_patio_catalogo_servicos
-with (security_invoker = true) as
-select distinct area, servico_nome as nome
+create table if not exists public.patio_catalogo_servicos_snapshot (
+  area text not null,
+  nome text not null,
+  origem text not null default 'historico',
+  sincronizado_em timestamptz not null default now(),
+  primary key (area, nome)
+);
+
+insert into public.patio_catalogo_servicos_snapshot (area, nome, origem)
+select distinct
+  coalesce(nullif(trim(area), ''), 'outros') as area,
+  trim(servico_nome) as nome,
+  'historico' as origem
 from public.patio_atendimento_itens
 where servico_nome is not null and trim(servico_nome) <> ''
-union
-select 'borracharia', 'MONTAGEM'
-union
-select 'borracharia', 'TROCA DE PNEU'
-union
-select 'alinhamento', 'ALINHAMENTO'
-union
-select 'alinhamento', 'BALANCEAMENTO'
-union
-select 'manutencao', 'CAMBAGEM';
+on conflict (area, nome) do update
+set sincronizado_em = now();
+
+insert into public.patio_catalogo_servicos_snapshot (area, nome, origem)
+values
+  ('borracharia', 'MONTAGEM', 'padrao'),
+  ('borracharia', 'TROCA DE PNEU', 'padrao'),
+  ('alinhamento', 'ALINHAMENTO', 'padrao'),
+  ('alinhamento', 'BALANCEAMENTO', 'padrao'),
+  ('manutencao', 'CAMBAGEM', 'padrao')
+on conflict (area, nome) do update
+set origem = excluded.origem,
+    sincronizado_em = now();
+
+create or replace view public.vw_patio_catalogo_servicos
+with (security_invoker = true) as
+select area, nome
+from public.patio_catalogo_servicos_snapshot;
 
 create or replace view public.vw_patio_alocacao_veiculos
 with (security_invoker = true) as
@@ -692,6 +710,7 @@ left join retornos retorno on retorno.patio_veiculo_id = a.patio_veiculo_id;
 
 grant select on public.patio_funcionarios_snapshot to anon, authenticated, service_role;
 grant select on public.patio_boxes_snapshot to anon, authenticated, service_role;
+grant select on public.patio_catalogo_servicos_snapshot to anon, authenticated, service_role;
 grant select on public.vw_patio_catalogo_servicos to anon, authenticated, service_role;
 grant select on public.vw_patio_alocacao_veiculos to anon, authenticated, service_role;
 grant select on public.vw_patio_areas_pendentes to anon, authenticated, service_role;
