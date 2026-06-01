@@ -392,6 +392,69 @@ export async function searchPatioVeiculos(queryText: string): Promise<PatioVeicu
   return (data as VeiculoBuscaRow[] | null ?? []).map(mapVeiculoBusca)
 }
 
+export async function updatePatioClienteDados(input: {
+  clienteId: string
+  nome?: string
+  responsavel?: string
+  telefone?: string
+  whatsapp?: string
+  cidade?: string
+  uf?: string
+}): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase) return
+
+  const patch: Record<string, string | undefined> = {
+    nome: input.nome?.trim() || undefined,
+    responsavel_nome: input.responsavel?.trim() || undefined,
+    telefone_principal: input.telefone?.trim() || undefined,
+    whatsapp_principal: input.whatsapp?.trim() || undefined,
+    cidade: input.cidade?.trim() || undefined,
+    uf: input.uf?.trim().toUpperCase() || undefined,
+  }
+
+  const { error } = await supabase
+    .from('clientes')
+    .update(patch)
+    .eq('id', input.clienteId)
+
+  if (error) throw error
+}
+
+export async function updatePatioVeiculoDados(input: {
+  patioVeiculoId: number
+  veiculoId?: string
+  modelo?: string
+  nomeMotorista?: string
+  contatoMotorista?: string
+  mediaKmDiaria?: number
+}): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase) return
+
+  const { error: snapshotError } = await supabase
+    .from('patio_veiculos_snapshot')
+    .update({
+      modelo: input.modelo?.trim() || undefined,
+      nome_motorista: input.nomeMotorista?.trim() || undefined,
+      contato_motorista: input.contatoMotorista?.trim() || undefined,
+      media_km_diaria: Number.isFinite(input.mediaKmDiaria) ? input.mediaKmDiaria : undefined,
+      data_atualizacao_contato: new Date().toISOString(),
+    })
+    .eq('patio_veiculo_id', input.patioVeiculoId)
+
+  if (snapshotError) throw snapshotError
+
+  if (input.veiculoId && input.modelo?.trim()) {
+    const { error: vehicleError } = await supabase
+      .from('veiculos')
+      .update({ descricao: input.modelo.trim() })
+      .eq('id', input.veiculoId)
+
+    if (vehicleError) throw vehicleError
+  }
+}
+
 export async function registerPatioEntrada(input: PatioEntradaInput): Promise<number> {
   const supabase = await getSupabase()
   if (!supabase) throw new Error('Supabase nao configurado.')

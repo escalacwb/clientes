@@ -183,6 +183,8 @@ import {
   revertPatioVisit,
   searchPatioVeiculos,
   unassignPatioBox,
+  updatePatioClienteDados,
+  updatePatioVeiculoDados,
 } from './repositories/patioRepository'
 import { createPipelineFromSuggestion, listPipelineOportunidades, updatePipelineOportunidade, updatePipelineStage } from './repositories/pipelineRepository'
 import { escalateStaleCommercialSequences, listDefaultCommercialSequenceSteps, listSequenciaExecucoes, startDefaultCommercialSequence, updateSequenceStep, type SequenciaEtapaConfig } from './repositories/sequenciasRepository'
@@ -260,6 +262,7 @@ const navSectionsByMode: Record<AppMode, Array<{ title: string; items: Array<{ i
       title: 'Operacao',
       items: [
         { id: 'patio-entrada', label: 'Cadastro de Servico', icon: Truck },
+        { id: 'patio-dados', label: 'Dados de Clientes', icon: UsersRound },
         { id: 'patio-alocacao', label: 'Alocar Servicos', icon: ClipboardList },
         { id: 'patio-fila', label: 'Filas de Servico', icon: BarChart3 },
         { id: 'patio-boxes', label: 'Boxes', icon: Gauge },
@@ -914,7 +917,7 @@ function App() {
     let isMounted = true
 
     async function loadPatioEntrada() {
-      if (isCheckingSession || !session || !['patio-entrada', 'patio-historico'].includes(view)) return
+      if (isCheckingSession || !session || !['patio-entrada', 'patio-historico', 'patio-dados'].includes(view)) return
       if (patioEntradaQuery.trim().length < 2) {
         setPatioEntradaResults([])
         return
@@ -1901,6 +1904,35 @@ function App() {
               setPatioFilaPage(1)
             }}
             onPageChange={setPatioFilaPage}
+            onOpenClient={async (clienteId) => {
+              await ensureClientInMemory(clienteId)
+              setSelectedClientId(clienteId)
+              setAppMode('crm')
+              localStorage.setItem('capital-crm:mode', 'crm')
+              setView('cliente360')
+            }}
+          />
+        )}
+
+        {appMode === 'patio' && view === 'patio-dados' && (
+          <PatioDadosClientes
+            query={patioEntradaQuery}
+            results={patioEntradaResults}
+            isLoading={isLoadingPatioEntrada}
+            onQueryChange={setPatioEntradaQuery}
+            onSaveCliente={async (input) => {
+              await updatePatioClienteDados(input)
+              setPatioEntradaResults(await searchPatioVeiculos(patioEntradaQuery))
+            }}
+            onSaveVeiculo={async (input) => {
+              await updatePatioVeiculoDados(input)
+              setPatioEntradaResults(await searchPatioVeiculos(patioEntradaQuery))
+            }}
+            onLoadHistorico={async (patioVeiculoId) => {
+              const atendimentos = await listPatioVeiculoAtendimentos(patioVeiculoId)
+              const itens = await listPatioVeiculoAtendimentoItens(atendimentos.map((item) => item.patioExecucaoId))
+              return { atendimentos, itens }
+            }}
             onOpenClient={async (clienteId) => {
               await ensureClientInMemory(clienteId)
               setSelectedClientId(clienteId)
@@ -3320,6 +3352,7 @@ function titleFor(view: string) {
     auditoria: 'Auditoria',
     cliente360: 'Ficha completa do cliente',
     'patio-entrada': 'Cadastro de Servico',
+    'patio-dados': 'Dados de Clientes',
     'patio-alocacao': 'Alocar Servicos',
     'patio-fila': 'Filas de Servico',
     'patio-boxes': 'Visao dos Boxes',
@@ -9196,6 +9229,224 @@ function PatioHistoricoVeiculo({
               </article>
             )
           })}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function PatioDadosClientes({
+  query,
+  results,
+  isLoading,
+  onQueryChange,
+  onSaveCliente,
+  onSaveVeiculo,
+  onLoadHistorico,
+  onOpenClient,
+}: {
+  query: string
+  results: PatioVeiculoBusca[]
+  isLoading: boolean
+  onQueryChange: (query: string) => void
+  onSaveCliente: (input: { clienteId: string; nome?: string; responsavel?: string; telefone?: string; whatsapp?: string }) => Promise<void>
+  onSaveVeiculo: (input: { patioVeiculoId: number; veiculoId?: string; modelo?: string; nomeMotorista?: string; contatoMotorista?: string; mediaKmDiaria?: number }) => Promise<void>
+  onLoadHistorico: (patioVeiculoId: number) => Promise<{ atendimentos: PatioAtendimentoResumo[]; itens: PatioAtendimentoItemResumo[] }>
+  onOpenClient: (clienteId: string) => void | Promise<void>
+}) {
+  const [selected, setSelected] = useState<PatioVeiculoBusca | undefined>()
+  const [clienteForm, setClienteForm] = useState({ nome: '', responsavel: '', telefone: '', whatsapp: '' })
+  const [veiculoForm, setVeiculoForm] = useState({ modelo: '', nomeMotorista: '', contatoMotorista: '', mediaKmDiaria: '' })
+  const [atendimentos, setAtendimentos] = useState<PatioAtendimentoResumo[]>([])
+  const [itens, setItens] = useState<PatioAtendimentoItemResumo[]>([])
+  const [isSaving, setIsSaving] = useState('')
+  const [isLoadingHistorico, setIsLoadingHistorico] = useState(false)
+  const [error, setError] = useState('')
+
+  const chooseVehicle = (vehicle: PatioVeiculoBusca) => {
+    setSelected(vehicle)
+    setError('')
+    setClienteForm({
+      nome: vehicle.clienteNome ?? '',
+      responsavel: vehicle.contatoNome ?? '',
+      telefone: vehicle.contatoRecomendado ?? '',
+      whatsapp: vehicle.contatoRecomendado ?? '',
+    })
+    setVeiculoForm({
+      modelo: vehicle.veiculoDescricao ?? '',
+      nomeMotorista: vehicle.nomeMotorista ?? '',
+      contatoMotorista: vehicle.contatoMotorista ?? '',
+      mediaKmDiaria: vehicle.mediaKmDiaria ? String(Math.round(vehicle.mediaKmDiaria)) : '',
+    })
+    setAtendimentos([])
+    setItens([])
+  }
+
+  const loadHistorico = async () => {
+    if (!selected) return
+    setIsLoadingHistorico(true)
+    setError('')
+    try {
+      const result = await onLoadHistorico(selected.patioVeiculoId)
+      setAtendimentos(result.atendimentos)
+      setItens(result.itens)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar historico.')
+    } finally {
+      setIsLoadingHistorico(false)
+    }
+  }
+
+  const saveCliente = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!selected?.clienteId) return
+    setIsSaving('cliente')
+    setError('')
+    try {
+      await onSaveCliente({ clienteId: selected.clienteId, ...clienteForm })
+      setSelected((current) => current ? { ...current, clienteNome: clienteForm.nome, contatoNome: clienteForm.responsavel, contatoRecomendado: clienteForm.whatsapp || clienteForm.telefone } : current)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel salvar cliente.')
+    } finally {
+      setIsSaving('')
+    }
+  }
+
+  const saveVeiculo = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!selected) return
+    setIsSaving('veiculo')
+    setError('')
+    try {
+      await onSaveVeiculo({
+        patioVeiculoId: selected.patioVeiculoId,
+        veiculoId: selected.veiculoId,
+        modelo: veiculoForm.modelo,
+        nomeMotorista: veiculoForm.nomeMotorista,
+        contatoMotorista: veiculoForm.contatoMotorista,
+        mediaKmDiaria: Number(veiculoForm.mediaKmDiaria) || undefined,
+      })
+      setSelected((current) => current ? {
+        ...current,
+        veiculoDescricao: veiculoForm.modelo,
+        nomeMotorista: veiculoForm.nomeMotorista,
+        contatoMotorista: veiculoForm.contatoMotorista,
+        mediaKmDiaria: Number(veiculoForm.mediaKmDiaria) || undefined,
+      } : current)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel salvar veiculo.')
+    } finally {
+      setIsSaving('')
+    }
+  }
+
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Dados de clientes</h2>
+          <p>Busca operacional para corrigir contato, motorista e dados do veiculo sem sair do modo Patio.</p>
+        </div>
+        {selected?.clienteId && <button className="button" type="button" onClick={() => onOpenClient(selected.clienteId!)}>Abrir ficha CRM</button>}
+      </div>
+      <div className="filters-grid">
+        <label>
+          Cliente, placa ou motorista
+          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Digite ao menos 2 caracteres" />
+        </label>
+      </div>
+      {error && <div className="inline-error">{error}</div>}
+      {isLoading && <div className="empty-state">Buscando dados...</div>}
+      {!isLoading && query.trim().length >= 2 && results.length === 0 && <div className="empty-state">Nenhum cliente ou veiculo encontrado.</div>}
+      {results.length > 0 && (
+        <div className="patio-history-results">
+          {results.slice(0, 12).map((item) => (
+            <button className={selected?.patioVeiculoId === item.patioVeiculoId ? 'button primary' : 'button'} type="button" key={item.patioVeiculoId} onClick={() => chooseVehicle(item)}>
+              {item.placa ?? 'Sem placa'} - {item.clienteNome ?? 'Cliente sem vinculo'}
+            </button>
+          ))}
+        </div>
+      )}
+      {selected && (
+        <div className="patio-data-grid">
+          <form className="panel subtle" onSubmit={(event) => void saveCliente(event)}>
+            <h3>Cliente e contato</h3>
+            <div className="filters-grid">
+              <label>
+                Nome do cliente
+                <input value={clienteForm.nome} onChange={(event) => setClienteForm((current) => ({ ...current, nome: event.target.value }))} disabled={!selected.clienteId} />
+              </label>
+              <label>
+                Responsavel
+                <input value={clienteForm.responsavel} onChange={(event) => setClienteForm((current) => ({ ...current, responsavel: event.target.value }))} disabled={!selected.clienteId} />
+              </label>
+              <label>
+                Telefone
+                <input value={clienteForm.telefone} onChange={(event) => setClienteForm((current) => ({ ...current, telefone: event.target.value }))} disabled={!selected.clienteId} />
+              </label>
+              <label>
+                WhatsApp principal
+                <input value={clienteForm.whatsapp} onChange={(event) => setClienteForm((current) => ({ ...current, whatsapp: event.target.value }))} disabled={!selected.clienteId} />
+              </label>
+            </div>
+            {!selected.clienteId && <div className="empty-state">Veiculo ainda sem cliente vinculado no CRM.</div>}
+            <button className="button primary" type="submit" disabled={!selected.clienteId || isSaving === 'cliente'}>{isSaving === 'cliente' ? 'Salvando...' : 'Salvar cliente'}</button>
+          </form>
+          <form className="panel subtle" onSubmit={(event) => void saveVeiculo(event)}>
+            <h3>Veiculo e motorista</h3>
+            <div className="filters-grid">
+              <label>
+                Placa
+                <input value={selected.placa ?? ''} disabled />
+              </label>
+              <label>
+                Modelo
+                <input value={veiculoForm.modelo} onChange={(event) => setVeiculoForm((current) => ({ ...current, modelo: event.target.value }))} />
+              </label>
+              <label>
+                Motorista
+                <input value={veiculoForm.nomeMotorista} onChange={(event) => setVeiculoForm((current) => ({ ...current, nomeMotorista: event.target.value }))} />
+              </label>
+              <label>
+                Contato motorista
+                <input value={veiculoForm.contatoMotorista} onChange={(event) => setVeiculoForm((current) => ({ ...current, contatoMotorista: event.target.value }))} />
+              </label>
+              <label>
+                Media km/dia
+                <input type="number" value={veiculoForm.mediaKmDiaria} onChange={(event) => setVeiculoForm((current) => ({ ...current, mediaKmDiaria: event.target.value }))} />
+              </label>
+            </div>
+            <button className="button primary" type="submit" disabled={isSaving === 'veiculo'}>{isSaving === 'veiculo' ? 'Salvando...' : 'Salvar veiculo'}</button>
+          </form>
+          <div className="panel subtle wide-field">
+            <div className="panel-header">
+              <div>
+                <h3>Historico rapido</h3>
+                <p>Ultimas visitas e servicos desta placa.</p>
+              </div>
+              <button className="button" type="button" onClick={() => void loadHistorico()} disabled={isLoadingHistorico}>
+                {isLoadingHistorico ? 'Carregando...' : 'Ver historico'}
+              </button>
+            </div>
+            {atendimentos.length === 0 && !isLoadingHistorico && <div className="empty-state">Clique em ver historico para consultar esta placa.</div>}
+            {atendimentos.slice(0, 6).map((atendimento) => {
+              const servicosDaVisita = itens.filter((item) => item.patioExecucaoId === atendimento.patioExecucaoId)
+              return (
+                <div className="status-list" key={atendimento.patioExecucaoId}>
+                  <div className="status-row">
+                    <span>{dateLabel(atendimento.inicioExecucao || atendimento.fimExecucao)} - KM {atendimento.quilometragem ? numberLabel(atendimento.quilometragem) : 'nao informado'}</span>
+                    <strong>{atendimento.status ?? 'sem status'}</strong>
+                  </div>
+                  {servicosDaVisita.slice(0, 4).map((servico) => (
+                    <div className="status-row" key={servico.id}>
+                      <span>{areaLabel(servico.area)} - {servico.quantidade ?? 1}x {servico.servicoNome || servico.descricao || 'Servico'}</span>
+                      <strong>{servico.status ?? ''}</strong>
+                    </div>
+                  ))}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
     </section>
