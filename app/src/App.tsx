@@ -181,6 +181,7 @@ import {
   listPatioRelatorioServicos,
   listPatioVeiculoAtendimentoItens,
   listPatioVeiculoAtendimentos,
+  markPatioContatosExportados,
   markPatioFeedbackDone,
   markPatioRevisaoDone,
   registerPatioEntrada,
@@ -2136,7 +2137,7 @@ function App() {
         )}
 
         {appMode === 'patio' && view === 'patio-contatos' && (
-          <PatioExportarContatos onLoadContatos={listPatioContatosExportacao} />
+          <PatioExportarContatos onLoadContatos={listPatioContatosExportacao} onMarkExported={markPatioContatosExportados} />
         )}
 
         {appMode === 'patio' && view === 'patio-pneus' && (
@@ -9691,19 +9692,25 @@ function PatioDadosClientes({
 
 function PatioExportarContatos({
   onLoadContatos,
+  onMarkExported,
 }: {
-  onLoadContatos: (query?: string) => Promise<PatioContatoExportacao[]>
+  onLoadContatos: (input?: { query?: string; reExportAll?: boolean }) => Promise<PatioContatoExportacao[]>
+  onMarkExported: (items: PatioContatoExportacao[]) => Promise<void>
 }) {
   const [query, setQuery] = useState('')
+  const [reExportAll, setReExportAll] = useState(false)
   const [items, setItems] = useState<PatioContatoExportacao[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [isMarking, setIsMarking] = useState(false)
+  const [downloaded, setDownloaded] = useState(false)
   const [error, setError] = useState('')
 
   const load = async () => {
     setIsLoading(true)
     setError('')
+    setDownloaded(false)
     try {
-      setItems(await onLoadContatos(query))
+      setItems(await onLoadContatos({ query, reExportAll }))
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar contatos.')
     } finally {
@@ -9722,6 +9729,22 @@ function PatioExportarContatos({
     anchor.click()
     anchor.remove()
     URL.revokeObjectURL(url)
+    setDownloaded(true)
+  }
+
+  const confirmExported = async () => {
+    if (!window.confirm(`Marcar ${items.length} contatos como exportados?`)) return
+    setIsMarking(true)
+    setError('')
+    try {
+      await onMarkExported(items)
+      setItems([])
+      setDownloaded(false)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel marcar contatos como exportados.')
+    } finally {
+      setIsMarking(false)
+    }
   }
 
   return (
@@ -9741,6 +9764,10 @@ function PatioExportarContatos({
           Filtrar antes de gerar
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cliente, placa, motorista ou telefone" />
         </label>
+        <label className="checkbox-line">
+          <input type="checkbox" checked={reExportAll} onChange={(event) => setReExportAll(event.target.checked)} />
+          Forcar re-exportacao de todos os contatos
+        </label>
       </div>
       {items.length > 0 && (
         <>
@@ -9751,7 +9778,13 @@ function PatioExportarContatos({
           </div>
           <div className="row-actions">
             <button className="button primary" type="button" onClick={downloadCsv}>Baixar CSV</button>
+            {!reExportAll && (
+              <button className="button" type="button" disabled={!downloaded || isMarking} onClick={() => void confirmExported()}>
+                {isMarking ? 'Marcando...' : 'Confirmar e marcar exportados'}
+              </button>
+            )}
           </div>
+          {!reExportAll && !downloaded && <p className="muted">Depois de baixar, confirme para estes contatos sairem da proxima exportacao incremental.</p>}
           <div className="table-list">
             {items.slice(0, 50).map((item, index) => (
               <article className="panel subtle" key={`${item.tipo}-${item.telefonePadronizado}-${index}`}>
@@ -9759,6 +9792,9 @@ function PatioExportarContatos({
                   <div>
                     <h3>{item.nome}</h3>
                     <p>{item.tipo} - {item.empresa || 'Empresa nao informada'} {item.placa ? `- ${item.placa}` : ''}</p>
+                    <small className="muted">
+                      Atualizado {item.atualizadoEm ? dateLabel(item.atualizadoEm) : 'sem data'} - Ultima exportacao {item.ultimaExportacao ? dateLabel(item.ultimaExportacao) : 'nunca'}
+                    </small>
                   </div>
                   <strong>{item.telefonePadronizado}</strong>
                 </div>

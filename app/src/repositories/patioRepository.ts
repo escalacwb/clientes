@@ -128,6 +128,8 @@ type PatioContatoClienteRow = {
   responsavel_nome: string | null
   telefone_principal: string | null
   whatsapp_principal: string | null
+  data_atualizacao_contato: string | null
+  data_ultima_exportacao: string | null
 }
 
 type PatioContatoMotoristaRow = {
@@ -137,6 +139,8 @@ type PatioContatoMotoristaRow = {
   modelo: string | null
   nome_motorista: string | null
   contato_motorista: string | null
+  data_atualizacao_contato: string | null
+  data_ultima_exportacao: string | null
 }
 
 type PatioRelatorioServicoRow = {
@@ -176,6 +180,7 @@ type PatioRevisaoResultadoRow = {
 
 export type PatioContatoExportacao = {
   tipo: 'Responsavel' | 'Motorista'
+  sourceId: string
   nome: string
   empresa: string
   placa?: string
@@ -183,6 +188,8 @@ export type PatioContatoExportacao = {
   telefone: string
   telefonePadronizado: string
   observacao: string
+  atualizadoEm?: string
+  ultimaExportacao?: string
 }
 
 export type PatioRelatorioServico = {
@@ -570,22 +577,22 @@ export async function updatePatioVeiculoMediaKm(input: {
   })
 }
 
-export async function listPatioContatosExportacao(queryText?: string): Promise<PatioContatoExportacao[]> {
+export async function listPatioContatosExportacao(input?: { query?: string; reExportAll?: boolean }): Promise<PatioContatoExportacao[]> {
   const supabase = await getSupabase()
   if (!supabase) return []
 
-  const term = queryText?.trim()
+  const term = input?.query?.trim()
   let clientesQuery = supabase
     .from('clientes')
-    .select('id,nome,responsavel_nome,telefone_principal,whatsapp_principal')
+    .select('id,nome,responsavel_nome,telefone_principal,whatsapp_principal,data_atualizacao_contato,data_ultima_exportacao')
     .not('responsavel_nome', 'is', null)
-    .limit(500)
+    .limit(input?.reExportAll ? 2000 : 1000)
 
   let motoristasQuery = supabase
     .from('patio_veiculos_snapshot')
-    .select('patio_veiculo_id,empresa,placa,modelo,nome_motorista,contato_motorista')
+    .select('patio_veiculo_id,empresa,placa,modelo,nome_motorista,contato_motorista,data_atualizacao_contato,data_ultima_exportacao')
     .not('nome_motorista', 'is', null)
-    .limit(500)
+    .limit(input?.reExportAll ? 2000 : 1000)
 
   if (term) {
     const like = `%${term}%`
@@ -602,24 +609,30 @@ export async function listPatioContatosExportacao(queryText?: string): Promise<P
   if (motoristasError) throw motoristasError
 
   const responsaveis = (clientes as PatioContatoClienteRow[] | null ?? [])
+    .filter((row) => input?.reExportAll || !row.data_ultima_exportacao || !row.data_atualizacao_contato || row.data_atualizacao_contato > row.data_ultima_exportacao)
     .map((row) => {
       const telefone = row.whatsapp_principal || row.telefone_principal || ''
       return {
         tipo: 'Responsavel' as const,
+        sourceId: row.id,
         nome: row.responsavel_nome?.trim() || row.nome?.trim() || 'Responsavel',
         empresa: row.nome?.trim() || '',
         telefone,
         telefonePadronizado: normalizeBrazilPhone(telefone),
         observacao: `Contato da empresa ${row.nome?.trim() || ''}`.trim(),
+        atualizadoEm: row.data_atualizacao_contato ?? undefined,
+        ultimaExportacao: row.data_ultima_exportacao ?? undefined,
       }
     })
     .filter((item) => item.telefonePadronizado)
 
   const contatosMotoristas = (motoristas as PatioContatoMotoristaRow[] | null ?? [])
+    .filter((row) => input?.reExportAll || !row.data_ultima_exportacao || !row.data_atualizacao_contato || row.data_atualizacao_contato > row.data_ultima_exportacao)
     .map((row) => {
       const telefone = row.contato_motorista || ''
       return {
         tipo: 'Motorista' as const,
+        sourceId: String(row.patio_veiculo_id),
         nome: row.nome_motorista?.trim() || 'Motorista',
         empresa: row.empresa?.trim() || '',
         placa: row.placa?.trim() || undefined,
@@ -627,11 +640,34 @@ export async function listPatioContatosExportacao(queryText?: string): Promise<P
         telefone,
         telefonePadronizado: normalizeBrazilPhone(telefone),
         observacao: `Motorista do veiculo ${row.placa?.trim() || ''} - ${row.empresa?.trim() || ''}`.trim(),
+        atualizadoEm: row.data_atualizacao_contato ?? undefined,
+        ultimaExportacao: row.data_ultima_exportacao ?? undefined,
       }
     })
     .filter((item) => item.telefonePadronizado)
 
   return [...responsaveis, ...contatosMotoristas]
+}
+
+export async function markPatioContatosExportados(items: PatioContatoExportacao[]): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase || items.length === 0) return
+
+  const now = new Date().toISOString()
+  const clienteIds = items.filter((item) => item.tipo === 'Responsavel').map((item) => item.sourceId)
+  const patioVeiculoIds = items.filter((item) => item.tipo === 'Motorista').map((item) => Number(item.sourceId)).filter(Number.isFinite)
+
+  const updates = []
+  if (clienteIds.length > 0) {
+    updates.push(supabase.from('clientes').update({ data_ultima_exportacao: now }).in('id', clienteIds))
+  }
+  if (patioVeiculoIds.length > 0) {
+    updates.push(supabase.from('patio_veiculos_snapshot').update({ data_ultima_exportacao: now }).in('patio_veiculo_id', patioVeiculoIds))
+  }
+
+  const results = await Promise.all(updates)
+  const error = results.find((result) => result.error)?.error
+  if (error) throw error
 }
 
 export async function listPatioRelatorioServicos(input: {
