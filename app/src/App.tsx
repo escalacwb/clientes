@@ -14952,6 +14952,9 @@ function Campanhas({
     }
   }
 
+  const audienceActiveFilters = campaignAudienceFilterLabels(publicoFiltros, query)
+  const audienceEmptyMessage = campaignAudienceEmptyMessage(publicoFiltros, query)
+
   return (
     <section className={`panel wide campaign-workspace campaign-view-${campaignTab}`}>
       <div className="panel-header">
@@ -15474,6 +15477,15 @@ function Campanhas({
           <span>{total} clientes no publico · pagina {page} de {totalPages}</span>
           <button className="button" type="button" onClick={resetCampaignAudience}>Limpar publico</button>
         </div>
+        {audienceActiveFilters.length > 0 && (
+          <div className="campaign-filter-summary">
+            <strong>Filtros ativos</strong>
+            <div>
+              {audienceActiveFilters.map((filter) => <span className="status-pill compact" key={filter}>{filter}</span>)}
+            </div>
+            <small>Os filtros sao combinados. Ex.: produto "Michelin" + medida "295/80" mostra clientes que batem nos dois criterios.</small>
+          </div>
+        )}
         <div className="campaign-filter-sections">
           <section className="campaign-filter-section">
             <div>
@@ -15590,7 +15602,7 @@ function Campanhas({
               </article>
             ))}
             {!isLoading && campanhaClientes.length === 0 && (
-              <div className="empty-state compact">Nenhum cliente encontrado com estes filtros. Remova algum criterio ou ajuste o termo buscado.</div>
+              <div className="empty-state compact">{audienceEmptyMessage}</div>
             )}
           </div>
         </section>
@@ -15836,6 +15848,40 @@ function campaignSummary(status: CampanhaEnvioStatus, mensagem: string) {
     nao_contatar: 'Cliente marcado como nao contatar pela campanha.',
   }
   return `${labels[status]} Mensagem: ${mensagem}`
+}
+
+function campaignAudienceFilterLabels(filtros: CampanhaPublicoFiltros, query: string) {
+  const labels: string[] = []
+  if (query.trim()) labels.push(`Busca: ${query.trim()}`)
+  if (filtros.produtoTerm?.trim()) labels.push(`Produto/servico: ${filtros.produtoTerm.trim()}`)
+  if (filtros.medidaTerm?.trim()) labels.push(`Medida: ${filtros.medidaTerm.trim()}`)
+  if (filtros.cidade?.trim()) labels.push(`Cidade: ${filtros.cidade.trim()}`)
+  if (filtros.uf?.trim()) labels.push(`UF: ${filtros.uf.trim()}`)
+  if (filtros.vendedorId) labels.push('Vendedor atual')
+  if (filtros.vendedorHistoricoNome?.trim()) labels.push(`Vendedor historico: ${filtros.vendedorHistoricoNome.trim()}`)
+  if (filtros.origemBase && filtros.origemBase !== 'todos') labels.push(`Origem: ${origemLabel(filtros.origemBase)}`)
+  if (filtros.leadQualificacaoStatus && filtros.leadQualificacaoStatus !== 'todos') labels.push(`Status lead: ${rodobensQualificacaoLabel(filtros.leadQualificacaoStatus)}`)
+  if (filtros.diasSemCompraMin) labels.push(`${filtros.diasSemCompraMin}+ dias sem compra`)
+  if (filtros.diasSemContatoMin) labels.push(`${filtros.diasSemContatoMin}+ dias sem contato`)
+  if (filtros.valorMin) labels.push(`Historico acima de ${money(filtros.valorMin)}`)
+  if (filtros.somenteComWhatsapp) labels.push('Somente com WhatsApp')
+  if (filtros.placaTerm?.trim()) labels.push(`Placa/veiculo: ${filtros.placaTerm.trim()}`)
+  if (filtros.kmMin) labels.push(`KM minimo ${numberLabel(filtros.kmMin)}`)
+  if (filtros.kmMax) labels.push(`KM maximo ${numberLabel(filtros.kmMax)}`)
+  return labels
+}
+
+function campaignAudienceEmptyMessage(filtros: CampanhaPublicoFiltros, query: string) {
+  const labels = campaignAudienceFilterLabels(filtros, query)
+  if (labels.length === 0) return 'Nenhum cliente encontrado nesse publico. Confira a origem da base ou tente outro objetivo.'
+  const hasProductAndMeasure = Boolean(filtros.produtoTerm?.trim() && filtros.medidaTerm?.trim())
+  if (hasProductAndMeasure) {
+    return 'Nenhum cliente bateu em todos os filtros. Produto/servico e medida sao combinados: tente deixar o produto mais amplo ou remover a medida para conferir a base.'
+  }
+  if (filtros.produtoTerm?.trim() || filtros.medidaTerm?.trim()) {
+    return 'Nenhum cliente encontrado no historico importado para esse termo. Tente uma medida mais simples, marca, codigo ou remova filtros de cidade/UF.'
+  }
+  return `Nenhum cliente encontrado com: ${labels.join(', ')}. Remova algum criterio ou ajuste a busca.`
 }
 
 function campaignTaskTitle(status: CampanhaEnvioStatus) {
