@@ -970,22 +970,26 @@ export async function listPatioFilaItens(input: {
   if (!supabase) return { items: [], total: 0 }
 
   const from = (input.page - 1) * input.pageSize
-  const to = from + input.pageSize - 1
+  const to = from + input.pageSize
   let query = supabase
-    .from('vw_patio_fila_itens')
-    .select('*', { count: 'exact' })
+    .from('patio_atendimento_itens')
+    .select('id,patio_item_id,patio_tabela_origem,patio_execucao_id,cliente_id,veiculo_id,area,servico_nome,descricao,quantidade,status,box_id,funcionario_id,quilometragem,tipo_atendimento,solicitado_em,atualizado_em')
+    .eq('status', 'pendente')
     .order('solicitado_em', { ascending: true, nullsFirst: false })
     .range(from, to)
 
   if (input.area && input.area !== 'todas') query = query.eq('area', input.area)
   if (input.query?.trim()) {
     const term = `%${input.query.trim()}%`
-    query = query.or(`cliente_nome.ilike.${term},placa.ilike.${term},servico_nome.ilike.${term}`)
+    query = query.or(`servico_nome.ilike.${term},descricao.ilike.${term}`)
   }
 
-  const { data, error, count } = await query
+  const { data, error } = await query
   if (error) throw error
-  return { items: (data as FilaRow[] | null ?? []).map(mapFila), total: count ?? 0 }
+  const rows = data as FilaRow[] | null ?? []
+  const hasMore = rows.length > input.pageSize
+  const pageRows = hasMore ? rows.slice(0, input.pageSize) : rows
+  return { items: pageRows.map(mapFila), total: from + pageRows.length + (hasMore ? 1 : 0) }
 }
 
 export async function listPatioBoxesAtivos(): Promise<PatioAtendimentoResumo[]> {

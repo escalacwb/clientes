@@ -489,6 +489,7 @@ function App() {
   const [patioFilaQuery, setPatioFilaQuery] = useState('')
   const [patioFilaArea, setPatioFilaArea] = useState<PatioFilaItem['area'] | 'todas'>('todas')
   const [isLoadingPatioFila, setIsLoadingPatioFila] = useState(false)
+  const [patioFilaLastUpdated, setPatioFilaLastUpdated] = useState('')
   const [patioPainelBoxes, setPatioPainelBoxes] = useState<PatioPainelBox[]>([])
   const [patioPainelFila, setPatioPainelFila] = useState<PatioFilaPainel[]>([])
   const [patioBoxesAtivos, setPatioBoxesAtivos] = useState<PatioPainelBox[]>([])
@@ -1004,10 +1005,10 @@ function App() {
   useEffect(() => {
     let isMounted = true
 
-    async function loadPatioFila() {
+    async function loadPatioFila(silent = false) {
       if (isCheckingSession || !session || view !== 'patio-fila') return
 
-      setIsLoadingPatioFila(true)
+      if (!silent) setIsLoadingPatioFila(true)
       try {
         const result = await listPatioFilaItens({
           page: patioFilaPage,
@@ -1024,18 +1025,21 @@ function App() {
         setPatioFilaTotal(result.total)
         setPatioPainelBoxes(boxesPainel)
         setPatioPainelFila(filaPainel)
+        setPatioFilaLastUpdated(new Date().toISOString())
         clearModuleError('patio-fila')
       } catch (exception) {
         if (isMounted) setModuleError('patio-fila', exception instanceof Error ? exception.message : 'Nao foi possivel carregar a fila do patio.')
       } finally {
-        if (isMounted) setIsLoadingPatioFila(false)
+        if (isMounted && !silent) setIsLoadingPatioFila(false)
       }
     }
 
-    const handle = window.setTimeout(loadPatioFila, patioFilaQuery.trim() ? 250 : 0)
+    const handle = window.setTimeout(() => void loadPatioFila(false), patioFilaQuery.trim() ? 250 : 0)
+    const interval = view === 'patio-fila' ? window.setInterval(() => void loadPatioFila(true), 30000) : undefined
     return () => {
       isMounted = false
       window.clearTimeout(handle)
+      if (interval) window.clearInterval(interval)
     }
   }, [isCheckingSession, patioFilaArea, patioFilaPage, patioFilaQuery, session, view])
 
@@ -1964,6 +1968,7 @@ function App() {
             query={patioFilaQuery}
             area={patioFilaArea}
             isLoading={isLoadingPatioFila}
+            lastUpdated={patioFilaLastUpdated}
             onQueryChange={(nextQuery) => {
               setPatioFilaQuery(nextQuery)
               setPatioFilaPage(1)
@@ -10294,6 +10299,7 @@ function PatioFila({
   query,
   area,
   isLoading,
+  lastUpdated,
   onQueryChange,
   onAreaChange,
   onPageChange,
@@ -10308,6 +10314,7 @@ function PatioFila({
   query: string
   area: PatioFilaItem['area'] | 'todas'
   isLoading: boolean
+  lastUpdated: string
   onQueryChange: (query: string) => void
   onAreaChange: (area: PatioFilaItem['area'] | 'todas') => void
   onPageChange: (page: number) => void
@@ -10325,7 +10332,10 @@ function PatioFila({
       <div className="panel-header">
         <div>
           <h2>Painel Operacional do Patio</h2>
-          <p>Mesma visao de trabalho do controle de patio: atendimento atual e fila de espera.</p>
+          <p>
+            Mesma visao de trabalho do controle de patio: atendimento atual e fila de espera.
+            {lastUpdated ? ` Atualizado ${new Date(lastUpdated).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.` : ''}
+          </p>
         </div>
         <strong>{filaPainel.length} veiculos na fila</strong>
       </div>
