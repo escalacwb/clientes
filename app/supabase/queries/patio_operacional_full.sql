@@ -606,12 +606,35 @@ select
   pa.nome_motorista,
   pa.contato_motorista,
   pa.data_feedback,
-  array[]::text[] as servicos,
+  coalesce(servicos.servicos, array[]::text[]) as servicos,
   coalesce(v.descricao, pvs.modelo) as veiculo_descricao
 from public.patio_atendimentos pa
 left join public.clientes c on c.id = pa.cliente_id
 left join public.veiculos v on v.id = pa.veiculo_id
 left join public.patio_veiculos_snapshot pvs on pvs.patio_veiculo_id = pa.patio_veiculo_id
+left join lateral (
+  select array_agg(label order by area_ordem, label) as servicos
+  from (
+    select distinct
+      case pai.area
+        when 'borracharia' then 1
+        when 'alinhamento' then 2
+        when 'manutencao' then 3
+        else 9
+      end as area_ordem,
+      concat(
+        coalesce(nullif(pai.servico_nome, ''), nullif(pai.descricao, ''), pai.area, 'Servico'),
+        case
+          when coalesce(pai.quantidade, 1) > 1 then ' (' || pai.quantidade::text || 'x)'
+          else ''
+        end
+      ) as label
+    from public.patio_atendimento_itens pai
+    where pai.patio_execucao_id = pa.patio_execucao_id
+      and pai.status = 'finalizado'
+      and coalesce(nullif(pai.servico_nome, ''), nullif(pai.descricao, ''), pai.area) is not null
+  ) itens
+) servicos on true
 where pa.status in ('finalizado', 'cancelado');
 
 create or replace view public.vw_patio_fila_painel

@@ -1,13 +1,4 @@
-create index if not exists idx_patio_atendimentos_feedback_pendente
-on public.patio_atendimentos (status, data_feedback, fim_execucao, patio_execucao_id)
-where status = 'finalizado' and data_feedback is null;
-
-create index if not exists idx_cliente_contatos_recomendado
-on public.cliente_contatos (cliente_id, valido, prioridade desc, atualizado_em desc);
-
-drop view if exists public.vw_patio_feedback_pendente;
-
-create view public.vw_patio_feedback_pendente
+create or replace view public.vw_patio_feedback_pendente
 with (security_invoker = true) as
 select
   pa.patio_execucao_id,
