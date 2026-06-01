@@ -9082,8 +9082,8 @@ function PatioEntrada({
     setFormError('')
   }, [selected])
 
-  const addServico = () => {
-    const nome = servicoNome.trim()
+  const addServico = (nomeSelecionado?: string) => {
+    const nome = (nomeSelecionado ?? servicoNome).trim()
     if (!nome) {
       setFormError('Informe o servico antes de adicionar.')
       return
@@ -9204,7 +9204,7 @@ function PatioEntrada({
               {onEditVehicle && <button className="button" type="button" onClick={() => onEditVehicle(selected)}>Alterar Veiculo</button>}
               {onEditVehicle && <button className="button" type="button" onClick={() => onEditVehicle(selected)}>Alterar Empresa/Responsavel</button>}
               <button className="button primary" type="submit" disabled={isSaving || servicos.length === 0}>
-                {isSaving ? 'Registrando...' : 'Registrar e enviar para fila'}
+                {isSaving ? 'Registrando...' : servicos.length === 0 ? 'Adicione servicos para registrar' : 'Registrar e enviar para fila'}
               </button>
             </div>
           </div>
@@ -9276,7 +9276,13 @@ function PatioEntrada({
               </div>
             </article>
             <article className="panel subtle">
-              <h3>3. Selecao de servicos</h3>
+              <div className="panel-header compact-header">
+                <div>
+                  <h3>3. Servicos da entrada</h3>
+                  <p>Escolha a area, informe quantidade e clique em adicionar. Os atalhos abaixo ja adicionam direto.</p>
+                </div>
+                <strong>{servicos.length} adicionados</strong>
+              </div>
               <div className="patio-service-areas">
                 {areasEntrada.map((areaInfo) => (
                   <button
@@ -9313,27 +9319,26 @@ function PatioEntrada({
               </div>
               <div className="patio-service-suggestions">
                 {catalogoDaArea.slice(0, 12).map((servico) => (
-                  <button className="button tiny-button" type="button" onClick={() => setServicoNome(servico.nome)} key={`${servico.area}-${servico.nome}`}>
-                    {servico.nome}
+                  <button className="button tiny-button" type="button" onClick={() => addServico(servico.nome)} key={`${servico.area}-${servico.nome}`}>
+                    + {servico.nome}
                   </button>
                 ))}
               </div>
               <div className="inline-actions">
-                <button className="button" type="button" onClick={addServico}>Adicionar servico</button>
+                <button className="button primary" type="button" onClick={() => addServico()}>Adicionar servico digitado</button>
                 <button className="button ghost" type="button" onClick={() => setSelected(undefined)}>Cancelar entrada</button>
+              </div>
+              <div className="table-list compact-list patio-selected-services">
+                {servicos.map((servico, index) => (
+                  <div className="status-row" key={`${servico.servicoNome}-${index}`}>
+                    <span>{areaLabel(servico.area)} - {servico.quantidade}x {servico.servicoNome}</span>
+                    <button className="button tiny-button" type="button" onClick={() => setServicos((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remover</button>
+                  </div>
+                ))}
+                {servicos.length === 0 && <div className="empty-state compact">Nenhum servico adicionado ainda.</div>}
               </div>
             </article>
           </div>
-          {servicos.length > 0 && (
-            <div className="table-list compact-list">
-              {servicos.map((servico, index) => (
-                <div className="status-row" key={`${servico.servicoNome}-${index}`}>
-                  <span>{areaLabel(servico.area)} - {servico.quantidade}x {servico.servicoNome}</span>
-                  <button className="button tiny-button" type="button" onClick={() => setServicos((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remover</button>
-                </div>
-              ))}
-            </div>
-          )}
         </form>
       )}
       <div className="table-list">
