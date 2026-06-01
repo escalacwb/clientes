@@ -393,6 +393,45 @@ export type PatioAtendimentoItemResumo = {
   tipoAtendimento?: string
 }
 
+export type PatioFeedbackPendente = {
+  patioExecucaoId: number
+  clienteId: string
+  clienteNome: string
+  vendedorId?: string
+  veiculoId?: string
+  placa?: string
+  veiculoDescricao?: string
+  quilometragem?: number
+  fimExecucao?: string
+  nomeMotorista?: string
+  contatoMotorista?: string
+  contatoRecomendado?: string
+  contatoNome?: string
+  contatoTipo?: string
+  servicos: string[]
+}
+
+export type PatioRevisaoProativa = {
+  patioVeiculoId: number
+  clienteId: string
+  clienteNome: string
+  vendedorId?: string
+  veiculoId?: string
+  placa?: string
+  veiculoDescricao?: string
+  nomeMotorista?: string
+  contatoMotorista?: string
+  mediaKmDiaria?: number
+  dataRevisaoProativa?: string
+  ultimoKm?: number
+  ultimoAtendimentoEm?: string
+  diasDesdeUltimaVisita: number
+  kmEstimadoDesdeVisita: number
+  contatoRecomendado?: string
+  contatoNome?: string
+  contatoTipo?: string
+}
+
 export type CarteiraFiltro =
   | 'todos'
   | 'origem-capital'

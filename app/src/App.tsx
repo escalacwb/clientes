@@ -17,7 +17,6 @@ import {
   ShieldCheck,
   Trophy,
   Truck,
-  UserCheck,
   UserRound,
   UsersRound,
   WalletCards,
@@ -157,7 +156,15 @@ import { reviseOrcamento } from './repositories/orcamentosRepository'
 import { updateOrcamentoFollowup } from './repositories/orcamentosRepository'
 import { updateOrcamentoStatus, type PedidoConfirmadoInput } from './repositories/orcamentosRepository'
 import { listOportunidadesPage, listOportunidadesResumo, markOportunidadeComTarefa, refreshOportunidadesCache, type OportunidadeFilter, type OportunidadeResumo } from './repositories/oportunidadesRepository'
-import { getClienteContatoRecomendado, listClientePatioAtendimentoItens, listClientePatioAtendimentos } from './repositories/patioRepository'
+import {
+  getClienteContatoRecomendado,
+  listClientePatioAtendimentoItens,
+  listClientePatioAtendimentos,
+  listPatioFeedbackPendente,
+  listPatioRevisaoProativa,
+  markPatioFeedbackDone,
+  markPatioRevisaoDone,
+} from './repositories/patioRepository'
 import { createPipelineFromSuggestion, listPipelineOportunidades, updatePipelineOportunidade, updatePipelineStage } from './repositories/pipelineRepository'
 import { escalateStaleCommercialSequences, listDefaultCommercialSequenceSteps, listSequenciaExecucoes, startDefaultCommercialSequence, updateSequenceStep, type SequenciaEtapaConfig } from './repositories/sequenciasRepository'
 import {
@@ -200,6 +207,8 @@ import type {
   OportunidadePipeline,
   PatioAtendimentoItemResumo,
   PatioAtendimentoResumo,
+  PatioFeedbackPendente,
+  PatioRevisaoProativa,
   PossivelDuplicado,
   ServicoItem,
   SessaoUsuario,
@@ -212,32 +221,64 @@ import type {
 
 const SalesChart = lazy(() => import('./components/SalesChart'))
 
-const navSections = [
-  {
-    title: 'Operacao',
-    items: [
-      { id: 'cockpit', label: 'Minha rotina', icon: Gauge },
-      { id: 'clientes', label: 'Clientes', icon: UsersRound },
-      { id: 'rodobens', label: 'Clientes sem cadastro', icon: UserCheck },
-    ],
-  },
-  {
-    title: 'Comercial',
-    items: [
-      { id: 'campanhas', label: 'Campanhas', icon: Send },
-      { id: 'orcamentos', label: 'Propostas', icon: WalletCards },
-      { id: 'catalogo', label: 'Catalogo', icon: ClipboardList },
-    ],
-  },
-  {
-    title: 'Gestao',
-    items: [
-      { id: 'importacoes', label: 'Importacoes', icon: FileUp },
-      { id: 'vendedores', label: 'Equipe', icon: UserRound },
-      { id: 'usuarios', label: 'Usuarios', icon: ShieldCheck },
-    ],
-  },
-]
+type AppMode = 'patio' | 'crm' | 'gestao'
+
+const navSectionsByMode: Record<AppMode, Array<{ title: string; items: Array<{ id: string; label: string; icon: typeof Gauge }> }>> = {
+  patio: [
+    {
+      title: 'Operacao',
+      items: [
+        { id: 'patio-entrada', label: 'Entrada', icon: Truck },
+        { id: 'patio-fila', label: 'Fila', icon: ClipboardList },
+        { id: 'patio-boxes', label: 'Boxes', icon: Gauge },
+        { id: 'patio-concluidos', label: 'Concluidos', icon: CheckCircle2 },
+        { id: 'patio-historico', label: 'Historico placa', icon: Search },
+      ],
+    },
+    {
+      title: 'Pos-atendimento',
+      items: [
+        { id: 'patio-feedback', label: 'Feedback', icon: MessageCircle },
+        { id: 'patio-revisao', label: 'Revisao proativa', icon: RefreshCw },
+      ],
+    },
+  ],
+  crm: [
+    {
+      title: 'Rotina',
+      items: [
+        { id: 'cockpit', label: 'Minha rotina', icon: Gauge },
+        { id: 'clientes', label: 'Clientes', icon: UsersRound },
+        { id: 'oportunidades', label: 'Oportunidades', icon: AlertTriangle },
+      ],
+    },
+    {
+      title: 'Comercial',
+      items: [
+        { id: 'campanhas', label: 'Campanhas', icon: Send },
+        { id: 'orcamentos', label: 'Propostas', icon: WalletCards },
+        { id: 'catalogo', label: 'Catalogo', icon: ClipboardList },
+      ],
+    },
+  ],
+  gestao: [
+    {
+      title: 'Gestao',
+      items: [
+        { id: 'importacoes', label: 'Importacoes', icon: FileUp },
+        { id: 'vendedores', label: 'Equipe', icon: UserRound },
+        { id: 'usuarios', label: 'Usuarios', icon: ShieldCheck },
+        { id: 'auditoria', label: 'Auditoria', icon: CheckCircle2 },
+      ],
+    },
+  ],
+}
+
+const firstViewByMode: Record<AppMode, string> = {
+  patio: 'patio-entrada',
+  crm: 'cockpit',
+  gestao: 'importacoes',
+}
 
 const hiddenViewRedirects: Record<string, string> = {
   dashboard: 'cockpit',
@@ -336,6 +377,7 @@ function App() {
   const [session, setSession] = useState<SessaoUsuario | null>(null)
   const [isCheckingSession, setIsCheckingSession] = useState(true)
   const [view, setView] = useState(() => normalizeView(localStorage.getItem('capital-crm:last-view') ?? 'cockpit'))
+  const [appMode, setAppMode] = useState<AppMode>(() => (localStorage.getItem('capital-crm:mode') as AppMode | null) ?? 'crm')
   const [clientes, setClientes] = useState<Cliente[]>(isSupabaseConfigured ? [] : seedClientes)
   const [clientesTotal, setClientesTotal] = useState(isSupabaseConfigured ? 0 : seedClientes.length)
   const [clientesPage, setClientesPage] = useState(1)
@@ -382,6 +424,18 @@ function App() {
   const [clienteContatoRecomendado, setClienteContatoRecomendado] = useState<ClienteContatoRecomendado | undefined>()
   const [clientePatioAtendimentos, setClientePatioAtendimentos] = useState<PatioAtendimentoResumo[]>([])
   const [clientePatioItens, setClientePatioItens] = useState<PatioAtendimentoItemResumo[]>([])
+  const [patioFeedbackItems, setPatioFeedbackItems] = useState<PatioFeedbackPendente[]>([])
+  const [patioFeedbackTotal, setPatioFeedbackTotal] = useState(0)
+  const [patioFeedbackPage, setPatioFeedbackPage] = useState(1)
+  const [patioFeedbackQuery, setPatioFeedbackQuery] = useState('')
+  const [isLoadingPatioFeedback, setIsLoadingPatioFeedback] = useState(false)
+  const [patioRevisaoItems, setPatioRevisaoItems] = useState<PatioRevisaoProativa[]>([])
+  const [patioRevisaoTotal, setPatioRevisaoTotal] = useState(0)
+  const [patioRevisaoPage, setPatioRevisaoPage] = useState(1)
+  const [patioRevisaoQuery, setPatioRevisaoQuery] = useState('')
+  const [patioRevisaoKmMin, setPatioRevisaoKmMin] = useState(80000)
+  const [patioRevisaoDiasMin, setPatioRevisaoDiasMin] = useState(120)
+  const [isLoadingPatioRevisao, setIsLoadingPatioRevisao] = useState(false)
   const [possiveisDuplicados, setPossiveisDuplicados] = useState<PossivelDuplicado[]>(isSupabaseConfigured ? [] : seedPossiveisDuplicados)
   const [mesclagens, setMesclagens] = useState<ClienteMesclagem[]>(isSupabaseConfigured ? [] : seedMesclagens)
   const [catalogo, setCatalogo] = useState<CatalogoItem[]>([])
@@ -472,7 +526,7 @@ function App() {
       setView(nextView)
       return
     }
-    if (isMobileShell && session && !mobileAllowedViews.has(nextView)) {
+    if (isMobileShell && session && !mobileAllowedViews.has(nextView) && !nextView.startsWith('patio-')) {
       setView('cockpit')
       return
     }
@@ -783,6 +837,86 @@ function App() {
       isMounted = false
     }
   }, [isCheckingSession, orcamentosFilter, orcamentosPage, session, view])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadPatioFeedback() {
+      if (isCheckingSession) return
+      if (!session) {
+        setPatioFeedbackItems([])
+        setPatioFeedbackTotal(0)
+        return
+      }
+      if (view !== 'patio-feedback') return
+
+      setIsLoadingPatioFeedback(true)
+      try {
+        const result = await listPatioFeedbackPendente({
+          page: patioFeedbackPage,
+          pageSize: 50,
+          vendedorId: session.role === 'vendedor' ? session.id : undefined,
+          query: patioFeedbackQuery,
+        })
+        if (!isMounted) return
+        setPatioFeedbackItems(result.items)
+        setPatioFeedbackTotal(result.total)
+        clearModuleError('patio-feedback')
+      } catch (exception) {
+        if (isMounted) setModuleError('patio-feedback', exception instanceof Error ? exception.message : 'Nao foi possivel carregar feedbacks do patio.')
+      } finally {
+        if (isMounted) setIsLoadingPatioFeedback(false)
+      }
+    }
+
+    const handle = window.setTimeout(loadPatioFeedback, patioFeedbackQuery.trim() ? 250 : 0)
+
+    return () => {
+      isMounted = false
+      window.clearTimeout(handle)
+    }
+  }, [isCheckingSession, patioFeedbackPage, patioFeedbackQuery, session, view])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadPatioRevisao() {
+      if (isCheckingSession) return
+      if (!session) {
+        setPatioRevisaoItems([])
+        setPatioRevisaoTotal(0)
+        return
+      }
+      if (view !== 'patio-revisao') return
+
+      setIsLoadingPatioRevisao(true)
+      try {
+        const result = await listPatioRevisaoProativa({
+          page: patioRevisaoPage,
+          pageSize: 50,
+          vendedorId: session.role === 'vendedor' ? session.id : undefined,
+          query: patioRevisaoQuery,
+          kmMin: patioRevisaoKmMin,
+          diasMin: patioRevisaoDiasMin,
+        })
+        if (!isMounted) return
+        setPatioRevisaoItems(result.items)
+        setPatioRevisaoTotal(result.total)
+        clearModuleError('patio-revisao')
+      } catch (exception) {
+        if (isMounted) setModuleError('patio-revisao', exception instanceof Error ? exception.message : 'Nao foi possivel carregar revisao proativa.')
+      } finally {
+        if (isMounted) setIsLoadingPatioRevisao(false)
+      }
+    }
+
+    const handle = window.setTimeout(loadPatioRevisao, patioRevisaoQuery.trim() ? 250 : 0)
+
+    return () => {
+      isMounted = false
+      window.clearTimeout(handle)
+    }
+  }, [isCheckingSession, patioRevisaoDiasMin, patioRevisaoKmMin, patioRevisaoPage, patioRevisaoQuery, session, view])
 
   useEffect(() => {
     let isMounted = true
@@ -1179,6 +1313,8 @@ function App() {
   }
 
   function openQuickAction(action: 'tarefas-vencidas' | 'orcamentos-vencidos' | 'clientes-sem-cadastro' | 'campanhas' | 'orcamentos') {
+    setAppMode('crm')
+    localStorage.setItem('capital-crm:mode', 'crm')
     if (action === 'tarefas-vencidas') {
       setTarefasStatusFilter('vencidas')
       setTarefasOriginFilter('todas')
@@ -1259,17 +1395,29 @@ function App() {
     )
   }
 
-  const visibleNavSections = navSections
+  const visibleNavSections = navSectionsByMode[appMode]
     .map((section) => ({
       ...section,
       items: section.items
-        .filter((item) => !isMobileShell || mobilePrimaryViews.has(item.id))
+        .filter((item) => !isMobileShell || mobileAllowedViews.has(item.id) || item.id.startsWith('patio-'))
         .filter((item) => session.role === 'admin' || !adminOnlyViews.has(item.id))
-        .filter((item) => session.role === 'admin' || sellerPrimaryViews.has(item.id))
+        .filter(() => appMode !== 'gestao' || session.role === 'admin')
+        .filter((item) => appMode !== 'crm' || session.role === 'admin' || sellerPrimaryViews.has(item.id) || item.id === 'oportunidades')
         .map((item) => item.id === 'orcamentos' ? { ...item, label: 'Propostas' } : item),
     }))
     .filter((section) => section.items.length > 0)
   const canUseScopedClientViews = session.role === 'admin' || isMobileShell || !sellerHasNoCarteira
+  const modeLabel: Record<AppMode, string> = {
+    patio: 'Patio',
+    crm: 'CRM',
+    gestao: 'Gestao',
+  }
+
+  function switchMode(nextMode: AppMode) {
+    setAppMode(nextMode)
+    localStorage.setItem('capital-crm:mode', nextMode)
+    setView(firstViewByMode[nextMode])
+  }
 
   return (
     <div className="app-shell">
@@ -1277,9 +1425,23 @@ function App() {
         <div className="brand">
           <BrandLogo compact />
           <div>
-            <strong>Capital Truck CRM</strong>
-            <span>Central de carteira</span>
+            <strong>Capital Truck</strong>
+            <span>{modeLabel[appMode]}</span>
           </div>
+        </div>
+
+        <div className="mode-switcher" aria-label="Modo de trabalho">
+          {(['patio', 'crm', 'gestao'] as AppMode[]).map((mode) => (
+            <button
+              className={appMode === mode ? 'active' : ''}
+              key={mode}
+              type="button"
+              onClick={() => switchMode(mode)}
+              disabled={mode === 'gestao' && session.role !== 'admin'}
+            >
+              {modeLabel[mode]}
+            </button>
+          ))}
         </div>
 
         <nav className="nav">
@@ -1326,7 +1488,7 @@ function App() {
           <div className="topbar-title">
             <BrandLogo compact />
             <div>
-              <p className="eyebrow">Rotina comercial</p>
+              <p className="eyebrow">{modeLabel[appMode]}</p>
               <h1>{titleFor(view)}</h1>
             </div>
           </div>
@@ -1469,7 +1631,123 @@ function App() {
           </section>
         )}
 
-        {isMobileShell && canUseScopedClientViews && view === 'cockpit' && (
+        {appMode === 'patio' && ['patio-entrada', 'patio-fila', 'patio-boxes', 'patio-concluidos', 'patio-historico'].includes(view) && (
+          <PatioModuloPlaceholder
+            view={view}
+            onOpenFeedback={() => setView('patio-feedback')}
+            onOpenRevisao={() => setView('patio-revisao')}
+          />
+        )}
+
+        {appMode === 'patio' && view === 'patio-feedback' && (
+          <PatioFeedback
+            items={patioFeedbackItems}
+            total={patioFeedbackTotal}
+            page={patioFeedbackPage}
+            pageSize={50}
+            query={patioFeedbackQuery}
+            isLoading={isLoadingPatioFeedback}
+            onQueryChange={(nextQuery) => {
+              setPatioFeedbackQuery(nextQuery)
+              setPatioFeedbackPage(1)
+            }}
+            onPageChange={setPatioFeedbackPage}
+            onOpenClient={async (clienteId) => {
+              await ensureClientInMemory(clienteId)
+              setSelectedClientId(clienteId)
+              setAppMode('crm')
+              localStorage.setItem('capital-crm:mode', 'crm')
+              setView('cliente360')
+            }}
+            onMarkDone={async (item, observacao) => {
+              await markPatioFeedbackDone(item.patioExecucaoId)
+              const created = await createInteracao({
+                clienteId: item.clienteId,
+                vendedorId: item.vendedorId ?? session.id,
+                canal: 'WhatsApp',
+                tipo: 'feedback_patio',
+                resumo: observacao || `Feedback pos-servico registrado para placa ${item.placa ?? 'sem placa'}.`,
+                resultado: 'feedback realizado',
+              })
+              setInteracoes((current) => [created, ...current])
+              setPatioFeedbackItems((current) => current.filter((row) => row.patioExecucaoId !== item.patioExecucaoId))
+              setPatioFeedbackTotal((current) => Math.max(0, current - 1))
+            }}
+            onCreateOpportunity={async (item) => {
+              const created = await createTarefa({
+                clienteId: item.clienteId,
+                vendedorId: item.vendedorId ?? session.id,
+                titulo: 'Retorno comercial apos feedback',
+                descricao: `Cliente com atendimento de patio em ${dateLabel(item.fimExecucao)} demonstrou necessidade de retorno. Placa: ${item.placa ?? 'sem placa'}.`,
+                dataVencimento: tomorrowDate(),
+                prioridade: 85,
+                origem: 'patio:feedback',
+              })
+              setTarefas((current) => [created, ...current])
+            }}
+          />
+        )}
+
+        {appMode === 'patio' && view === 'patio-revisao' && (
+          <PatioRevisao
+            items={patioRevisaoItems}
+            total={patioRevisaoTotal}
+            page={patioRevisaoPage}
+            pageSize={50}
+            query={patioRevisaoQuery}
+            kmMin={patioRevisaoKmMin}
+            diasMin={patioRevisaoDiasMin}
+            isLoading={isLoadingPatioRevisao}
+            onQueryChange={(nextQuery) => {
+              setPatioRevisaoQuery(nextQuery)
+              setPatioRevisaoPage(1)
+            }}
+            onKmMinChange={(value) => {
+              setPatioRevisaoKmMin(value)
+              setPatioRevisaoPage(1)
+            }}
+            onDiasMinChange={(value) => {
+              setPatioRevisaoDiasMin(value)
+              setPatioRevisaoPage(1)
+            }}
+            onPageChange={setPatioRevisaoPage}
+            onOpenClient={async (clienteId) => {
+              await ensureClientInMemory(clienteId)
+              setSelectedClientId(clienteId)
+              setAppMode('crm')
+              localStorage.setItem('capital-crm:mode', 'crm')
+              setView('cliente360')
+            }}
+            onMarkDone={async (item, observacao) => {
+              await markPatioRevisaoDone(item.patioVeiculoId)
+              const created = await createInteracao({
+                clienteId: item.clienteId,
+                vendedorId: item.vendedorId ?? session.id,
+                canal: 'WhatsApp',
+                tipo: 'revisao_proativa',
+                resumo: observacao || `Contato de revisao proativa registrado para placa ${item.placa ?? 'sem placa'}.`,
+                resultado: 'revisao contatada',
+              })
+              setInteracoes((current) => [created, ...current])
+              setPatioRevisaoItems((current) => current.filter((row) => row.patioVeiculoId !== item.patioVeiculoId))
+              setPatioRevisaoTotal((current) => Math.max(0, current - 1))
+            }}
+            onCreateOpportunity={async (item) => {
+              const created = await createTarefa({
+                clienteId: item.clienteId,
+                vendedorId: item.vendedorId ?? session.id,
+                titulo: 'Oportunidade de revisao proativa',
+                descricao: `Veiculo ${item.placa ?? ''} com ${numberLabel(item.kmEstimadoDesdeVisita)} km estimados desde a ultima visita. Criar proposta ou contato comercial.`,
+                dataVencimento: tomorrowDate(),
+                prioridade: 88,
+                origem: 'patio:revisao',
+              })
+              setTarefas((current) => [created, ...current])
+            }}
+          />
+        )}
+
+        {appMode === 'crm' && isMobileShell && canUseScopedClientViews && view === 'cockpit' && (
           <MobileActionHome
             clientes={scoredClientes.slice(0, 8)}
             tarefasCount={cockpitTarefasVencidas.length}
@@ -1484,7 +1762,7 @@ function App() {
             onOpenCampaigns={() => setView('campanhas')}
           />
         )}
-        {view === 'cockpit' && !isMobileShell && !sellerHasNoCarteira && (
+        {appMode === 'crm' && view === 'cockpit' && !isMobileShell && !sellerHasNoCarteira && (
           <Cockpit
             currentUser={session}
             usuarios={usuarios}
@@ -2666,8 +2944,15 @@ function titleFor(view: string) {
     usuarios: 'Usuarios e permissoes',
     auditoria: 'Auditoria',
     cliente360: 'Ficha completa do cliente',
+    'patio-entrada': 'Entrada de veiculo',
+    'patio-fila': 'Fila do patio',
+    'patio-boxes': 'Boxes em atendimento',
+    'patio-concluidos': 'Servicos concluidos',
+    'patio-historico': 'Historico por placa',
+    'patio-feedback': 'Feedback pos-servico',
+    'patio-revisao': 'Revisao proativa',
   }
-  return titles[view]
+  return titles[view] ?? 'Capital Truck'
 }
 
 function Login({ usuarios, onLogin }: { usuarios: Vendedor[]; onLogin: (session: SessaoUsuario) => void }) {
@@ -8112,6 +8397,303 @@ function contactTypeLabel(tipo?: string) {
 
 function numberLabel(value: number) {
   return value.toLocaleString('pt-BR')
+}
+
+function PatioModuloPlaceholder({
+  view,
+  onOpenFeedback,
+  onOpenRevisao,
+}: {
+  view: string
+  onOpenFeedback: () => void
+  onOpenRevisao: () => void
+}) {
+  const copy: Record<string, { title: string; description: string; actions: string[] }> = {
+    'patio-entrada': {
+      title: 'Entrada de veiculo',
+      description: 'Fluxo principal a migrar do app de patio: placa, cliente, motorista, contato e servicos solicitados.',
+      actions: ['Buscar placa', 'Atualizar contato operacional', 'Criar atendimento'],
+    },
+    'patio-fila': {
+      title: 'Fila do patio',
+      description: 'Visao dos servicos pendentes por area para alocar em box sem abrir CRM comercial.',
+      actions: ['Ver pendentes', 'Filtrar area', 'Alocar box'],
+    },
+    'patio-boxes': {
+      title: 'Boxes em atendimento',
+      description: 'Controle visual dos boxes, finalizacao, KM e reversoes com permissao.',
+      actions: ['Acompanhar box', 'Finalizar', 'Registrar KM'],
+    },
+    'patio-concluidos': {
+      title: 'Servicos concluidos',
+      description: 'Historico operacional recente para consulta, reversao controlada e auditoria.',
+      actions: ['Consultar data', 'Abrir placa', 'Reverter com permissao'],
+    },
+    'patio-historico': {
+      title: 'Historico por placa',
+      description: 'Consulta rapida por placa para equipe operacional sem entrar na ficha comercial completa.',
+      actions: ['Buscar placa', 'Ver KM', 'Ver servicos'],
+    },
+  }
+  const content = copy[view] ?? copy['patio-entrada']
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>{content.title}</h2>
+          <p>{content.description}</p>
+        </div>
+        <div className="row-actions">
+          <button className="button" type="button" onClick={onOpenFeedback}>Feedback</button>
+          <button className="button primary" type="button" onClick={onOpenRevisao}>Revisao proativa</button>
+        </div>
+      </div>
+      <div className="metrics-grid">
+        {content.actions.map((action) => (
+          <article className="metric-card" key={action}>
+            <small>Proxima migracao</small>
+            <strong>{action}</strong>
+          </article>
+        ))}
+      </div>
+      <div className="readiness warn">
+        Esta tela esta reservada para migrar o fluxo operacional completo do patio sem misturar funil comercial no atendimento.
+      </div>
+    </section>
+  )
+}
+
+function PatioFeedback({
+  items,
+  total,
+  page,
+  pageSize,
+  query,
+  isLoading,
+  onQueryChange,
+  onPageChange,
+  onOpenClient,
+  onMarkDone,
+  onCreateOpportunity,
+}: {
+  items: PatioFeedbackPendente[]
+  total: number
+  page: number
+  pageSize: number
+  query: string
+  isLoading: boolean
+  onQueryChange: (query: string) => void
+  onPageChange: (page: number) => void
+  onOpenClient: (clienteId: string) => void
+  onMarkDone: (item: PatioFeedbackPendente, observacao: string) => Promise<void>
+  onCreateOpportunity: (item: PatioFeedbackPendente) => Promise<void>
+}) {
+  const [busyId, setBusyId] = useState<number | undefined>()
+  const [notes, setNotes] = useState<Record<number, string>>({})
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+
+  async function run(item: PatioFeedbackPendente, action: () => Promise<void>) {
+    setBusyId(item.patioExecucaoId)
+    try {
+      await action()
+    } finally {
+      setBusyId(undefined)
+    }
+  }
+
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Feedback pos-servico</h2>
+          <p>Atendimentos finalizados no patio que ainda precisam de retorno simples pelo WhatsApp.</p>
+        </div>
+        <strong>{total} pendentes</strong>
+      </div>
+      <div className="filters-grid">
+        <label>
+          Buscar
+          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Cliente, placa ou motorista" />
+        </label>
+      </div>
+      {isLoading && <div className="empty-state">Carregando feedbacks...</div>}
+      {!isLoading && items.length === 0 && <div className="empty-state">Nenhum feedback pendente com os filtros atuais.</div>}
+      <div className="table-list">
+        {items.map((item) => {
+          const phone = item.contatoRecomendado || item.contatoMotorista
+          const message = buildPatioFeedbackMessage(item)
+          return (
+            <article className="panel subtle" key={item.patioExecucaoId}>
+              <div className="panel-header">
+                <div>
+                  <h3>{item.clienteNome}</h3>
+                  <p>{item.placa ?? 'Sem placa'} · {dateLabel(item.fimExecucao)} · {item.quilometragem ? `${numberLabel(item.quilometragem)} km` : 'KM nao informado'}</p>
+                </div>
+                <div className="row-actions">
+                  {phone && (
+                    <a className="button primary" href={`https://wa.me/${phone}?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer">
+                      WhatsApp
+                    </a>
+                  )}
+                  <button className="button" type="button" onClick={() => onOpenClient(item.clienteId)}>Ficha</button>
+                </div>
+              </div>
+              <div className="status-list">
+                <div className="status-row"><span>Contato</span><strong>{item.contatoNome || item.nomeMotorista || 'Nao informado'}</strong></div>
+                <div className="status-row"><span>Servicos</span><strong>{item.servicos.slice(0, 3).join(', ') || 'Servico de patio'}</strong></div>
+              </div>
+              <label className="wide-field">
+                Observacao do feedback
+                <textarea value={notes[item.patioExecucaoId] ?? ''} onChange={(event) => setNotes((current) => ({ ...current, [item.patioExecucaoId]: event.target.value }))} placeholder="Ex.: cliente elogiou atendimento, pediu cotacao ou nao respondeu." />
+              </label>
+              <div className="row-actions">
+                <button className="button primary" type="button" disabled={busyId === item.patioExecucaoId} onClick={() => void run(item, () => onMarkDone(item, notes[item.patioExecucaoId] ?? ''))}>
+                  Marcar feedback feito
+                </button>
+                <button className="button" type="button" disabled={busyId === item.patioExecucaoId} onClick={() => void run(item, () => onCreateOpportunity(item))}>
+                  Criar retorno comercial
+                </button>
+              </div>
+            </article>
+          )
+        })}
+      </div>
+      <div className="pagination-bar">
+        <button className="button" type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>Anterior</button>
+        <span>Pagina {page} de {totalPages}</span>
+        <button className="button" type="button" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>Proxima</button>
+      </div>
+    </section>
+  )
+}
+
+function PatioRevisao({
+  items,
+  total,
+  page,
+  pageSize,
+  query,
+  kmMin,
+  diasMin,
+  isLoading,
+  onQueryChange,
+  onKmMinChange,
+  onDiasMinChange,
+  onPageChange,
+  onOpenClient,
+  onMarkDone,
+  onCreateOpportunity,
+}: {
+  items: PatioRevisaoProativa[]
+  total: number
+  page: number
+  pageSize: number
+  query: string
+  kmMin: number
+  diasMin: number
+  isLoading: boolean
+  onQueryChange: (query: string) => void
+  onKmMinChange: (value: number) => void
+  onDiasMinChange: (value: number) => void
+  onPageChange: (page: number) => void
+  onOpenClient: (clienteId: string) => void
+  onMarkDone: (item: PatioRevisaoProativa, observacao: string) => Promise<void>
+  onCreateOpportunity: (item: PatioRevisaoProativa) => Promise<void>
+}) {
+  const [busyId, setBusyId] = useState<number | undefined>()
+  const [notes, setNotes] = useState<Record<number, string>>({})
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+
+  async function run(item: PatioRevisaoProativa, action: () => Promise<void>) {
+    setBusyId(item.patioVeiculoId)
+    try {
+      await action()
+    } finally {
+      setBusyId(undefined)
+    }
+  }
+
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Revisao proativa</h2>
+          <p>Veiculos priorizados por KM estimado e tempo desde a ultima passagem no patio.</p>
+        </div>
+        <strong>{total} veiculos</strong>
+      </div>
+      <div className="filters-grid">
+        <label>
+          Buscar
+          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Cliente, placa ou motorista" />
+        </label>
+        <label>
+          KM minimo estimado
+          <input type="number" value={kmMin} onChange={(event) => onKmMinChange(Number(event.target.value || 0))} />
+        </label>
+        <label>
+          Dias minimos sem visita
+          <input type="number" value={diasMin} onChange={(event) => onDiasMinChange(Number(event.target.value || 0))} />
+        </label>
+      </div>
+      {isLoading && <div className="empty-state">Carregando revisoes...</div>}
+      {!isLoading && items.length === 0 && <div className="empty-state">Nenhum veiculo encontrado com esses criterios.</div>}
+      <div className="table-list">
+        {items.map((item) => {
+          const phone = item.contatoRecomendado || item.contatoMotorista
+          const message = buildPatioRevisaoMessage(item)
+          return (
+            <article className="panel subtle" key={item.patioVeiculoId}>
+              <div className="panel-header">
+                <div>
+                  <h3>{item.placa ?? 'Sem placa'} · {item.clienteNome}</h3>
+                  <p>{numberLabel(item.kmEstimadoDesdeVisita)} km estimados · {item.diasDesdeUltimaVisita} dias sem visita · ultimo KM {item.ultimoKm ? numberLabel(item.ultimoKm) : 'n/d'}</p>
+                </div>
+                <div className="row-actions">
+                  {phone && (
+                    <a className="button primary" href={`https://wa.me/${phone}?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer">
+                      WhatsApp
+                    </a>
+                  )}
+                  <button className="button" type="button" onClick={() => onOpenClient(item.clienteId)}>Ficha</button>
+                </div>
+              </div>
+              <div className="status-list">
+                <div className="status-row"><span>Motorista/contato</span><strong>{item.contatoNome || item.nomeMotorista || 'Nao informado'}</strong></div>
+                <div className="status-row"><span>Ultima visita</span><strong>{dateLabel(item.ultimoAtendimentoEm)}</strong></div>
+              </div>
+              <label className="wide-field">
+                Observacao do contato
+                <textarea value={notes[item.patioVeiculoId] ?? ''} onChange={(event) => setNotes((current) => ({ ...current, [item.patioVeiculoId]: event.target.value }))} placeholder="Ex.: pediu cotacao, agendou revisao, nao respondeu." />
+              </label>
+              <div className="row-actions">
+                <button className="button primary" type="button" disabled={busyId === item.patioVeiculoId} onClick={() => void run(item, () => onMarkDone(item, notes[item.patioVeiculoId] ?? ''))}>
+                  Marcar contato feito
+                </button>
+                <button className="button" type="button" disabled={busyId === item.patioVeiculoId} onClick={() => void run(item, () => onCreateOpportunity(item))}>
+                  Criar oportunidade
+                </button>
+              </div>
+            </article>
+          )
+        })}
+      </div>
+      <div className="pagination-bar">
+        <button className="button" type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>Anterior</button>
+        <span>Pagina {page} de {totalPages}</span>
+        <button className="button" type="button" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>Proxima</button>
+      </div>
+    </section>
+  )
+}
+
+function buildPatioFeedbackMessage(item: PatioFeedbackPendente) {
+  const servicos = item.servicos.slice(0, 3).join(', ')
+  return `Ola, tudo bem? Aqui e da Capital Truck Center. Estamos passando para saber como foi o atendimento do veiculo ${item.placa ?? ''}${servicos ? ` (${servicos})` : ''}. Seu feedback ajuda muito nossa equipe.`
+}
+
+function buildPatioRevisaoMessage(item: PatioRevisaoProativa) {
+  return `Ola, tudo bem? Aqui e da Capital Truck Center. Pelo historico do veiculo ${item.placa ?? ''}, ja pode ser um bom momento para revisar alinhamento, balanceamento ou pneus. Posso verificar uma condicao para voce?`
 }
 
 function Cliente360({
