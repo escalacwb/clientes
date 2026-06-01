@@ -1641,6 +1641,11 @@ h3 {
   border-top: 1px solid #dfe7e2;
 }
 
+.compact-panel-header {
+  align-items: center;
+  gap: 12px;
+}
+
 .panel-subsection h3 {
   font-size: 16px;
   margin: 0;

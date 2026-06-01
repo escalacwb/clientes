@@ -9408,6 +9408,7 @@ function PatioDadosClientes({
   onOpenClient: (clienteId: string) => void | Promise<void>
 }) {
   const [selected, setSelected] = useState<PatioVeiculoBusca | undefined>()
+  const [selectedClientKey, setSelectedClientKey] = useState('')
   const [clienteForm, setClienteForm] = useState({ nome: '', responsavel: '', telefone: '', whatsapp: '' })
   const [veiculoForm, setVeiculoForm] = useState({ modelo: '', nomeMotorista: '', contatoMotorista: '', mediaKmDiaria: '' })
   const [atendimentos, setAtendimentos] = useState<PatioAtendimentoResumo[]>([])
@@ -9416,8 +9417,48 @@ function PatioDadosClientes({
   const [isLoadingHistorico, setIsLoadingHistorico] = useState(false)
   const [error, setError] = useState('')
 
+  const clientGroups = useMemo(() => {
+    const groups = new Map<string, { key: string; clienteId?: string; clienteNome: string; contatoNome?: string; contatoRecomendado?: string; vehicles: PatioVeiculoBusca[] }>()
+    results.forEach((vehicle) => {
+      const key = vehicle.clienteId ?? vehicle.clienteNome ?? `sem-cliente-${vehicle.patioVeiculoId}`
+      const current = groups.get(key)
+      if (current) {
+        current.vehicles.push(vehicle)
+        return
+      }
+      groups.set(key, {
+        key,
+        clienteId: vehicle.clienteId,
+        clienteNome: vehicle.clienteNome ?? 'Cliente sem vinculo',
+        contatoNome: vehicle.contatoNome,
+        contatoRecomendado: vehicle.contatoRecomendado,
+        vehicles: [vehicle],
+      })
+    })
+    return Array.from(groups.values())
+  }, [results])
+
+  const selectedClient = clientGroups.find((group) => group.key === selectedClientKey)
+  const selectedClientVehicles = selectedClient?.vehicles ?? []
+
+  useEffect(() => {
+    setSelected(undefined)
+    setSelectedClientKey('')
+    setAtendimentos([])
+    setItens([])
+  }, [query])
+
+  const chooseClient = (clientKey: string) => {
+    setSelectedClientKey(clientKey)
+    setSelected(undefined)
+    setAtendimentos([])
+    setItens([])
+    setError('')
+  }
+
   const chooseVehicle = (vehicle: PatioVeiculoBusca) => {
     setSelected(vehicle)
+    setSelectedClientKey(vehicle.clienteId ?? vehicle.clienteNome ?? `sem-cliente-${vehicle.patioVeiculoId}`)
     setError('')
     setClienteForm({
       nome: vehicle.clienteNome ?? '',
@@ -9511,13 +9552,44 @@ function PatioDadosClientes({
       {error && <div className="inline-error">{error}</div>}
       {isLoading && <div className="empty-state">Buscando dados...</div>}
       {!isLoading && query.trim().length >= 2 && results.length === 0 && <div className="empty-state">Nenhum cliente ou veiculo encontrado.</div>}
-      {results.length > 0 && (
-        <div className="patio-history-results">
-          {results.slice(0, 12).map((item) => (
-            <button className={selected?.patioVeiculoId === item.patioVeiculoId ? 'button primary' : 'button'} type="button" key={item.patioVeiculoId} onClick={() => chooseVehicle(item)}>
-              {item.placa ?? 'Sem placa'} - {item.clienteNome ?? 'Cliente sem vinculo'}
-            </button>
-          ))}
+      {clientGroups.length > 0 && (
+        <div className="panel-subsection">
+          <div className="panel-header compact-panel-header">
+            <div>
+              <h3>Clientes encontrados</h3>
+              <p>Selecione o cliente primeiro, depois escolha o veiculo para alterar dados ou consultar historico.</p>
+            </div>
+            <strong>{clientGroups.length} clientes</strong>
+          </div>
+          <div className="patio-history-results">
+            {clientGroups.slice(0, 12).map((group) => (
+              <button className={selectedClientKey === group.key ? 'button primary' : 'button'} type="button" key={group.key} onClick={() => chooseClient(group.key)}>
+                {group.clienteNome} - {group.vehicles.length} veiculo{group.vehicles.length === 1 ? '' : 's'}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {selectedClient && (
+        <div className="panel-subsection">
+          <div className="panel-header compact-panel-header">
+            <div>
+              <h3>{selectedClient.clienteNome}</h3>
+              <p>
+                {selectedClient.clienteId ? `ID CRM: ${selectedClient.clienteId.slice(0, 8)}` : 'Sem cliente vinculado'}
+                {selectedClient.contatoNome ? ` - Responsavel: ${selectedClient.contatoNome}` : ''}
+                {selectedClient.contatoRecomendado ? ` - Contato: ${selectedClient.contatoRecomendado}` : ''}
+              </p>
+            </div>
+            {selectedClient.clienteId && <button className="button" type="button" onClick={() => onOpenClient(selectedClient.clienteId!)}>Abrir ficha CRM</button>}
+          </div>
+          <div className="patio-history-results">
+            {selectedClientVehicles.map((item) => (
+              <button className={selected?.patioVeiculoId === item.patioVeiculoId ? 'button primary' : 'button'} type="button" key={item.patioVeiculoId} onClick={() => chooseVehicle(item)}>
+                {item.placa ?? 'Sem placa'} - {item.veiculoDescricao || 'Modelo nao informado'}{item.ultimoAtendimentoEm ? ` - ultima visita ${dateLabel(item.ultimoAtendimentoEm)}` : ''}
+              </button>
+            ))}
+          </div>
         </div>
       )}
       {selected && (
