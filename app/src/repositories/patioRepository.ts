@@ -121,6 +121,34 @@ type VeiculoBuscaRow = {
   contato_tipo: string | null
 }
 
+type PatioContatoClienteRow = {
+  id: string
+  nome: string | null
+  responsavel_nome: string | null
+  telefone_principal: string | null
+  whatsapp_principal: string | null
+}
+
+type PatioContatoMotoristaRow = {
+  patio_veiculo_id: number
+  empresa: string | null
+  placa: string | null
+  modelo: string | null
+  nome_motorista: string | null
+  contato_motorista: string | null
+}
+
+export type PatioContatoExportacao = {
+  tipo: 'Responsavel' | 'Motorista'
+  nome: string
+  empresa: string
+  placa?: string
+  modelo?: string
+  telefone: string
+  telefonePadronizado: string
+  observacao: string
+}
+
 type FilaRow = {
   id: string
   patio_item_id: number
@@ -453,6 +481,70 @@ export async function updatePatioVeiculoDados(input: {
 
     if (vehicleError) throw vehicleError
   }
+}
+
+export async function listPatioContatosExportacao(queryText?: string): Promise<PatioContatoExportacao[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const term = queryText?.trim()
+  let clientesQuery = supabase
+    .from('clientes')
+    .select('id,nome,responsavel_nome,telefone_principal,whatsapp_principal')
+    .not('responsavel_nome', 'is', null)
+    .limit(500)
+
+  let motoristasQuery = supabase
+    .from('patio_veiculos_snapshot')
+    .select('patio_veiculo_id,empresa,placa,modelo,nome_motorista,contato_motorista')
+    .not('nome_motorista', 'is', null)
+    .limit(500)
+
+  if (term) {
+    const like = `%${term}%`
+    clientesQuery = clientesQuery.or(`nome.ilike.${like},responsavel_nome.ilike.${like},telefone_principal.ilike.${like},whatsapp_principal.ilike.${like}`)
+    motoristasQuery = motoristasQuery.or(`empresa.ilike.${like},placa.ilike.${like},nome_motorista.ilike.${like},contato_motorista.ilike.${like}`)
+  }
+
+  const [{ data: clientes, error: clientesError }, { data: motoristas, error: motoristasError }] = await Promise.all([
+    clientesQuery,
+    motoristasQuery,
+  ])
+
+  if (clientesError) throw clientesError
+  if (motoristasError) throw motoristasError
+
+  const responsaveis = (clientes as PatioContatoClienteRow[] | null ?? [])
+    .map((row) => {
+      const telefone = row.whatsapp_principal || row.telefone_principal || ''
+      return {
+        tipo: 'Responsavel' as const,
+        nome: row.responsavel_nome?.trim() || row.nome?.trim() || 'Responsavel',
+        empresa: row.nome?.trim() || '',
+        telefone,
+        telefonePadronizado: normalizeBrazilPhone(telefone),
+        observacao: `Contato da empresa ${row.nome?.trim() || ''}`.trim(),
+      }
+    })
+    .filter((item) => item.telefonePadronizado)
+
+  const contatosMotoristas = (motoristas as PatioContatoMotoristaRow[] | null ?? [])
+    .map((row) => {
+      const telefone = row.contato_motorista || ''
+      return {
+        tipo: 'Motorista' as const,
+        nome: row.nome_motorista?.trim() || 'Motorista',
+        empresa: row.empresa?.trim() || '',
+        placa: row.placa?.trim() || undefined,
+        modelo: row.modelo?.trim() || undefined,
+        telefone,
+        telefonePadronizado: normalizeBrazilPhone(telefone),
+        observacao: `Motorista do veiculo ${row.placa?.trim() || ''} - ${row.empresa?.trim() || ''}`.trim(),
+      }
+    })
+    .filter((item) => item.telefonePadronizado)
+
+  return [...responsaveis, ...contatosMotoristas]
 }
 
 export async function registerPatioEntrada(input: PatioEntradaInput): Promise<number> {
@@ -803,6 +895,19 @@ function mapAtendimentoItem(row: AtendimentoItemRow): PatioAtendimentoItemResumo
     solicitadoEm: row.solicitado_em ?? undefined,
     tipoAtendimento: row.tipo_atendimento ?? undefined,
   }
+}
+
+function normalizeBrazilPhone(value?: string | null) {
+  if (!value) return ''
+  let digits = value.replace(/\D/g, '')
+  if (digits.startsWith('55')) digits = digits.slice(2)
+  if (digits.length > 10 && digits.startsWith('0')) digits = digits.slice(1)
+  if (digits.length === 10) {
+    const phone = digits.slice(2)
+    if (/^[6789]/.test(phone)) digits = `${digits.slice(0, 2)}9${phone}`
+  }
+  if (![10, 11].includes(digits.length)) return ''
+  return `+55${digits}`
 }
 
 function mapFeedback(row: FeedbackRow): PatioFeedbackPendente {

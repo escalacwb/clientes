@@ -170,6 +170,7 @@ import {
   listPatioBoxesLivres,
   listPatioCatalogoServicos,
   listPatioConcluidos,
+  listPatioContatosExportacao,
   listPatioFeedbackPendente,
   listPatioFilaItens,
   listPatioFilaPainel,
@@ -185,6 +186,7 @@ import {
   unassignPatioBox,
   updatePatioClienteDados,
   updatePatioVeiculoDados,
+  type PatioContatoExportacao,
 } from './repositories/patioRepository'
 import { createPipelineFromSuggestion, listPipelineOportunidades, updatePipelineOportunidade, updatePipelineStage } from './repositories/pipelineRepository'
 import { escalateStaleCommercialSequences, listDefaultCommercialSequenceSteps, listSequenciaExecucoes, startDefaultCommercialSequence, updateSequenceStep, type SequenciaEtapaConfig } from './repositories/sequenciasRepository'
@@ -268,6 +270,7 @@ const navSectionsByMode: Record<AppMode, Array<{ title: string; items: Array<{ i
         { id: 'patio-boxes', label: 'Boxes', icon: Gauge },
         { id: 'patio-concluidos', label: 'Servicos Concluidos', icon: CheckCircle2 },
         { id: 'patio-historico', label: 'Historico placa', icon: Search },
+        { id: 'patio-contatos', label: 'Exportar contatos', icon: FileUp },
       ],
     },
   ],
@@ -2046,6 +2049,10 @@ function App() {
           />
         )}
 
+        {appMode === 'patio' && view === 'patio-contatos' && (
+          <PatioExportarContatos onLoadContatos={listPatioContatosExportacao} />
+        )}
+
         {appMode === 'crm' && view === 'patio-feedback' && (
           <PatioFeedback
             items={patioFeedbackItems}
@@ -3358,6 +3365,7 @@ function titleFor(view: string) {
     'patio-boxes': 'Visao dos Boxes',
     'patio-concluidos': 'Servicos concluidos',
     'patio-historico': 'Historico por placa',
+    'patio-contatos': 'Exportar contatos',
     'patio-feedback': 'Feedback pos-servico',
     'patio-revisao': 'Revisao proativa',
   }
@@ -9451,6 +9459,110 @@ function PatioDadosClientes({
       )}
     </section>
   )
+}
+
+function PatioExportarContatos({
+  onLoadContatos,
+}: {
+  onLoadContatos: (query?: string) => Promise<PatioContatoExportacao[]>
+}) {
+  const [query, setQuery] = useState('')
+  const [items, setItems] = useState<PatioContatoExportacao[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const load = async () => {
+    setIsLoading(true)
+    setError('')
+    try {
+      setItems(await onLoadContatos(query))
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar contatos.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const downloadCsv = () => {
+    const csv = buildGoogleContactsCsv(items)
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `google_contacts_capital_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Exportar contatos</h2>
+          <p>Gere CSV para Google Contacts com responsaveis e motoristas da base consolidada.</p>
+        </div>
+        <button className="button primary" type="button" onClick={() => void load()} disabled={isLoading}>
+          {isLoading ? 'Carregando...' : 'Gerar lista'}
+        </button>
+      </div>
+      {error && <div className="inline-error">{error}</div>}
+      <div className="filters-grid">
+        <label>
+          Filtrar antes de gerar
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cliente, placa, motorista ou telefone" />
+        </label>
+      </div>
+      {items.length > 0 && (
+        <>
+          <div className="status-list">
+            <div className="status-row"><span>Contatos prontos</span><strong>{items.length}</strong></div>
+            <div className="status-row"><span>Responsaveis</span><strong>{items.filter((item) => item.tipo === 'Responsavel').length}</strong></div>
+            <div className="status-row"><span>Motoristas</span><strong>{items.filter((item) => item.tipo === 'Motorista').length}</strong></div>
+          </div>
+          <div className="row-actions">
+            <button className="button primary" type="button" onClick={downloadCsv}>Baixar CSV</button>
+          </div>
+          <div className="table-list">
+            {items.slice(0, 50).map((item, index) => (
+              <article className="panel subtle" key={`${item.tipo}-${item.telefonePadronizado}-${index}`}>
+                <div className="panel-header">
+                  <div>
+                    <h3>{item.nome}</h3>
+                    <p>{item.tipo} - {item.empresa || 'Empresa nao informada'} {item.placa ? `- ${item.placa}` : ''}</p>
+                  </div>
+                  <strong>{item.telefonePadronizado}</strong>
+                </div>
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+      {!isLoading && items.length === 0 && <div className="empty-state">Gere a lista para visualizar e baixar contatos validos.</div>}
+    </section>
+  )
+}
+
+function buildGoogleContactsCsv(items: PatioContatoExportacao[]) {
+  const headers = ['Name Prefix', 'First Name', 'Middle Name', 'Last Name', 'Name Suffix', 'Phone 1 - Type', 'Phone 1 - Value', 'Notes']
+  const rows = items.map((item) => [
+    item.tipo,
+    item.nome,
+    item.empresa,
+    item.placa ?? '',
+    item.modelo ?? '',
+    'Celular',
+    item.telefonePadronizado,
+    item.observacao,
+  ])
+  return [headers, ...rows]
+    .map((row) => row.map(csvCell).join(','))
+    .join('\r\n')
+}
+
+function csvCell(value: string) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`
 }
 
 function PatioFila({
