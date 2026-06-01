@@ -10107,6 +10107,7 @@ function PatioKmMedio({
   const [feedback, setFeedback] = useState('')
   const [kmDrafts, setKmDrafts] = useState<Record<number, string>>({})
   const [manualMedia, setManualMedia] = useState('')
+  const visitDayKey = (visit: PatioAtendimentoResumo) => String(visit.fimExecucao || visit.inicioExecucao || '').slice(0, 10)
 
   const selectVehicle = async (vehicle: PatioVeiculoBusca) => {
     setSelected(vehicle)
@@ -10126,8 +10127,9 @@ function PatioKmMedio({
     const unique = new Map<string, PatioAtendimentoResumo>()
     for (const item of atendimentos) {
       if (!item.fimExecucao || !item.quilometragem || item.quilometragem <= 0) continue
-      const key = `${item.fimExecucao.slice(0, 10)}-${item.quilometragem}`
-      if (!unique.has(key)) unique.set(key, item)
+      const key = visitDayKey(item)
+      const current = unique.get(key)
+      if (!current || (item.quilometragem ?? 0) > (current.quilometragem ?? 0)) unique.set(key, item)
     }
     return Array.from(unique.values()).sort((a, b) => String(a.fimExecucao).localeCompare(String(b.fimExecucao)))
   }, [atendimentos])
@@ -10166,8 +10168,9 @@ function PatioKmMedio({
     setFeedback('')
     try {
       await onSaveAtendimentoKm({ patioExecucaoId: visit.patioExecucaoId, quilometragem: nextKm })
+      const changedDay = visitDayKey(visit)
       setAtendimentos((current) => current.map((item) =>
-        item.patioExecucaoId === visit.patioExecucaoId ? { ...item, quilometragem: Math.round(nextKm) } : item,
+        visitDayKey(item) === changedDay ? { ...item, quilometragem: Math.round(nextKm) } : item,
       ))
       setFeedback('KM da visita atualizado. Confira a nova media calculada antes de salvar.')
     } catch (exception) {
