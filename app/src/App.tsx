@@ -12219,6 +12219,48 @@ function approvalActionLabel(action: OrcamentoAprovacao['acao']) {
   return labels[action]
 }
 
+function isOpenBudget(orcamento: Orcamento) {
+  return ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando'].includes(orcamento.status)
+}
+
+function isExpiredBudget(orcamento: Orcamento) {
+  return isOpenBudget(orcamento) && daysSince(orcamento.validade) > 0
+}
+
+function budgetPriorityRank(orcamento: Orcamento) {
+  if (isExpiredBudget(orcamento)) return 0
+  if (orcamento.status === 'aguardando_aprovacao') return 1
+  if (orcamento.status === 'negociando') return 2
+  if (orcamento.status === 'enviado') return 3
+  if (orcamento.status === 'aberto') return 4
+  if (orcamento.status === 'ganho') return 5
+  return 6
+}
+
+function budgetStatusLabel(orcamento: Orcamento) {
+  if (isExpiredBudget(orcamento)) return 'Vencida'
+  const labels: Record<Orcamento['status'], string> = {
+    aberto: 'Aberta',
+    aguardando_aprovacao: 'Aguardando aprovacao',
+    enviado: 'Enviada',
+    negociando: 'Negociando',
+    ganho: 'Ganha',
+    perdido: 'Perdida',
+  }
+  return labels[orcamento.status]
+}
+
+function budgetPriorityLabels(orcamentos: Orcamento[]) {
+  const labels = new Set<string>()
+  const sorted = [...orcamentos]
+    .sort((a, b) => budgetPriorityRank(a) - budgetPriorityRank(b) || b.data.localeCompare(a.data))
+  sorted.forEach((orcamento) => {
+    labels.add(budgetStatusLabel(orcamento))
+    if (orcamento.pedidoConfirmadoEm) labels.add('Pedido confirmado')
+  })
+  return Array.from(labels)
+}
+
 function Orcamentos({
   clientes,
   orcamentos,
@@ -12379,6 +12421,26 @@ function Orcamentos({
     })
   }
 
+  const groupedOrcamentos = useMemo(() => {
+    const groups = new Map<string, Orcamento[]>()
+    orcamentos.forEach((orcamento) => {
+      const key = orcamento.clienteId || orcamento.clienteNome || orcamento.id
+      groups.set(key, [...(groups.get(key) ?? []), orcamento])
+    })
+
+    return Array.from(groups.values())
+      .map((items) => {
+        const sorted = [...items].sort((a, b) => budgetPriorityRank(a) - budgetPriorityRank(b) || b.data.localeCompare(a.data))
+        return {
+          primary: sorted[0],
+          all: sorted,
+          labels: budgetPriorityLabels(sorted),
+          totalValue: sorted.reduce((sum, item) => sum + item.valorTotal, 0),
+        }
+      })
+      .sort((a, b) => budgetPriorityRank(a.primary) - budgetPriorityRank(b.primary) || b.primary.data.localeCompare(a.primary.data))
+  }, [orcamentos])
+
   return (
     <section className="panel wide">
       <div className="panel-header">
@@ -12475,16 +12537,28 @@ function Orcamentos({
           <span>Vendedor</span>
         </div>
         {isLoading && <div className="empty-state compact">Carregando propostas...</div>}
-        {!isLoading && orcamentos.map((orcamento) => {
+        {!isLoading && groupedOrcamentos.map((group) => {
+          const orcamento = group.primary
           const cliente = clientes.find((item) => item.id === orcamento.clienteId)
           const vendedor = usuarios.find((item) => item.id === orcamento.vendedorId)
-          const isExpired = openStatuses.includes(orcamento.status) && daysSince(orcamento.validade) > 0
+          const isExpired = isExpiredBudget(orcamento)
           const isClosed = orcamento.status === 'ganho' || orcamento.status === 'perdido'
+          const secondaryLabels = group.labels.filter((label) => label !== budgetStatusLabel(orcamento))
           return (
             <div className={isExpired ? 'table-row five expired-budget' : 'table-row five'} key={orcamento.id}>
-              <span><strong>{cliente?.nome ?? orcamento.clienteNome ?? 'Cliente nao carregado'}</strong></span>
               <span>
-                <span className={isExpired ? 'status-pill danger' : 'status-pill'}>{isExpired ? 'vencido' : orcamento.status}</span>
+                <strong>{cliente?.nome ?? orcamento.clienteNome ?? 'Cliente nao carregado'}</strong>
+                {group.all.length > 1 && <small>{group.all.length} propostas agrupadas</small>}
+              </span>
+              <span>
+                <span className={isExpired ? 'status-pill danger' : 'status-pill'}>{budgetStatusLabel(orcamento)}</span>
+                {secondaryLabels.length > 0 && (
+                  <div className="budget-priority-tags">
+                    {secondaryLabels.map((label) => (
+                      <small className="status-pill compact" key={label}>{label}</small>
+                    ))}
+                  </div>
+                )}
                 {orcamento.aprovacaoMotivo && <small>{orcamento.aprovacaoMotivo}</small>}
                 {orcamento.motivoPerda && <small>Motivo: {lossReasonLabel(orcamento.motivoPerda)}</small>}
                 {orcamento.aprovadoEm && <small>Aprovado em {dateLabel(orcamento.aprovadoEm)}</small>}
@@ -12494,6 +12568,7 @@ function Orcamentos({
               <span>
                 <strong>{money(orcamento.valorTotal)}</strong>
                 <small>{orcamento.itens?.length ?? 0} itens</small>
+                {group.all.length > 1 && <small>{group.all.length} propostas no cliente - total {money(group.totalValue)}</small>}
               </span>
               <span>
                 <strong>{dateLabel(orcamento.validade)}</strong>
@@ -12582,14 +12657,29 @@ function Orcamentos({
                     Perder
                   </button>
                 </details>}
+                {group.all.length > 1 && (
+                  <details className="budget-loss-row">
+                    <summary>Outras propostas do cliente</summary>
+                    <div className="budget-related-list">
+                      {group.all.filter((item) => item.id !== orcamento.id).map((related) => (
+                        <button className="button" type="button" key={related.id} onClick={() => onOpenDetail(related)}>
+                          {related.status} - {money(related.valorTotal)} - validade {dateLabel(related.validade)}
+                        </button>
+                      ))}
+                    </div>
+                  </details>
+                )}
               </span>
             </div>
           )
         })}
-        {!isLoading && orcamentos.length === 0 && <div className="empty-state">Nenhuma proposta nesta visao.</div>}
+        {!isLoading && groupedOrcamentos.length === 0 && <div className="empty-state">Nenhuma proposta nesta visao.</div>}
       </div>
       <div className="pagination-bar">
-        <span>Pagina {page} de {totalPages} - {total} propostas</span>
+        <span>
+          Pagina {page} de {totalPages} - {total} propostas
+          {groupedOrcamentos.length !== orcamentos.length ? ` - ${groupedOrcamentos.length} clientes nesta pagina` : ''}
+        </span>
         <div className="toolbar-actions">
           <button className="button" type="button" disabled={page <= 1 || isLoading} onClick={() => onPageChange(Math.max(1, page - 1))}>
             Anterior

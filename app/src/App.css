@@ -1990,6 +1990,11 @@ h3 {
   color: #a8071a;
 }
 
+.status-pill.compact {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
 .quick-actions {
   gap: 8px;
   flex-wrap: wrap;
@@ -2138,6 +2143,13 @@ h3 {
   margin-top: 8px;
 }
 
+.budget-priority-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
 .budget-status-actions .button,
 .budget-status-actions .assign-select,
 .budget-row-actions .button,
@@ -2162,6 +2174,19 @@ h3 {
 
 .budget-loss-row[open] {
   opacity: 1;
+}
+
+.budget-related-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+  width: 100%;
+}
+
+.budget-related-list .button {
+  justify-content: space-between;
+  width: 100%;
+  text-align: left;
 }
 
 .budget-summary {
