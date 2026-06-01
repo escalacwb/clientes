@@ -35,6 +35,7 @@ type AtendimentoRow = {
   cliente_id: string | null
   veiculo_id: string | null
   placa_snapshot: string | null
+  veiculo_descricao: string | null
   cliente_nome_snapshot: string | null
   quilometragem: number | null
   status: string | null
@@ -652,6 +653,7 @@ export async function listPatioBoxesAtivos(): Promise<PatioAtendimentoResumo[]> 
     cliente_nome_snapshot: row.cliente_nome ?? null,
     fim_execucao: null,
     data_feedback: null,
+    veiculo_descricao: null,
   }))
 }
 
@@ -667,7 +669,7 @@ export async function listPatioConcluidos(input: {
   const to = from + input.pageSize
   let query = supabase
     .from('vw_patio_concluidos')
-    .select('patio_execucao_id,cliente_id,veiculo_id,placa,cliente_nome,quilometragem,status,inicio_execucao,fim_execucao,nome_motorista,contato_motorista,data_feedback')
+    .select('patio_execucao_id,cliente_id,veiculo_id,placa,veiculo_descricao,cliente_nome,quilometragem,status,inicio_execucao,fim_execucao,nome_motorista,contato_motorista,data_feedback')
     .order('fim_execucao', { ascending: false, nullsFirst: false })
     .range(from, to)
 
@@ -711,6 +713,7 @@ function mapAtendimento(row: AtendimentoRow): PatioAtendimentoResumo {
     clienteId: row.cliente_id ?? undefined,
     veiculoId: row.veiculo_id ?? undefined,
     placa: row.placa_snapshot ?? undefined,
+    veiculoDescricao: row.veiculo_descricao ?? undefined,
     clienteNome: row.cliente_nome_snapshot ?? undefined,
     quilometragem: row.quilometragem ?? undefined,
     status: row.status ?? undefined,

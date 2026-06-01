@@ -368,6 +368,7 @@ export type PatioAtendimentoResumo = {
   clienteId?: string
   veiculoId?: string
   placa?: string
+  veiculoDescricao?: string
   clienteNome?: string
   quilometragem?: number
   status?: string

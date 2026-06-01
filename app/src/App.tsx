@@ -9767,6 +9767,12 @@ function PatioConcluidos({
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const [savingId, setSavingId] = useState<number | undefined>()
   const [error, setError] = useState('')
+  const [termTarget, setTermTarget] = useState<PatioAtendimentoResumo | null>(null)
+  const [termConditions, setTermConditions] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    if (termTarget) setTermConditions({})
+  }, [termTarget?.patioExecucaoId])
 
   const handleReverter = async (patioExecucaoId: number) => {
     if (!window.confirm('Reverter esta visita concluida e devolver os servicos para alocacao?')) return
@@ -9780,6 +9786,8 @@ function PatioConcluidos({
       setSavingId(undefined)
     }
   }
+
+  const selectedTermConditions = PATIO_TERMO_CONDICOES.filter((condition) => termConditions[condition.id])
 
   return (
     <section className="panel wide">
@@ -9809,6 +9817,7 @@ function PatioConcluidos({
               </div>
               <div className="inline-actions">
                 {item.clienteId && <button className="button" type="button" onClick={() => onOpenClient(item.clienteId!)}>Ficha CRM</button>}
+                <button className="button" type="button" onClick={() => setTermTarget(item)}>Gerar termo</button>
                 <button
                   className="button"
                   type="button"
@@ -9826,6 +9835,46 @@ function PatioConcluidos({
           </article>
         ))}
       </div>
+      {termTarget && (
+        <div className="patio-term-workspace">
+          <div className="panel-header">
+            <div>
+              <h3>Termo de responsabilidade</h3>
+              <p>{termTarget.placa ?? 'Sem placa'} - {termTarget.clienteNome ?? 'Cliente sem vinculo'}</p>
+            </div>
+            <div className="inline-actions">
+              <button className="button" type="button" onClick={() => setTermTarget(null)}>Fechar</button>
+              <button
+                className="button primary"
+                type="button"
+                onClick={() => printPatioResponsibilityTerm(termTarget, selectedTermConditions)}
+              >
+                Imprimir termo
+              </button>
+            </div>
+          </div>
+          <div className="patio-term-grid">
+            <div className="panel subtle">
+              <h4>Condições observadas</h4>
+              <div className="checkbox-grid">
+                {PATIO_TERMO_CONDICOES.map((condition) => (
+                  <label key={condition.id} className="checkbox-card">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(termConditions[condition.id])}
+                      onChange={(event) => setTermConditions((current) => ({ ...current, [condition.id]: event.target.checked }))}
+                    />
+                    <span>{condition.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="patio-term-preview">
+              <PatioResponsibilityTermPreview atendimento={termTarget} conditions={selectedTermConditions} />
+            </div>
+          </div>
+        </div>
+      )}
       <div className="pagination-bar">
         <button className="button" type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>Anterior</button>
         <span>Pagina {page} de {totalPages}</span>
@@ -9833,6 +9882,152 @@ function PatioConcluidos({
       </div>
     </section>
   )
+}
+
+type PatioTermCondition = {
+  id: string
+  label: string
+  kind: 'avaria' | 'carga' | 'cambagem'
+}
+
+const PATIO_TERMO_CONDICOES: PatioTermCondition[] = [
+  { id: 'folga_bucha_jumelo', label: 'Folga em Bucha Jumelo', kind: 'avaria' },
+  { id: 'folga_bucha_tirante', label: 'Folga em Bucha Tirante', kind: 'avaria' },
+  { id: 'folga_terminal', label: 'Folga em Terminal', kind: 'avaria' },
+  { id: 'pino_centro_quebrado', label: 'Pino de Centro Quebrado', kind: 'avaria' },
+  { id: 'folga_manga_eixo', label: 'Folga em Manga de Eixo', kind: 'avaria' },
+  { id: 'folga_rolamento', label: 'Folga em Rolamento', kind: 'avaria' },
+  { id: 'mola_quebrada', label: 'Mola Quebrada', kind: 'avaria' },
+  { id: 'carreta_carregada', label: 'Carreta Carregada', kind: 'carga' },
+  { id: 'cambagem', label: 'Cambagem', kind: 'cambagem' },
+]
+
+function PatioResponsibilityTermPreview({
+  atendimento,
+  conditions,
+}: {
+  atendimento: PatioAtendimentoResumo
+  conditions: PatioTermCondition[]
+}) {
+  const term = buildPatioResponsibilityTerm(atendimento, conditions)
+  return (
+    <article className="patio-term-document">
+      <h3>TERMO DE RESPONSABILIDADE</h3>
+      {term.paragraphs.slice(0, 1).map((paragraph, index) => (
+        <p key={`${paragraph.slice(0, 20)}-${index}`}>{paragraph}</p>
+      ))}
+      {term.avarias.length > 0 && (
+        <ul>
+          {term.avarias.map((avaria) => <li key={avaria}>{avaria}</li>)}
+        </ul>
+      )}
+      {term.paragraphs.slice(1).map((paragraph, index) => (
+        <p key={`${paragraph.slice(0, 20)}-${index}`}>{paragraph}</p>
+      ))}
+      <p>{term.dataExtenso}</p>
+      <div className="patio-term-signature">
+        <span />
+        <strong>{term.motorista}</strong>
+      </div>
+    </article>
+  )
+}
+
+function buildPatioResponsibilityTerm(atendimento: PatioAtendimentoResumo, conditions: PatioTermCondition[]) {
+  const motorista = (atendimento.nomeMotorista || 'RESPONSAVEL PELO VEICULO').toUpperCase()
+  const placa = (atendimento.placa || 'NAO INFORMADA').toUpperCase()
+  const cliente = (atendimento.clienteNome || 'CLIENTE NAO INFORMADO').toUpperCase()
+  const veiculo = (atendimento.veiculoDescricao || 'VEICULO').toUpperCase()
+  const avarias = conditions.filter((condition) => condition.kind === 'avaria').map((condition) => condition.label.toUpperCase())
+  const hasCarga = conditions.some((condition) => condition.kind === 'carga')
+  const hasCambagem = conditions.some((condition) => condition.kind === 'cambagem')
+  const dataExtenso = new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    weekday: 'long',
+  }).format(new Date())
+
+  const paragraphs = [
+    `Eu, ${motorista}, responsável pelo veículo ${veiculo} de placa ${placa}, pertencente à empresa ${cliente}, declaro que autorizo a execução do serviço de alinhamento na unidade acima identificada, ciente de que o serviço será realizado pela Capital Truck Center mesmo diante das condições descritas neste termo.`,
+  ]
+
+  if (avarias.length > 0) {
+    paragraphs.push('O veículo apresenta avarias ou folgas que podem comprometer a precisão e a eficácia do alinhamento, podendo resultar em resultado insatisfatório ou fora dos padrões recomendados.')
+    paragraphs.push('Estou ciente de que a circulação do veículo com tais condições representa risco potencial à segurança, podendo gerar perda de estabilidade, desgaste prematuro dos pneus e danos adicionais ao sistema de suspensão e direção.')
+  }
+  if (hasCarga) {
+    paragraphs.push('O veículo encontra-se carregado, condição que pode interferir na medição precisa dos ângulos de alinhamento devido à alteração temporária na geometria da suspensão e direção.')
+  }
+  if (hasCambagem) {
+    paragraphs.push('Foi constatado que a cambagem do veículo encontra-se fora dos parâmetros recomendados, podendo afetar dirigibilidade, desgaste dos pneus e desempenho geral da suspensão.')
+  }
+  paragraphs.push('Assumo total responsabilidade pelas consequências decorrentes da realização do alinhamento nestas condições, bem como pela utilização do veículo após a execução do serviço.')
+  paragraphs.push('Declaro, ainda, que compreendo e aceito que, devido às condições apresentadas, este serviço será realizado sem garantia, uma vez que não é possível garantir a precisão técnica exigida pelo fabricante.')
+
+  return {
+    motorista,
+    placa,
+    cliente,
+    veiculo,
+    avarias,
+    dataExtenso: `Dourados - MS, ${dataExtenso}`,
+    paragraphs,
+  }
+}
+
+function printPatioResponsibilityTerm(atendimento: PatioAtendimentoResumo, conditions: PatioTermCondition[]) {
+  const term = buildPatioResponsibilityTerm(atendimento, conditions)
+  const avariasHtml = term.avarias.length > 0
+    ? `<p><strong>Condicoes observadas:</strong></p><ul>${term.avarias.map((avaria) => `<li>${escapeHtml(avaria)}</li>`).join('')}</ul>`
+    : ''
+  const html = `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Termo - ${escapeHtml(term.placa)}</title>
+  <style>
+    @page { size: A4 portrait; margin: 1.6cm; }
+    body { color: #111827; font-family: Arial, sans-serif; margin: 0; }
+    main { max-width: 760px; margin: 0 auto; }
+    h1 { font-size: 18px; text-align: center; margin: 0 0 22px; letter-spacing: 0; }
+    p { font-size: 12px; line-height: 1.55; margin: 0 0 12px; text-align: justify; }
+    ul { margin: 0 0 14px 20px; padding: 0; }
+    li { font-size: 12px; margin: 4px 0; }
+    .meta { border: 1px solid #d1d5db; margin: 0 0 18px; padding: 10px 12px; }
+    .signature { margin-top: 52px; text-align: center; }
+    .signature span { display: block; border-top: 1px solid #111827; margin: 0 auto 8px; width: 320px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>TERMO DE RESPONSABILIDADE</h1>
+    <div class="meta">
+      <p><strong>Cliente:</strong> ${escapeHtml(term.cliente)}<br><strong>Veículo:</strong> ${escapeHtml(term.veiculo)}<br><strong>Placa:</strong> ${escapeHtml(term.placa)}</p>
+    </div>
+    ${term.paragraphs.slice(0, 1).map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join('')}
+    ${avariasHtml}
+    ${term.paragraphs.slice(1).map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join('')}
+    <p style="text-align:center;margin-top:28px;">${escapeHtml(term.dataExtenso)}</p>
+    <div class="signature"><span></span><strong>${escapeHtml(term.motorista)}</strong></div>
+  </main>
+  <script>window.onload = () => { window.print(); }</script>
+</body>
+</html>`
+  const printWindow = window.open('', '_blank')
+  if (!printWindow) return
+  printWindow.document.open()
+  printWindow.document.write(html)
+  printWindow.document.close()
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
 }
 
 function PatioFeedback({

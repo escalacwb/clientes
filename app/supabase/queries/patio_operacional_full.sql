@@ -569,10 +569,12 @@ select
   pa.nome_motorista,
   pa.contato_motorista,
   pa.data_feedback,
-  array[]::text[] as servicos
+  array[]::text[] as servicos,
+  coalesce(v.descricao, pvs.modelo) as veiculo_descricao
 from public.patio_atendimentos pa
 left join public.clientes c on c.id = pa.cliente_id
 left join public.veiculos v on v.id = pa.veiculo_id
+left join public.patio_veiculos_snapshot pvs on pvs.patio_veiculo_id = pa.patio_veiculo_id
 where pa.status in ('finalizado', 'cancelado');
 
 create or replace view public.vw_patio_fila_painel
