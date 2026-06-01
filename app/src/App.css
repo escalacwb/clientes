@@ -1306,6 +1306,11 @@ h3 {
   -webkit-box-orient: vertical;
 }
 
+.next-action-why {
+  color: #12312f;
+  font-weight: 800;
+}
+
 .next-action-label {
   display: inline-flex;
   width: fit-content;

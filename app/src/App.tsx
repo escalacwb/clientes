@@ -605,12 +605,24 @@ function App() {
       setView(nextView)
       return
     }
-    if (isMobileShell && session && !mobileAllowedViews.has(nextView) && !nextView.startsWith('patio-')) {
+    if (session?.role !== 'admin' && appMode === 'gestao') {
+      setAppMode('crm')
+      localStorage.setItem('capital-crm:mode', 'crm')
+      setView('cockpit')
+      return
+    }
+    if (isMobileShell && session?.role !== 'admin' && appMode !== 'crm') {
+      setAppMode('crm')
+      localStorage.setItem('capital-crm:mode', 'crm')
+      setView('cockpit')
+      return
+    }
+    if (isMobileShell && session && appMode === 'crm' && !mobileAllowedViews.has(nextView)) {
       setView('cockpit')
       return
     }
     localStorage.setItem('capital-crm:last-view', nextView)
-  }, [isMobileShell, session, view])
+  }, [appMode, isMobileShell, session, view])
 
   useEffect(() => {
     localStorage.setItem('capital-crm:cliente-filter', clienteFiltro)
@@ -1698,11 +1710,17 @@ function App() {
     )
   }
 
+  const visibleModes = (['patio', 'crm', 'gestao'] as AppMode[]).filter((mode) => {
+    if (mode === 'gestao' && session.role !== 'admin') return false
+    if (isMobileShell && session.role !== 'admin') return mode === 'crm'
+    if (isMobileShell && mode === 'gestao') return false
+    return true
+  })
   const visibleNavSections = navSectionsByMode[appMode]
     .map((section) => ({
       ...section,
       items: section.items
-        .filter((item) => !isMobileShell || mobileAllowedViews.has(item.id) || item.id.startsWith('patio-'))
+        .filter((item) => !isMobileShell || appMode === 'patio' || mobileAllowedViews.has(item.id))
         .filter((item) => session.role === 'admin' || !adminOnlyViews.has(item.id))
         .filter(() => appMode !== 'gestao' || session.role === 'admin')
         .filter((item) => appMode !== 'crm' || session.role === 'admin' || sellerPrimaryViews.has(item.id) || item.id === 'oportunidades')
@@ -1733,19 +1751,20 @@ function App() {
           </div>
         </div>
 
-        <div className="mode-switcher" aria-label="Modo de trabalho">
-          {(['patio', 'crm', 'gestao'] as AppMode[]).map((mode) => (
+        {visibleModes.length > 1 && (
+          <div className="mode-switcher" aria-label="Modo de trabalho">
+          {visibleModes.map((mode) => (
             <button
               className={appMode === mode ? 'active' : ''}
               key={mode}
               type="button"
               onClick={() => switchMode(mode)}
-              disabled={mode === 'gestao' && session.role !== 'admin'}
             >
               {modeLabel[mode]}
             </button>
           ))}
-        </div>
+          </div>
+        )}
 
         <nav className="nav">
           {visibleNavSections.map((section) => (
@@ -1892,7 +1911,7 @@ function App() {
 
         <div className={dataError ? 'data-banner error' : 'data-banner'}>
           <span>
-            {isSupabaseConfigured ? 'Supabase configurado' : 'Modo local com dados demonstrativos'}
+            {isSupabaseConfigured ? 'Base conectada' : 'Modo local com dados demonstrativos'}
             {' · '}
             {session.role === 'admin' ? `${clientesTotal} clientes totais` : `${clientesTotal} clientes na sua visao`}
             {view === 'clientes' && hasActiveClientFilter ? ` · ${clientesTotal} encontrados com filtro` : ''}
@@ -1916,7 +1935,7 @@ function App() {
           {dataError && <strong>{dataError}</strong>}
         </div>
 
-        {appMode === 'crm' && session.role === 'admin' && vendedoresSemCarteira.length > 0 && (
+        {appMode === 'crm' && view === 'cockpit' && session.role === 'admin' && vendedoresSemCarteira.length > 0 && (
           <section className="panel wide seller-wallet-alert">
             <div className="panel-header">
               <div>
@@ -3701,7 +3720,7 @@ function MobileActionHome({
           <article className="mobile-client-card" key={cliente.id}>
             <strong>{cliente.nome}</strong>
             <span>{[cliente.cidade, cliente.uf].filter(Boolean).join('/')} - {cliente.whatsapp || cliente.telefone || 'sem WhatsApp'}</span>
-            <small>{(cliente as Cliente & { proximaMelhorAcao?: string }).proximaMelhorAcao ?? bestNextAction(cliente)} - Ultima compra {dateLabel(cliente.ultimaCompraEm)}</small>
+            <small>{mobileClientActionLabel(cliente)} - Ultima compra {dateLabel(cliente.ultimaCompraEm)}</small>
             <div className="mobile-client-card-actions">
               <button className="button primary" type="button" onClick={() => onCreateQuote(cliente)}>
                 Orcar
@@ -3715,6 +3734,13 @@ function MobileActionHome({
       </div>
     </section>
   )
+}
+
+function mobileClientActionLabel(cliente: Cliente) {
+  const explicitAction = (cliente as Cliente & { proximaMelhorAcao?: string }).proximaMelhorAcao
+  if (explicitAction && explicitAction !== 'Distribuir carteira') return explicitAction
+  if (!cliente.vendedorId) return 'Sem vendedor definido'
+  return bestNextAction(cliente)
 }
 
 function Cockpit({
@@ -3874,6 +3900,13 @@ function Cockpit({
   ].sort((a, b) => b.priority - a.priority)
   const nextActions = uniqueBy(nextActionCandidates, (item) => item.id).slice(0, 14)
   const primaryAction = nextActions[0]
+  const actionReason = (item: typeof nextActions[number]) => {
+    if (item.kind === 'campanha') return item.envio.status === 'respondeu' ? 'Cliente respondeu campanha e precisa de retorno.' : 'Envio de campanha ainda precisa de tratamento.'
+    if (item.kind === 'tarefa') return item.sla.tone === 'danger' ? 'Tarefa atrasada ou de alta prioridade.' : 'Follow-up planejado para agora.'
+    if (item.kind === 'orcamento') return 'Proposta aberta passou da validade e precisa de retomada.'
+    if (item.kind === 'lead') return 'Lista externa ainda nao qualificada para virar cliente ativo.'
+    return item.oportunidade.proximaAcao ? `Oportunidade: ${item.oportunidade.proximaAcao}` : `Oportunidade detectada: ${item.oportunidade.motivo}`
+  }
 
   async function complete(id: string) {
     setBusyTaskId(id)
@@ -3973,6 +4006,7 @@ function Cockpit({
             <span className="next-action-label">Comece por aqui</span>
             <h2>{primaryAction.title}</h2>
             <p>{primaryAction.label} - {primaryAction.subtitle}</p>
+            <small className="next-action-why">{actionReason(primaryAction)}</small>
             <small>{primaryAction.detail}</small>
           </div>
           <div className="toolbar-actions">
@@ -4053,7 +4087,10 @@ function Cockpit({
                   <strong>{item.title}</strong>
                   <small>{item.subtitle}</small>
                 </div>
-                <p>{item.detail}</p>
+                <div>
+                  <small className="next-action-why">{actionReason(item)}</small>
+                  <p>{item.detail}</p>
+                </div>
               </div>
               <div className="next-action-actions">
                 <button className="button" type="button" onClick={() => onOpenClient(item.clienteId)}>Ficha</button>
@@ -19444,4 +19481,5 @@ function Info({ label, value }: { label: string; value: string }) {
 }
 
 export default App
+
 
