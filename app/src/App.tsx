@@ -160,10 +160,14 @@ import {
   getClienteContatoRecomendado,
   listClientePatioAtendimentoItens,
   listClientePatioAtendimentos,
+  listPatioBoxesAtivos,
+  listPatioConcluidos,
   listPatioFeedbackPendente,
+  listPatioFilaItens,
   listPatioRevisaoProativa,
   markPatioFeedbackDone,
   markPatioRevisaoDone,
+  searchPatioVeiculos,
 } from './repositories/patioRepository'
 import { createPipelineFromSuggestion, listPipelineOportunidades, updatePipelineOportunidade, updatePipelineStage } from './repositories/pipelineRepository'
 import { escalateStaleCommercialSequences, listDefaultCommercialSequenceSteps, listSequenciaExecucoes, startDefaultCommercialSequence, updateSequenceStep, type SequenciaEtapaConfig } from './repositories/sequenciasRepository'
@@ -208,7 +212,9 @@ import type {
   PatioAtendimentoItemResumo,
   PatioAtendimentoResumo,
   PatioFeedbackPendente,
+  PatioFilaItem,
   PatioRevisaoProativa,
+  PatioVeiculoBusca,
   PossivelDuplicado,
   ServicoItem,
   SessaoUsuario,
@@ -235,13 +241,6 @@ const navSectionsByMode: Record<AppMode, Array<{ title: string; items: Array<{ i
         { id: 'patio-historico', label: 'Historico placa', icon: Search },
       ],
     },
-    {
-      title: 'Pos-atendimento',
-      items: [
-        { id: 'patio-feedback', label: 'Feedback', icon: MessageCircle },
-        { id: 'patio-revisao', label: 'Revisao proativa', icon: RefreshCw },
-      ],
-    },
   ],
   crm: [
     {
@@ -250,6 +249,8 @@ const navSectionsByMode: Record<AppMode, Array<{ title: string; items: Array<{ i
         { id: 'cockpit', label: 'Minha rotina', icon: Gauge },
         { id: 'clientes', label: 'Clientes', icon: UsersRound },
         { id: 'oportunidades', label: 'Oportunidades', icon: AlertTriangle },
+        { id: 'patio-feedback', label: 'Feedback patio', icon: MessageCircle },
+        { id: 'patio-revisao', label: 'Revisao proativa', icon: RefreshCw },
       ],
     },
     {
@@ -429,6 +430,22 @@ function App() {
   const [patioFeedbackPage, setPatioFeedbackPage] = useState(1)
   const [patioFeedbackQuery, setPatioFeedbackQuery] = useState('')
   const [isLoadingPatioFeedback, setIsLoadingPatioFeedback] = useState(false)
+  const [patioEntradaQuery, setPatioEntradaQuery] = useState('')
+  const [patioEntradaResults, setPatioEntradaResults] = useState<PatioVeiculoBusca[]>([])
+  const [isLoadingPatioEntrada, setIsLoadingPatioEntrada] = useState(false)
+  const [patioFilaItems, setPatioFilaItems] = useState<PatioFilaItem[]>([])
+  const [patioFilaTotal, setPatioFilaTotal] = useState(0)
+  const [patioFilaPage, setPatioFilaPage] = useState(1)
+  const [patioFilaQuery, setPatioFilaQuery] = useState('')
+  const [patioFilaArea, setPatioFilaArea] = useState<PatioFilaItem['area'] | 'todas'>('todas')
+  const [isLoadingPatioFila, setIsLoadingPatioFila] = useState(false)
+  const [patioBoxesAtivos, setPatioBoxesAtivos] = useState<PatioAtendimentoResumo[]>([])
+  const [isLoadingPatioBoxes, setIsLoadingPatioBoxes] = useState(false)
+  const [patioConcluidos, setPatioConcluidos] = useState<PatioAtendimentoResumo[]>([])
+  const [patioConcluidosTotal, setPatioConcluidosTotal] = useState(0)
+  const [patioConcluidosPage, setPatioConcluidosPage] = useState(1)
+  const [patioConcluidosQuery, setPatioConcluidosQuery] = useState('')
+  const [isLoadingPatioConcluidos, setIsLoadingPatioConcluidos] = useState(false)
   const [patioRevisaoItems, setPatioRevisaoItems] = useState<PatioRevisaoProativa[]>([])
   const [patioRevisaoTotal, setPatioRevisaoTotal] = useState(0)
   const [patioRevisaoPage, setPatioRevisaoPage] = useState(1)
@@ -837,6 +854,124 @@ function App() {
       isMounted = false
     }
   }, [isCheckingSession, orcamentosFilter, orcamentosPage, session, view])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadPatioEntrada() {
+      if (isCheckingSession || !session || view !== 'patio-entrada') return
+      if (patioEntradaQuery.trim().length < 2) {
+        setPatioEntradaResults([])
+        return
+      }
+
+      setIsLoadingPatioEntrada(true)
+      try {
+        const rows = await searchPatioVeiculos(patioEntradaQuery)
+        if (!isMounted) return
+        setPatioEntradaResults(rows)
+        clearModuleError('patio-entrada')
+      } catch (exception) {
+        if (isMounted) setModuleError('patio-entrada', exception instanceof Error ? exception.message : 'Nao foi possivel buscar placa no patio.')
+      } finally {
+        if (isMounted) setIsLoadingPatioEntrada(false)
+      }
+    }
+
+    const handle = window.setTimeout(loadPatioEntrada, 250)
+    return () => {
+      isMounted = false
+      window.clearTimeout(handle)
+    }
+  }, [isCheckingSession, patioEntradaQuery, session, view])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadPatioFila() {
+      if (isCheckingSession || !session || view !== 'patio-fila') return
+
+      setIsLoadingPatioFila(true)
+      try {
+        const result = await listPatioFilaItens({
+          page: patioFilaPage,
+          pageSize: 50,
+          query: patioFilaQuery,
+          area: patioFilaArea,
+        })
+        if (!isMounted) return
+        setPatioFilaItems(result.items)
+        setPatioFilaTotal(result.total)
+        clearModuleError('patio-fila')
+      } catch (exception) {
+        if (isMounted) setModuleError('patio-fila', exception instanceof Error ? exception.message : 'Nao foi possivel carregar a fila do patio.')
+      } finally {
+        if (isMounted) setIsLoadingPatioFila(false)
+      }
+    }
+
+    const handle = window.setTimeout(loadPatioFila, patioFilaQuery.trim() ? 250 : 0)
+    return () => {
+      isMounted = false
+      window.clearTimeout(handle)
+    }
+  }, [isCheckingSession, patioFilaArea, patioFilaPage, patioFilaQuery, session, view])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadPatioBoxes() {
+      if (isCheckingSession || !session || view !== 'patio-boxes') return
+
+      setIsLoadingPatioBoxes(true)
+      try {
+        const rows = await listPatioBoxesAtivos()
+        if (!isMounted) return
+        setPatioBoxesAtivos(rows)
+        clearModuleError('patio-boxes')
+      } catch (exception) {
+        if (isMounted) setModuleError('patio-boxes', exception instanceof Error ? exception.message : 'Nao foi possivel carregar boxes.')
+      } finally {
+        if (isMounted) setIsLoadingPatioBoxes(false)
+      }
+    }
+
+    loadPatioBoxes()
+    return () => {
+      isMounted = false
+    }
+  }, [isCheckingSession, session, view])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadPatioConcluidos() {
+      if (isCheckingSession || !session || view !== 'patio-concluidos') return
+
+      setIsLoadingPatioConcluidos(true)
+      try {
+        const result = await listPatioConcluidos({
+          page: patioConcluidosPage,
+          pageSize: 50,
+          query: patioConcluidosQuery,
+        })
+        if (!isMounted) return
+        setPatioConcluidos(result.items)
+        setPatioConcluidosTotal(result.total)
+        clearModuleError('patio-concluidos')
+      } catch (exception) {
+        if (isMounted) setModuleError('patio-concluidos', exception instanceof Error ? exception.message : 'Nao foi possivel carregar concluidos.')
+      } finally {
+        if (isMounted) setIsLoadingPatioConcluidos(false)
+      }
+    }
+
+    const handle = window.setTimeout(loadPatioConcluidos, patioConcluidosQuery.trim() ? 250 : 0)
+    return () => {
+      isMounted = false
+      window.clearTimeout(handle)
+    }
+  }, [isCheckingSession, patioConcluidosPage, patioConcluidosQuery, session, view])
 
   useEffect(() => {
     let isMounted = true
@@ -1631,15 +1766,106 @@ function App() {
           </section>
         )}
 
-        {appMode === 'patio' && ['patio-entrada', 'patio-fila', 'patio-boxes', 'patio-concluidos', 'patio-historico'].includes(view) && (
-          <PatioModuloPlaceholder
-            view={view}
-            onOpenFeedback={() => setView('patio-feedback')}
-            onOpenRevisao={() => setView('patio-revisao')}
+        {appMode === 'patio' && view === 'patio-entrada' && (
+          <PatioEntrada
+            query={patioEntradaQuery}
+            results={patioEntradaResults}
+            isLoading={isLoadingPatioEntrada}
+            onQueryChange={setPatioEntradaQuery}
+            onOpenClient={async (clienteId) => {
+              await ensureClientInMemory(clienteId)
+              setSelectedClientId(clienteId)
+              setAppMode('crm')
+              localStorage.setItem('capital-crm:mode', 'crm')
+              setView('cliente360')
+            }}
           />
         )}
 
-        {appMode === 'patio' && view === 'patio-feedback' && (
+        {appMode === 'patio' && view === 'patio-fila' && (
+          <PatioFila
+            items={patioFilaItems}
+            total={patioFilaTotal}
+            page={patioFilaPage}
+            pageSize={50}
+            query={patioFilaQuery}
+            area={patioFilaArea}
+            isLoading={isLoadingPatioFila}
+            onQueryChange={(nextQuery) => {
+              setPatioFilaQuery(nextQuery)
+              setPatioFilaPage(1)
+            }}
+            onAreaChange={(nextArea) => {
+              setPatioFilaArea(nextArea)
+              setPatioFilaPage(1)
+            }}
+            onPageChange={setPatioFilaPage}
+            onOpenClient={async (clienteId) => {
+              await ensureClientInMemory(clienteId)
+              setSelectedClientId(clienteId)
+              setAppMode('crm')
+              localStorage.setItem('capital-crm:mode', 'crm')
+              setView('cliente360')
+            }}
+          />
+        )}
+
+        {appMode === 'patio' && view === 'patio-boxes' && (
+          <PatioBoxes
+            items={patioBoxesAtivos}
+            isLoading={isLoadingPatioBoxes}
+            onOpenClient={async (clienteId) => {
+              await ensureClientInMemory(clienteId)
+              setSelectedClientId(clienteId)
+              setAppMode('crm')
+              localStorage.setItem('capital-crm:mode', 'crm')
+              setView('cliente360')
+            }}
+          />
+        )}
+
+        {appMode === 'patio' && view === 'patio-concluidos' && (
+          <PatioConcluidos
+            items={patioConcluidos}
+            total={patioConcluidosTotal}
+            page={patioConcluidosPage}
+            pageSize={50}
+            query={patioConcluidosQuery}
+            isLoading={isLoadingPatioConcluidos}
+            onQueryChange={(nextQuery) => {
+              setPatioConcluidosQuery(nextQuery)
+              setPatioConcluidosPage(1)
+            }}
+            onPageChange={setPatioConcluidosPage}
+            onOpenClient={async (clienteId) => {
+              await ensureClientInMemory(clienteId)
+              setSelectedClientId(clienteId)
+              setAppMode('crm')
+              localStorage.setItem('capital-crm:mode', 'crm')
+              setView('cliente360')
+            }}
+          />
+        )}
+
+        {appMode === 'patio' && view === 'patio-historico' && (
+          <PatioEntrada
+            query={patioEntradaQuery}
+            results={patioEntradaResults}
+            isLoading={isLoadingPatioEntrada}
+            onQueryChange={setPatioEntradaQuery}
+            onOpenClient={async (clienteId) => {
+              await ensureClientInMemory(clienteId)
+              setSelectedClientId(clienteId)
+              setAppMode('crm')
+              localStorage.setItem('capital-crm:mode', 'crm')
+              setView('cliente360')
+            }}
+            title="Historico por placa"
+            description="Busque uma placa, motorista ou cliente para ver o ultimo atendimento e abrir a ficha completa."
+          />
+        )}
+
+        {appMode === 'crm' && view === 'patio-feedback' && (
           <PatioFeedback
             items={patioFeedbackItems}
             total={patioFeedbackTotal}
@@ -1688,7 +1914,7 @@ function App() {
           />
         )}
 
-        {appMode === 'patio' && view === 'patio-revisao' && (
+        {appMode === 'crm' && view === 'patio-revisao' && (
           <PatioRevisao
             items={patioRevisaoItems}
             total={patioRevisaoTotal}
@@ -8399,65 +8625,232 @@ function numberLabel(value: number) {
   return value.toLocaleString('pt-BR')
 }
 
-function PatioModuloPlaceholder({
-  view,
-  onOpenFeedback,
-  onOpenRevisao,
+function PatioEntrada({
+  query,
+  results,
+  isLoading,
+  onQueryChange,
+  onOpenClient,
+  title = 'Entrada de veiculo',
+  description = 'Busque por placa, cliente ou motorista usando a base ja sincronizada do patio.',
 }: {
-  view: string
-  onOpenFeedback: () => void
-  onOpenRevisao: () => void
+  query: string
+  results: PatioVeiculoBusca[]
+  isLoading: boolean
+  onQueryChange: (query: string) => void
+  onOpenClient: (clienteId: string) => void
+  title?: string
+  description?: string
 }) {
-  const copy: Record<string, { title: string; description: string; actions: string[] }> = {
-    'patio-entrada': {
-      title: 'Entrada de veiculo',
-      description: 'Fluxo principal a migrar do app de patio: placa, cliente, motorista, contato e servicos solicitados.',
-      actions: ['Buscar placa', 'Atualizar contato operacional', 'Criar atendimento'],
-    },
-    'patio-fila': {
-      title: 'Fila do patio',
-      description: 'Visao dos servicos pendentes por area para alocar em box sem abrir CRM comercial.',
-      actions: ['Ver pendentes', 'Filtrar area', 'Alocar box'],
-    },
-    'patio-boxes': {
-      title: 'Boxes em atendimento',
-      description: 'Controle visual dos boxes, finalizacao, KM e reversoes com permissao.',
-      actions: ['Acompanhar box', 'Finalizar', 'Registrar KM'],
-    },
-    'patio-concluidos': {
-      title: 'Servicos concluidos',
-      description: 'Historico operacional recente para consulta, reversao controlada e auditoria.',
-      actions: ['Consultar data', 'Abrir placa', 'Reverter com permissao'],
-    },
-    'patio-historico': {
-      title: 'Historico por placa',
-      description: 'Consulta rapida por placa para equipe operacional sem entrar na ficha comercial completa.',
-      actions: ['Buscar placa', 'Ver KM', 'Ver servicos'],
-    },
-  }
-  const content = copy[view] ?? copy['patio-entrada']
   return (
     <section className="panel wide">
       <div className="panel-header">
         <div>
-          <h2>{content.title}</h2>
-          <p>{content.description}</p>
-        </div>
-        <div className="row-actions">
-          <button className="button" type="button" onClick={onOpenFeedback}>Feedback</button>
-          <button className="button primary" type="button" onClick={onOpenRevisao}>Revisao proativa</button>
+          <h2>{title}</h2>
+          <p>{description}</p>
         </div>
       </div>
-      <div className="metrics-grid">
-        {content.actions.map((action) => (
-          <article className="metric-card" key={action}>
-            <small>Proxima migracao</small>
-            <strong>{action}</strong>
+      <div className="filters-grid">
+        <label>
+          Placa, cliente ou motorista
+          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Ex.: ABC1D23, cliente ou motorista" />
+        </label>
+      </div>
+      {isLoading && <div className="empty-state">Buscando no historico do patio...</div>}
+      {!isLoading && query.trim().length >= 2 && results.length === 0 && <div className="empty-state">Nenhum veiculo encontrado.</div>}
+      {query.trim().length < 2 && <div className="empty-state">Digite ao menos 2 caracteres para consultar.</div>}
+      <div className="table-list">
+        {results.map((item) => (
+          <article className="panel subtle" key={item.patioVeiculoId}>
+            <div className="panel-header">
+              <div>
+                <h3>{item.placa ?? 'Sem placa'} · {item.clienteNome ?? 'Cliente sem vinculo'}</h3>
+                <p>{item.veiculoDescricao ?? 'Veiculo sem descricao'} · ultimo atendimento {dateLabel(item.ultimoAtendimentoEm)}</p>
+              </div>
+              {item.clienteId && <button className="button primary" type="button" onClick={() => onOpenClient(item.clienteId!)}>Abrir ficha CRM</button>}
+            </div>
+            <div className="status-list">
+              <div className="status-row"><span>Motorista</span><strong>{item.nomeMotorista || 'Nao informado'}</strong></div>
+              <div className="status-row"><span>Contato</span><strong>{item.contatoRecomendado || item.contatoMotorista || 'Nao informado'}</strong></div>
+              <div className="status-row"><span>KM</span><strong>{item.ultimoKm ? numberLabel(item.ultimoKm) : 'Sem KM'}</strong></div>
+              <div className="status-row"><span>Media km/dia</span><strong>{item.mediaKmDiaria ? numberLabel(Math.round(item.mediaKmDiaria)) : 'Sem media'}</strong></div>
+            </div>
           </article>
         ))}
       </div>
-      <div className="readiness warn">
-        Esta tela esta reservada para migrar o fluxo operacional completo do patio sem misturar funil comercial no atendimento.
+    </section>
+  )
+}
+
+function PatioFila({
+  items,
+  total,
+  page,
+  pageSize,
+  query,
+  area,
+  isLoading,
+  onQueryChange,
+  onAreaChange,
+  onPageChange,
+  onOpenClient,
+}: {
+  items: PatioFilaItem[]
+  total: number
+  page: number
+  pageSize: number
+  query: string
+  area: PatioFilaItem['area'] | 'todas'
+  isLoading: boolean
+  onQueryChange: (query: string) => void
+  onAreaChange: (area: PatioFilaItem['area'] | 'todas') => void
+  onPageChange: (page: number) => void
+  onOpenClient: (clienteId: string) => void
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Fila do patio</h2>
+          <p>Servicos pendentes sincronizados do fluxo operacional existente.</p>
+        </div>
+        <strong>{total} itens</strong>
+      </div>
+      <div className="filters-grid">
+        <label>
+          Buscar
+          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Cliente, placa ou servico" />
+        </label>
+        <label>
+          Area
+          <select value={area} onChange={(event) => onAreaChange(event.target.value as PatioFilaItem['area'] | 'todas')}>
+            <option value="todas">Todas</option>
+            <option value="borracharia">Borracharia</option>
+            <option value="alinhamento">Alinhamento</option>
+            <option value="manutencao">Manutencao</option>
+          </select>
+        </label>
+      </div>
+      {isLoading && <div className="empty-state">Carregando fila...</div>}
+      {!isLoading && items.length === 0 && <div className="empty-state">Nenhum item pendente.</div>}
+      <div className="table-list">
+        {items.map((item) => (
+          <article className="panel subtle" key={item.id}>
+            <div className="panel-header">
+              <div>
+                <h3>{item.placa ?? 'Sem placa'} · {item.servicoNome || item.descricao || item.area}</h3>
+                <p>{item.clienteNome ?? 'Cliente sem vinculo'} · {item.area} · {item.status ?? 'pendente'}</p>
+              </div>
+              {item.clienteId && <button className="button" type="button" onClick={() => onOpenClient(item.clienteId!)}>Ficha CRM</button>}
+            </div>
+          </article>
+        ))}
+      </div>
+      <div className="pagination-bar">
+        <button className="button" type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>Anterior</button>
+        <span>Pagina {page} de {totalPages}</span>
+        <button className="button" type="button" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>Proxima</button>
+      </div>
+    </section>
+  )
+}
+
+function PatioBoxes({
+  items,
+  isLoading,
+  onOpenClient,
+}: {
+  items: PatioAtendimentoResumo[]
+  isLoading: boolean
+  onOpenClient: (clienteId: string) => void
+}) {
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Boxes em atendimento</h2>
+          <p>Leitura dos atendimentos em andamento ja vindos do controle de patio.</p>
+        </div>
+        <strong>{items.length} ativos</strong>
+      </div>
+      {isLoading && <div className="empty-state">Carregando boxes...</div>}
+      {!isLoading && items.length === 0 && <div className="empty-state">Nenhum box ativo no snapshot atual.</div>}
+      <div className="metrics-grid">
+        {items.map((item) => (
+          <article className="metric-card" key={item.patioExecucaoId}>
+            <small>{item.status ?? 'em andamento'}</small>
+            <strong>{item.placa ?? 'Sem placa'}</strong>
+            <span>{item.clienteNome ?? 'Cliente sem vinculo'}</span>
+            <span>{item.inicioExecucao ? `Inicio ${dateLabel(item.inicioExecucao)}` : 'Inicio nao informado'}</span>
+            {item.clienteId && <button className="button compact-button" type="button" onClick={() => onOpenClient(item.clienteId!)}>Ficha CRM</button>}
+          </article>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function PatioConcluidos({
+  items,
+  total,
+  page,
+  pageSize,
+  query,
+  isLoading,
+  onQueryChange,
+  onPageChange,
+  onOpenClient,
+}: {
+  items: PatioAtendimentoResumo[]
+  total: number
+  page: number
+  pageSize: number
+  query: string
+  isLoading: boolean
+  onQueryChange: (query: string) => void
+  onPageChange: (page: number) => void
+  onOpenClient: (clienteId: string) => void
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Servicos concluidos</h2>
+          <p>Historico operacional recente sincronizado do patio. Acoes comerciais devem seguir pela ficha CRM.</p>
+        </div>
+        <strong>{total} registros</strong>
+      </div>
+      <div className="filters-grid">
+        <label>
+          Buscar
+          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Cliente, placa ou motorista" />
+        </label>
+      </div>
+      {isLoading && <div className="empty-state">Carregando concluidos...</div>}
+      {!isLoading && items.length === 0 && <div className="empty-state">Nenhum atendimento encontrado.</div>}
+      <div className="table-list">
+        {items.map((item) => (
+          <article className="panel subtle" key={item.patioExecucaoId}>
+            <div className="panel-header">
+              <div>
+                <h3>{item.placa ?? 'Sem placa'} · {item.clienteNome ?? 'Cliente sem vinculo'}</h3>
+                <p>{dateLabel(item.fimExecucao)} · {item.quilometragem ? `${numberLabel(item.quilometragem)} km` : 'KM nao informado'} · {item.status}</p>
+              </div>
+              {item.clienteId && <button className="button" type="button" onClick={() => onOpenClient(item.clienteId!)}>Ficha CRM</button>}
+            </div>
+            <div className="status-list">
+              <div className="status-row"><span>Motorista</span><strong>{item.nomeMotorista || 'Nao informado'}</strong></div>
+              <div className="status-row"><span>Feedback</span><strong>{item.dataFeedback ? dateLabel(item.dataFeedback) : 'Pendente'}</strong></div>
+            </div>
+          </article>
+        ))}
+      </div>
+      <div className="pagination-bar">
+        <button className="button" type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>Anterior</button>
+        <span>Pagina {page} de {totalPages}</span>
+        <button className="button" type="button" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>Proxima</button>
       </div>
     </section>
   )

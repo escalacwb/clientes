@@ -4,7 +4,9 @@ import type {
   PatioAtendimentoItemResumo,
   PatioAtendimentoResumo,
   PatioFeedbackPendente,
+  PatioFilaItem,
   PatioRevisaoProativa,
+  PatioVeiculoBusca,
 } from '../types'
 
 type ContatoRow = {
@@ -86,6 +88,50 @@ type RevisaoRow = {
   contato_recomendado: string | null
   contato_nome: string | null
   contato_tipo: string | null
+}
+
+type VeiculoBuscaRow = {
+  patio_veiculo_id: number
+  cliente_id: string | null
+  cliente_nome: string | null
+  vendedor_id: string | null
+  veiculo_id: string | null
+  placa: string | null
+  veiculo_descricao: string | null
+  ano_modelo: number | null
+  nome_motorista: string | null
+  contato_motorista: string | null
+  media_km_diaria: number | null
+  data_revisao_proativa: string | null
+  ultimo_patio_execucao_id: number | null
+  ultimo_km: number | null
+  ultimo_atendimento_em: string | null
+  contato_recomendado: string | null
+  contato_nome: string | null
+  contato_tipo: string | null
+}
+
+type FilaRow = {
+  id: string
+  patio_item_id: number
+  patio_tabela_origem: string
+  patio_execucao_id: number | null
+  cliente_id: string | null
+  cliente_nome: string | null
+  vendedor_id: string | null
+  veiculo_id: string | null
+  placa: string | null
+  area: PatioFilaItem['area']
+  servico_nome: string | null
+  descricao: string | null
+  quantidade: number | null
+  status: string | null
+  box_id: number | null
+  funcionario_id: number | null
+  quilometragem: number | null
+  tipo_atendimento: string | null
+  solicitado_em: string | null
+  atualizado_em: string | null
 }
 
 export async function getClienteContatoRecomendado(clienteId: string): Promise<ClienteContatoRecomendado | undefined> {
@@ -213,6 +259,102 @@ export async function markPatioRevisaoDone(patioVeiculoId: number): Promise<void
   if (error) throw error
 }
 
+export async function searchPatioVeiculos(queryText: string): Promise<PatioVeiculoBusca[]> {
+  const supabase = await getSupabase()
+  if (!supabase || queryText.trim().length < 2) return []
+
+  const term = `%${queryText.trim()}%`
+  const { data, error } = await supabase
+    .from('vw_patio_veiculos_busca')
+    .select('*')
+    .or(`placa.ilike.${term},cliente_nome.ilike.${term},nome_motorista.ilike.${term}`)
+    .order('ultimo_atendimento_em', { ascending: false, nullsFirst: false })
+    .limit(30)
+
+  if (error) throw error
+  return (data as VeiculoBuscaRow[] | null ?? []).map(mapVeiculoBusca)
+}
+
+export async function listPatioFilaItens(input: {
+  page: number
+  pageSize: number
+  area?: PatioFilaItem['area'] | 'todas'
+  query?: string
+}): Promise<{ items: PatioFilaItem[]; total: number }> {
+  const supabase = await getSupabase()
+  if (!supabase) return { items: [], total: 0 }
+
+  const from = (input.page - 1) * input.pageSize
+  const to = from + input.pageSize - 1
+  let query = supabase
+    .from('vw_patio_fila_itens')
+    .select('*', { count: 'exact' })
+    .order('solicitado_em', { ascending: true, nullsFirst: false })
+    .range(from, to)
+
+  if (input.area && input.area !== 'todas') query = query.eq('area', input.area)
+  if (input.query?.trim()) {
+    const term = `%${input.query.trim()}%`
+    query = query.or(`cliente_nome.ilike.${term},placa.ilike.${term},servico_nome.ilike.${term}`)
+  }
+
+  const { data, error, count } = await query
+  if (error) throw error
+  return { items: (data as FilaRow[] | null ?? []).map(mapFila), total: count ?? 0 }
+}
+
+export async function listPatioBoxesAtivos(): Promise<PatioAtendimentoResumo[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('vw_patio_boxes_ativos')
+    .select('patio_execucao_id,cliente_id,veiculo_id,placa,cliente_nome,quilometragem,status,inicio_execucao,nome_motorista,contato_motorista')
+    .order('box_id', { ascending: true, nullsFirst: false })
+
+  if (error) throw error
+  return (data as Array<AtendimentoRow & { placa?: string | null; cliente_nome?: string | null }> | null ?? []).map((row) => mapAtendimento({
+    ...row,
+    placa_snapshot: row.placa ?? null,
+    cliente_nome_snapshot: row.cliente_nome ?? null,
+    fim_execucao: null,
+    data_feedback: null,
+  }))
+}
+
+export async function listPatioConcluidos(input: {
+  page: number
+  pageSize: number
+  query?: string
+}): Promise<{ items: PatioAtendimentoResumo[]; total: number }> {
+  const supabase = await getSupabase()
+  if (!supabase) return { items: [], total: 0 }
+
+  const from = (input.page - 1) * input.pageSize
+  const to = from + input.pageSize - 1
+  let query = supabase
+    .from('vw_patio_concluidos')
+    .select('patio_execucao_id,cliente_id,veiculo_id,placa,cliente_nome,quilometragem,status,inicio_execucao,fim_execucao,nome_motorista,contato_motorista,data_feedback', { count: 'exact' })
+    .order('fim_execucao', { ascending: false, nullsFirst: false })
+    .range(from, to)
+
+  if (input.query?.trim()) {
+    const term = `%${input.query.trim()}%`
+    query = query.or(`cliente_nome.ilike.${term},placa.ilike.${term},nome_motorista.ilike.${term}`)
+  }
+
+  const { data, error, count } = await query
+  if (error) throw error
+  return {
+    items: (data as Array<AtendimentoRow & { placa?: string | null; cliente_nome?: string | null }> | null ?? []).map((row) => mapAtendimento({
+      ...row,
+      placa_snapshot: row.placa ?? null,
+      cliente_nome_snapshot: row.cliente_nome ?? null,
+    })),
+    total: count ?? 0,
+  }
+}
+
 function mapContato(row: ContatoRow): ClienteContatoRecomendado {
   return {
     clienteId: row.cliente_id,
@@ -301,5 +443,53 @@ function mapRevisao(row: RevisaoRow): PatioRevisaoProativa {
     contatoRecomendado: row.contato_recomendado ?? undefined,
     contatoNome: row.contato_nome ?? undefined,
     contatoTipo: row.contato_tipo ?? undefined,
+  }
+}
+
+function mapVeiculoBusca(row: VeiculoBuscaRow): PatioVeiculoBusca {
+  return {
+    patioVeiculoId: Number(row.patio_veiculo_id),
+    clienteId: row.cliente_id ?? undefined,
+    clienteNome: row.cliente_nome ?? undefined,
+    vendedorId: row.vendedor_id ?? undefined,
+    veiculoId: row.veiculo_id ?? undefined,
+    placa: row.placa ?? undefined,
+    veiculoDescricao: row.veiculo_descricao ?? undefined,
+    anoModelo: row.ano_modelo ?? undefined,
+    nomeMotorista: row.nome_motorista ?? undefined,
+    contatoMotorista: row.contato_motorista ?? undefined,
+    mediaKmDiaria: row.media_km_diaria ?? undefined,
+    dataRevisaoProativa: row.data_revisao_proativa ?? undefined,
+    ultimoPatioExecucaoId: row.ultimo_patio_execucao_id ?? undefined,
+    ultimoKm: row.ultimo_km ?? undefined,
+    ultimoAtendimentoEm: row.ultimo_atendimento_em ?? undefined,
+    contatoRecomendado: row.contato_recomendado ?? undefined,
+    contatoNome: row.contato_nome ?? undefined,
+    contatoTipo: row.contato_tipo ?? undefined,
+  }
+}
+
+function mapFila(row: FilaRow): PatioFilaItem {
+  return {
+    id: row.id,
+    patioItemId: Number(row.patio_item_id),
+    patioTabelaOrigem: row.patio_tabela_origem,
+    patioExecucaoId: row.patio_execucao_id ?? undefined,
+    clienteId: row.cliente_id ?? undefined,
+    clienteNome: row.cliente_nome ?? undefined,
+    vendedorId: row.vendedor_id ?? undefined,
+    veiculoId: row.veiculo_id ?? undefined,
+    placa: row.placa ?? undefined,
+    area: row.area,
+    servicoNome: row.servico_nome ?? undefined,
+    descricao: row.descricao ?? undefined,
+    quantidade: row.quantidade ?? undefined,
+    status: row.status ?? undefined,
+    boxId: row.box_id ?? undefined,
+    funcionarioId: row.funcionario_id ?? undefined,
+    quilometragem: row.quilometragem ?? undefined,
+    tipoAtendimento: row.tipo_atendimento ?? undefined,
+    solicitadoEm: row.solicitado_em ?? undefined,
+    atualizadoEm: row.atualizado_em ?? undefined,
   }
 }

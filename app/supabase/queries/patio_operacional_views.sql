@@ -141,3 +141,149 @@ $$;
 
 grant select on public.vw_patio_feedback_pendente to anon, authenticated, service_role;
 grant select on public.vw_patio_revisao_proativa to anon, authenticated, service_role;
+
+create or replace view public.vw_patio_veiculos_busca
+with (security_invoker = true) as
+select
+  pvs.patio_veiculo_id,
+  pvs.cliente_id,
+  c.nome as cliente_nome,
+  c.vendedor_id,
+  pvs.veiculo_id,
+  coalesce(v.placa, pvs.placa) as placa,
+  coalesce(v.descricao, pvs.modelo) as veiculo_descricao,
+  pvs.ano_modelo,
+  pvs.nome_motorista,
+  pvs.contato_motorista,
+  pvs.media_km_diaria,
+  pvs.data_revisao_proativa,
+  ultimo.patio_execucao_id as ultimo_patio_execucao_id,
+  ultimo.quilometragem as ultimo_km,
+  ultimo.fim_execucao as ultimo_atendimento_em,
+  cr.whatsapp as contato_recomendado,
+  cr.nome as contato_nome,
+  cr.tipo as contato_tipo
+from public.patio_veiculos_snapshot pvs
+left join public.clientes c on c.id = pvs.cliente_id
+left join public.veiculos v on v.id = pvs.veiculo_id
+left join public.vw_cliente_contatos_recomendados cr on cr.cliente_id = pvs.cliente_id
+left join lateral (
+  select pa.patio_execucao_id, pa.quilometragem, pa.fim_execucao
+  from public.patio_atendimentos pa
+  where pa.patio_veiculo_id = pvs.patio_veiculo_id
+  order by pa.fim_execucao desc nulls last
+  limit 1
+) ultimo on true;
+
+create or replace view public.vw_patio_fila_itens
+with (security_invoker = true) as
+select
+  pai.id,
+  pai.patio_item_id,
+  pai.patio_tabela_origem,
+  pai.patio_execucao_id,
+  pai.cliente_id,
+  c.nome as cliente_nome,
+  c.vendedor_id,
+  pai.veiculo_id,
+  coalesce(v.placa, pa.placa_snapshot) as placa,
+  pai.area,
+  pai.servico_nome,
+  pai.descricao,
+  pai.quantidade,
+  pai.status,
+  pai.box_id,
+  pai.funcionario_id,
+  pai.quilometragem,
+  pai.tipo_atendimento,
+  pai.solicitado_em,
+  pai.atualizado_em
+from public.patio_atendimento_itens pai
+left join public.patio_atendimentos pa on pa.patio_execucao_id = pai.patio_execucao_id
+left join public.clientes c on c.id = pai.cliente_id
+left join public.veiculos v on v.id = pai.veiculo_id
+where coalesce(pai.status, '') not in ('finalizado', 'cancelado')
+order by pai.solicitado_em asc nulls last;
+
+create or replace view public.vw_patio_boxes_ativos
+with (security_invoker = true) as
+select
+  pa.patio_execucao_id,
+  pa.cliente_id,
+  c.nome as cliente_nome,
+  c.vendedor_id,
+  pa.veiculo_id,
+  coalesce(v.placa, pa.placa_snapshot) as placa,
+  pa.box_id,
+  pa.funcionario_id,
+  pa.quilometragem,
+  pa.status,
+  pa.inicio_execucao,
+  pa.nome_motorista,
+  pa.contato_motorista,
+  array_remove(array_agg(distinct pai.servico_nome) filter (where pai.servico_nome is not null), null) as servicos
+from public.patio_atendimentos pa
+left join public.clientes c on c.id = pa.cliente_id
+left join public.veiculos v on v.id = pa.veiculo_id
+left join public.patio_atendimento_itens pai on pai.patio_execucao_id = pa.patio_execucao_id
+where pa.status = 'em_andamento'
+group by
+  pa.patio_execucao_id,
+  pa.cliente_id,
+  c.nome,
+  c.vendedor_id,
+  pa.veiculo_id,
+  coalesce(v.placa, pa.placa_snapshot),
+  pa.box_id,
+  pa.funcionario_id,
+  pa.quilometragem,
+  pa.status,
+  pa.inicio_execucao,
+  pa.nome_motorista,
+  pa.contato_motorista
+order by pa.box_id asc nulls last, pa.inicio_execucao asc;
+
+create or replace view public.vw_patio_concluidos
+with (security_invoker = true) as
+select
+  pa.patio_execucao_id,
+  pa.cliente_id,
+  c.nome as cliente_nome,
+  c.vendedor_id,
+  pa.veiculo_id,
+  coalesce(v.placa, pa.placa_snapshot) as placa,
+  pa.box_id,
+  pa.quilometragem,
+  pa.status,
+  pa.inicio_execucao,
+  pa.fim_execucao,
+  pa.nome_motorista,
+  pa.contato_motorista,
+  pa.data_feedback,
+  array_remove(array_agg(distinct pai.servico_nome) filter (where pai.servico_nome is not null), null) as servicos
+from public.patio_atendimentos pa
+left join public.clientes c on c.id = pa.cliente_id
+left join public.veiculos v on v.id = pa.veiculo_id
+left join public.patio_atendimento_itens pai on pai.patio_execucao_id = pa.patio_execucao_id
+where pa.status in ('finalizado', 'cancelado')
+group by
+  pa.patio_execucao_id,
+  pa.cliente_id,
+  c.nome,
+  c.vendedor_id,
+  pa.veiculo_id,
+  coalesce(v.placa, pa.placa_snapshot),
+  pa.box_id,
+  pa.quilometragem,
+  pa.status,
+  pa.inicio_execucao,
+  pa.fim_execucao,
+  pa.nome_motorista,
+  pa.contato_motorista,
+  pa.data_feedback
+order by pa.fim_execucao desc nulls last;
+
+grant select on public.vw_patio_veiculos_busca to anon, authenticated, service_role;
+grant select on public.vw_patio_fila_itens to anon, authenticated, service_role;
+grant select on public.vw_patio_boxes_ativos to anon, authenticated, service_role;
+grant select on public.vw_patio_concluidos to anon, authenticated, service_role;

@@ -432,6 +432,50 @@ export type PatioRevisaoProativa = {
   contatoTipo?: string
 }
 
+export type PatioVeiculoBusca = {
+  patioVeiculoId: number
+  clienteId?: string
+  clienteNome?: string
+  vendedorId?: string
+  veiculoId?: string
+  placa?: string
+  veiculoDescricao?: string
+  anoModelo?: number
+  nomeMotorista?: string
+  contatoMotorista?: string
+  mediaKmDiaria?: number
+  dataRevisaoProativa?: string
+  ultimoPatioExecucaoId?: number
+  ultimoKm?: number
+  ultimoAtendimentoEm?: string
+  contatoRecomendado?: string
+  contatoNome?: string
+  contatoTipo?: string
+}
+
+export type PatioFilaItem = {
+  id: string
+  patioItemId: number
+  patioTabelaOrigem: string
+  patioExecucaoId?: number
+  clienteId?: string
+  clienteNome?: string
+  vendedorId?: string
+  veiculoId?: string
+  placa?: string
+  area: 'borracharia' | 'alinhamento' | 'manutencao'
+  servicoNome?: string
+  descricao?: string
+  quantidade?: number
+  status?: string
+  boxId?: number
+  funcionarioId?: number
+  quilometragem?: number
+  tipoAtendimento?: string
+  solicitadoEm?: string
+  atualizadoEm?: string
+}
+
 export type CarteiraFiltro =
   | 'todos'
   | 'origem-capital'
