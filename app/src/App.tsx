@@ -10437,8 +10437,12 @@ function PatioAlocacao({
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!selectedVehicleId && veiculos[0]) setSelectedVehicleId(String(veiculos[0].patioVeiculoId))
-  }, [selectedVehicleId, veiculos])
+    if (!selectedVehicleId && veiculos[0]) {
+      const firstVehicleId = String(veiculos[0].patioVeiculoId)
+      setSelectedVehicleId(firstVehicleId)
+      void onVehicleChange(veiculos[0].patioVeiculoId)
+    }
+  }, [onVehicleChange, selectedVehicleId, veiculos])
 
   useEffect(() => {
     if (areas[0] && !selectedArea) setSelectedArea(areas[0].area)
