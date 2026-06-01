@@ -26,6 +26,9 @@ on public.patio_atendimentos (status, box_id, patio_execucao_id);
 create index if not exists idx_patio_atendimentos_status_veiculo
 on public.patio_atendimentos (status, patio_veiculo_id, patio_execucao_id);
 
+create index if not exists idx_patio_atendimentos_status_fim
+on public.patio_atendimentos (status, fim_execucao desc, patio_execucao_id);
+
 create index if not exists idx_patio_itens_status_execucao
 on public.patio_atendimento_itens (status, patio_execucao_id);
 
