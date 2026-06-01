@@ -98,6 +98,7 @@ import {
 } from './repositories/catalogoRepository'
 import {
   assignClientesVendedorByFilter,
+  countClientesTotal,
   listRodobensFunilResumo,
   listVendedoresHistoricosResumo,
   updateRodobensQualificacao,
@@ -621,6 +622,9 @@ function App() {
       clearModuleError('dashboard')
 
       try {
+        const needsDashboardResumo = ['dashboard', 'relatorios', 'usuarios'].includes(view)
+        const needsVendedorHistorico = ['relatorios', 'vendedores'].includes(view)
+        const needsRelatorioGerencial = view === 'relatorios'
         const results = await Promise.allSettled([
           listInteracoes(),
           listOrcamentos(),
@@ -634,16 +638,16 @@ function App() {
           listMesclagens(),
           listCatalogoItens(),
           listCatalogoRegrasDesconto(),
-          getDashboardResumo(),
+          needsDashboardResumo ? getDashboardResumo() : Promise.resolve(dashboardResumo),
           listVendedoresResumo(),
-          listVendedoresHistoricosResumo(),
-          listRankingMedidas(),
-          listRankingServicos(),
-          listFunilGerencial(),
-          listMotivosPerda(),
-          listAtividadesDia(),
-          listForecastVendedor(),
-          listMetasVendedores(),
+          needsVendedorHistorico ? listVendedoresHistoricosResumo() : Promise.resolve(vendedoresHistoricosResumo),
+          needsRelatorioGerencial ? listRankingMedidas() : Promise.resolve(rankingMedidas),
+          needsRelatorioGerencial ? listRankingServicos() : Promise.resolve(rankingServicos),
+          needsRelatorioGerencial ? listFunilGerencial() : Promise.resolve(funilGerencial),
+          needsRelatorioGerencial ? listMotivosPerda() : Promise.resolve(motivosPerda),
+          needsRelatorioGerencial ? listAtividadesDia() : Promise.resolve(atividadesDia),
+          needsRelatorioGerencial ? listForecastVendedor() : Promise.resolve(forecastVendedor),
+          needsRelatorioGerencial ? listMetasVendedores() : Promise.resolve(metasVendedores),
         ])
         const rejected = results.find((result) => result.status === 'rejected')
         const valueAt = <T,>(index: number, fallback: T): T => {
@@ -716,7 +720,7 @@ function App() {
     return () => {
       isMounted = false
     }
-  }, [isCheckingSession, session])
+  }, [isCheckingSession, session, view])
 
   useEffect(() => {
     let isMounted = true
@@ -760,6 +764,29 @@ function App() {
       window.clearTimeout(handle)
     }
   }, [clienteFiltro, clientesPage, isCheckingSession, query, session])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadExactClientesTotal() {
+      if (isCheckingSession || !session || query.trim() || clienteFiltro !== 'todos') return
+
+      try {
+        const total = await countClientesTotal({
+          vendedorId: session.role === 'vendedor' ? session.id : undefined,
+        })
+        if (isMounted) setClientesTotal(total)
+      } catch {
+        // A lista ja usa contagem estimada; se a contagem exata falhar, mantemos a tela responsiva.
+      }
+    }
+
+    void loadExactClientesTotal()
+
+    return () => {
+      isMounted = false
+    }
+  }, [clienteFiltro, isCheckingSession, query, session])
 
   useEffect(() => {
     let isMounted = true

@@ -138,6 +138,22 @@ export async function listClientesPage(input: {
   }
 }
 
+export async function countClientesTotal(input: ClientePageFilters = {}): Promise<number> {
+  const supabase = await getSupabase()
+  if (!supabase) return filterMockClientes(mockClientes, input).length
+
+  let query = supabase
+    .from('clientes')
+    .select('id', { count: 'exact', head: true })
+    .is('excluido_em', null)
+
+  query = applyClienteFilters(query, input)
+
+  const { count, error } = await query
+  if (error) throw error
+  return count ?? 0
+}
+
 export async function assignClientesVendedorByFilter(input: ClientePageFilters & { vendedorIdDestino: string }): Promise<number> {
   const supabase = await getSupabase()
   if (!supabase) return filterMockClientes(mockClientes, input).length

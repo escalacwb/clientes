@@ -406,7 +406,7 @@ export async function listPatioFeedbackPendente(input: {
   const to = from + input.pageSize - 1
   let query = supabase
     .from('vw_patio_feedback_pendente')
-    .select('*', { count: 'exact' })
+    .select('*', { count: 'planned' })
     .order('fim_execucao', { ascending: true })
     .range(from, to)
 
@@ -436,7 +436,7 @@ export async function listPatioRevisaoProativa(input: {
   const to = from + input.pageSize - 1
   let query = supabase
     .from('vw_patio_revisao_proativa')
-    .select('*', { count: 'exact' })
+    .select('*', { count: 'planned' })
     .order('km_estimado_desde_visita', { ascending: false })
     .order('dias_desde_ultima_visita', { ascending: false })
     .range(from, to)
