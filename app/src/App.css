@@ -2803,6 +2803,12 @@ h3 {
   font-weight: 700;
 }
 
+.quote-save-hint {
+  color: #64736f;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .quote-controls input,
 .quote-controls select,
 .quote-search input,

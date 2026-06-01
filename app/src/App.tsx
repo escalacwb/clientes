@@ -7729,7 +7729,9 @@ function OrcamentoEditor({
         origem: shouldSend ? 'orcamento:envio' : 'orcamento:followup',
       })
       if (shouldSend && waUrl) window.open(waUrl, '_blank', 'noopener,noreferrer')
-      setFeedback(`Proposta ${created.id.slice(0, 8)} ${shouldSend ? 'criada e marcada como enviada' : 'criada'} com total de ${money(created.valorTotal)}.`)
+      setFeedback(
+        `Proposta ${created.id.slice(0, 8)} ${shouldSend ? 'criada, marcada como enviada e com follow-up programado' : 'salva com follow-up programado'} para ${dateLabel(previsaoFechamento || new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10))}. Total: ${money(created.valorTotal)}.`,
+      )
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Nao foi possivel criar a proposta.')
     } finally {
@@ -7989,11 +7991,14 @@ function OrcamentoEditor({
           <button className="button" type="button" onClick={copyMessage} disabled={validItems.length === 0}>
             Copiar mensagem
           </button>
+          <small className="quote-save-hint">
+            A proposta so entra no historico depois de salvar. Ao enviar pelo WhatsApp, o sistema cria um follow-up automatico.
+          </small>
           <button className="button" type="submit" value="draft" disabled={isSaving}>
-            {isSaving ? 'Criando...' : 'Nova proposta'}
+            {isSaving ? 'Salvando...' : 'Salvar proposta'}
           </button>
           <button className="button primary" type="submit" value="send" disabled={isSaving || approvalWarnings.length > 0 || !waUrl}>
-            {isSaving ? 'Criando...' : 'Criar e enviar'}
+            {isSaving ? 'Salvando...' : 'Salvar e abrir WhatsApp'}
           </button>
         </aside>
       </form>
