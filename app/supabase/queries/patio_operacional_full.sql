@@ -634,6 +634,62 @@ where pa.status = 'finalizado'
   and pai.status = 'finalizado'
   and pa.fim_execucao is not null;
 
+create or replace view public.vw_patio_revisao_resultados
+with (security_invoker = true) as
+with acoes as (
+  select
+    pvs.patio_veiculo_id,
+    pvs.cliente_id,
+    c.nome as cliente_nome,
+    c.vendedor_id,
+    pvs.veiculo_id,
+    coalesce(v.placa, pvs.placa) as placa,
+    coalesce(v.descricao, pvs.modelo) as veiculo_descricao,
+    pvs.nome_motorista,
+    pvs.contato_motorista,
+    pvs.data_revisao_proativa
+  from public.patio_veiculos_snapshot pvs
+  join public.clientes c on c.id = pvs.cliente_id
+  left join public.veiculos v on v.id = pvs.veiculo_id
+  where pvs.data_revisao_proativa is not null
+    and c.excluido_em is null
+),
+retornos as (
+  select distinct on (a.patio_veiculo_id)
+    a.patio_veiculo_id,
+    pa.patio_execucao_id,
+    pa.inicio_execucao,
+    pa.quilometragem
+  from acoes a
+  join public.patio_atendimentos pa on pa.patio_veiculo_id = a.patio_veiculo_id
+  where pa.status = 'finalizado'
+    and pa.inicio_execucao::date > a.data_revisao_proativa
+    and pa.inicio_execucao::date <= a.data_revisao_proativa + 15
+  order by a.patio_veiculo_id, pa.inicio_execucao asc
+)
+select
+  a.patio_veiculo_id,
+  a.cliente_id,
+  a.cliente_nome,
+  a.vendedor_id,
+  a.veiculo_id,
+  a.placa,
+  a.veiculo_descricao,
+  a.nome_motorista,
+  a.contato_motorista,
+  a.data_revisao_proativa,
+  retorno.patio_execucao_id as retorno_patio_execucao_id,
+  retorno.inicio_execucao as retorno_em,
+  retorno.quilometragem as retorno_km,
+  case
+    when retorno.patio_execucao_id is not null then 'retornou_15d'
+    when a.data_revisao_proativa <= current_date - 15 then 'sem_retorno_15d'
+    else 'aguardando'
+  end as resultado,
+  greatest(0, current_date - a.data_revisao_proativa)::integer as dias_desde_acao
+from acoes a
+left join retornos retorno on retorno.patio_veiculo_id = a.patio_veiculo_id;
+
 grant select on public.patio_funcionarios_snapshot to anon, authenticated, service_role;
 grant select on public.patio_boxes_snapshot to anon, authenticated, service_role;
 grant select on public.vw_patio_catalogo_servicos to anon, authenticated, service_role;
@@ -644,6 +700,7 @@ grant select on public.vw_patio_box_servicos to anon, authenticated, service_rol
 grant select on public.vw_patio_concluidos to anon, authenticated, service_role;
 grant select on public.vw_patio_fila_painel to anon, authenticated, service_role;
 grant select on public.vw_patio_relatorio_servicos to anon, authenticated, service_role;
+grant select on public.vw_patio_revisao_resultados to anon, authenticated, service_role;
 grant execute on function public.registrar_entrada_patio_crm(bigint, integer, text, text, jsonb, text) to anon, authenticated, service_role;
 grant execute on function public.alocar_servicos_patio_crm(bigint, text, integer, bigint) to anon, authenticated, service_role;
 grant execute on function public.adicionar_servico_box_patio_crm(bigint, text, text, integer) to anon, authenticated, service_role;

@@ -176,6 +176,7 @@ import {
   listPatioFilaPainel,
   listPatioFuncionarios,
   listPatioRevisaoProativa,
+  listPatioRevisaoResultados,
   listPatioRelatorioServicos,
   listPatioVeiculoAtendimentoItens,
   listPatioVeiculoAtendimentos,
@@ -190,6 +191,7 @@ import {
   updatePatioVeiculoDados,
   type PatioContatoExportacao,
   type PatioRelatorioServico,
+  type PatioRevisaoResultado,
 } from './repositories/patioRepository'
 import { createPipelineFromSuggestion, listPipelineOportunidades, updatePipelineOportunidade, updatePipelineStage } from './repositories/pipelineRepository'
 import { escalateStaleCommercialSequences, listDefaultCommercialSequenceSteps, listSequenciaExecucoes, startDefaultCommercialSequence, updateSequenceStep, type SequenciaEtapaConfig } from './repositories/sequenciasRepository'
@@ -305,6 +307,7 @@ const navSectionsByMode: Record<AppMode, Array<{ title: string; items: Array<{ i
         { id: 'importacoes', label: 'Importacoes', icon: FileUp },
         { id: 'relatorio-patio', label: 'Relatorio Patio', icon: BarChart3 },
         { id: 'patio-km-medio', label: 'KM medio placa', icon: Gauge },
+        { id: 'patio-resultados', label: 'Resultados Patio', icon: Trophy },
         { id: 'vendedores', label: 'Equipe', icon: UserRound },
         { id: 'usuarios', label: 'Usuarios', icon: ShieldCheck },
         { id: 'auditoria', label: 'Auditoria', icon: CheckCircle2 },
@@ -327,7 +330,7 @@ const hiddenViewRedirects: Record<string, string> = {
   'campanhas-inbox': 'campanhas',
 }
 
-const adminOnlyViews = new Set(['importacoes', 'conflitos', 'mesclagem', 'relatorios', 'relatorio-patio', 'patio-km-medio', 'vendedores', 'usuarios', 'auditoria'])
+const adminOnlyViews = new Set(['importacoes', 'conflitos', 'mesclagem', 'relatorios', 'relatorio-patio', 'patio-km-medio', 'patio-resultados', 'vendedores', 'usuarios', 'auditoria'])
 const sellerPrimaryViews = new Set(['cockpit', 'clientes', 'campanhas', 'orcamentos', 'catalogo'])
 const mobilePrimaryViews = new Set(['cockpit', 'clientes', 'campanhas', 'orcamentos'])
 const mobileAllowedViews = new Set(['cockpit', 'clientes', 'campanhas', 'orcamentos', 'cliente360', 'orcamento-editor', 'orcamento-detalhe'])
@@ -3311,6 +3314,9 @@ function App() {
             }}
           />
         )}
+        {session.role === 'admin' && view === 'patio-resultados' && (
+          <PatioResultados onLoad={listPatioRevisaoResultados} />
+        )}
         {session.role === 'admin' && view === 'vendedores' && (
           <VendedoresCarteira
             clientes={clientes}
@@ -3387,6 +3393,7 @@ function titleFor(view: string) {
     relatorios: 'Relatorios gerenciais',
     'relatorio-patio': 'Relatorio Patio',
     'patio-km-medio': 'KM medio por placa',
+    'patio-resultados': 'Resultados Patio',
     usuarios: 'Usuarios e permissoes',
     auditoria: 'Auditoria',
     cliente360: 'Ficha completa do cliente',
@@ -9910,6 +9917,98 @@ function PatioKmMedio({
       )}
     </section>
   )
+}
+
+function PatioResultados({
+  onLoad,
+}: {
+  onLoad: (input?: { status?: 'todos' | 'retornou_15d' | 'sem_retorno_15d' | 'aguardando'; limit?: number }) => Promise<PatioRevisaoResultado[]>
+}) {
+  const [status, setStatus] = useState<'todos' | 'retornou_15d' | 'sem_retorno_15d' | 'aguardando'>('todos')
+  const [items, setItems] = useState<PatioRevisaoResultado[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const load = async () => {
+    setIsLoading(true)
+    setError('')
+    try {
+      setItems(await onLoad({ status, limit: 500 }))
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar resultados.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void load()
+  }, [status])
+
+  const retornou = items.filter((item) => item.resultado === 'retornou_15d').length
+  const semRetorno = items.filter((item) => item.resultado === 'sem_retorno_15d').length
+  const aguardando = items.filter((item) => item.resultado === 'aguardando').length
+  const taxa = retornou + semRetorno ? Math.round((retornou / (retornou + semRetorno)) * 100) : 0
+
+  return (
+    <section className="panel wide">
+      <div className="panel-header">
+        <div>
+          <h2>Resultados Patio</h2>
+          <p>Controle se revisoes proativas geraram retorno da placa em ate 15 dias.</p>
+        </div>
+        <button className="button primary" type="button" onClick={() => void load()} disabled={isLoading}>
+          {isLoading ? 'Carregando...' : 'Atualizar'}
+        </button>
+      </div>
+      {error && <div className="inline-error">{error}</div>}
+      <div className="filters-grid">
+        <label>
+          Status
+          <select value={status} onChange={(event) => setStatus(event.target.value as typeof status)}>
+            <option value="todos">Todos</option>
+            <option value="retornou_15d">Retornou em 15 dias</option>
+            <option value="aguardando">Aguardando janela</option>
+            <option value="sem_retorno_15d">Sem retorno em 15 dias</option>
+          </select>
+        </label>
+      </div>
+      <div className="metric-grid">
+        <Metric icon={Trophy} label="Taxa de retorno" value={`${taxa}%`} tone="green" />
+        <Metric icon={CheckCircle2} label="Retornaram" value={numberLabel(retornou)} tone="green" />
+        <Metric icon={CalendarClock} label="Aguardando" value={numberLabel(aguardando)} tone="amber" />
+        <Metric icon={AlertTriangle} label="Sem retorno" value={numberLabel(semRetorno)} tone="red" />
+      </div>
+      <div className="table-list">
+        {items.map((item) => (
+          <article className="panel subtle" key={`${item.patioVeiculoId}-${item.dataRevisaoProativa}`}>
+            <div className="panel-header">
+              <div>
+                <h3>{item.placa ?? 'Sem placa'} - {item.clienteNome ?? 'Cliente sem vinculo'}</h3>
+                <p>Acionado em {dateLabel(item.dataRevisaoProativa)} - {resultadoRevisaoLabel(item.resultado)} - {item.diasDesdeAcao} dias</p>
+              </div>
+              <strong>{item.retornoEm ? `Retorno ${dateLabel(item.retornoEm)}` : resultadoRevisaoLabel(item.resultado)}</strong>
+            </div>
+            <div className="status-list">
+              <div className="status-row"><span>Veiculo</span><strong>{item.veiculoDescricao || 'Nao informado'}</strong></div>
+              <div className="status-row"><span>Motorista</span><strong>{item.nomeMotorista || 'Nao informado'}</strong></div>
+              <div className="status-row"><span>KM retorno</span><strong>{item.retornoKm ? numberLabel(item.retornoKm) : 'Sem retorno'}</strong></div>
+            </div>
+          </article>
+        ))}
+        {!isLoading && items.length === 0 && <div className="empty-state">Nenhum resultado encontrado para este filtro.</div>}
+      </div>
+    </section>
+  )
+}
+
+function resultadoRevisaoLabel(value: PatioRevisaoResultado['resultado']) {
+  const labels: Record<PatioRevisaoResultado['resultado'], string> = {
+    retornou_15d: 'Retornou em 15 dias',
+    sem_retorno_15d: 'Sem retorno em 15 dias',
+    aguardando: 'Aguardando janela',
+  }
+  return labels[value] ?? value
 }
 
 function rankPatioReport(items: PatioRelatorioServico[], labeler: (item: PatioRelatorioServico) => string) {

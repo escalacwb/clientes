@@ -155,6 +155,24 @@ type PatioRelatorioServicoRow = {
   quilometragem: number | null
 }
 
+type PatioRevisaoResultadoRow = {
+  patio_veiculo_id: number
+  cliente_id: string
+  cliente_nome: string | null
+  vendedor_id: string | null
+  veiculo_id: string | null
+  placa: string | null
+  veiculo_descricao: string | null
+  nome_motorista: string | null
+  contato_motorista: string | null
+  data_revisao_proativa: string | null
+  retorno_patio_execucao_id: number | null
+  retorno_em: string | null
+  retorno_km: number | null
+  resultado: string | null
+  dias_desde_acao: number | null
+}
+
 export type PatioContatoExportacao = {
   tipo: 'Responsavel' | 'Motorista'
   nome: string
@@ -181,6 +199,24 @@ export type PatioRelatorioServico = {
   fimExecucao?: string
   duracaoMinutos?: number
   quilometragem?: number
+}
+
+export type PatioRevisaoResultado = {
+  patioVeiculoId: number
+  clienteId: string
+  clienteNome?: string
+  vendedorId?: string
+  veiculoId?: string
+  placa?: string
+  veiculoDescricao?: string
+  nomeMotorista?: string
+  contatoMotorista?: string
+  dataRevisaoProativa?: string
+  retornoPatioExecucaoId?: number
+  retornoEm?: string
+  retornoKm?: number
+  resultado: 'retornou_15d' | 'sem_retorno_15d' | 'aguardando'
+  diasDesdeAcao: number
 }
 
 type FilaRow = {
@@ -627,6 +663,42 @@ export async function listPatioRelatorioServicos(input: {
     fimExecucao: row.fim_execucao ?? undefined,
     duracaoMinutos: row.duracao_minutos ? Number(row.duracao_minutos) : undefined,
     quilometragem: row.quilometragem ?? undefined,
+  }))
+}
+
+export async function listPatioRevisaoResultados(input: {
+  status?: 'todos' | 'retornou_15d' | 'sem_retorno_15d' | 'aguardando'
+  limit?: number
+} = {}): Promise<PatioRevisaoResultado[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  let query = supabase
+    .from('vw_patio_revisao_resultados')
+    .select('*')
+    .order('data_revisao_proativa', { ascending: false })
+    .limit(input.limit ?? 300)
+
+  if (input.status && input.status !== 'todos') query = query.eq('resultado', input.status)
+
+  const { data, error } = await query
+  if (error) throw error
+  return (data as PatioRevisaoResultadoRow[] | null ?? []).map((row) => ({
+    patioVeiculoId: Number(row.patio_veiculo_id),
+    clienteId: row.cliente_id,
+    clienteNome: row.cliente_nome ?? undefined,
+    vendedorId: row.vendedor_id ?? undefined,
+    veiculoId: row.veiculo_id ?? undefined,
+    placa: row.placa ?? undefined,
+    veiculoDescricao: row.veiculo_descricao ?? undefined,
+    nomeMotorista: row.nome_motorista ?? undefined,
+    contatoMotorista: row.contato_motorista ?? undefined,
+    dataRevisaoProativa: row.data_revisao_proativa ?? undefined,
+    retornoPatioExecucaoId: row.retorno_patio_execucao_id ?? undefined,
+    retornoEm: row.retorno_em ?? undefined,
+    retornoKm: row.retorno_km ?? undefined,
+    resultado: (row.resultado as PatioRevisaoResultado['resultado']) ?? 'aguardando',
+    diasDesdeAcao: Number(row.dias_desde_acao ?? 0),
   }))
 }
 
