@@ -160,6 +160,7 @@ import { listOportunidadesPage, listOportunidadesResumo, markOportunidadeComTare
 import {
   allocatePatioServices,
   addPatioBoxServico,
+  consultPatioPlate,
   finishPatioBox,
   getClienteContatoRecomendado,
   listPatioAlocacaoVeiculos,
@@ -184,6 +185,7 @@ import {
   markPatioContatosExportados,
   markPatioFeedbackDone,
   markPatioRevisaoDone,
+  notifyPatioBoxFinalized,
   registerPatioEntrada,
   revertPatioVisit,
   searchPatioVeiculos,
@@ -1938,6 +1940,7 @@ function App() {
             isLoading={isLoadingPatioEntrada}
             catalogoServicos={patioCatalogoServicos}
             onQueryChange={setPatioEntradaQuery}
+            onConsultPlate={consultPatioPlate}
             onRegisterEntrada={async (input) => {
               await registerPatioEntrada(input)
               setPatioFilaPage(1)
@@ -2053,6 +2056,13 @@ function App() {
             }}
             onFinalizar={async (input) => {
               await finishPatioBox(input)
+              notifyPatioBoxFinalized({
+                patioExecucaoId: input.patioExecucaoId,
+                finalizadoPor: session.nome,
+                observacaoFinal: input.observacaoFinal,
+              }).catch((error) => {
+                console.warn('Nao foi possivel enviar notificacao Telegram do patio.', error)
+              })
               setPatioBoxesAtivos(await listPatioBoxesPainel())
             }}
             onRefresh={async () => {
@@ -9006,6 +9016,7 @@ function PatioEntrada({
   isLoading,
   catalogoServicos,
   onQueryChange,
+  onConsultPlate,
   onRegisterEntrada,
   onEditVehicle,
   onOpenClient,
@@ -9018,6 +9029,7 @@ function PatioEntrada({
   isLoading: boolean
   catalogoServicos: PatioCatalogoServico[]
   onQueryChange: (query: string) => void
+  onConsultPlate?: (placa: string) => Promise<{ placa: string; modelo: string; anoModelo?: number | string | null }>
   onRegisterEntrada?: (input: PatioEntradaInput) => Promise<void>
   onEditVehicle?: (vehicle: PatioVeiculoBusca) => void
   onOpenClient: (clienteId: string) => void | Promise<void>
@@ -9042,6 +9054,9 @@ function PatioEntrada({
   const [vibracao, setVibracao] = useState('Nao')
   const [isSaving, setIsSaving] = useState(false)
   const [formError, setFormError] = useState('')
+  const [plateConsultResult, setPlateConsultResult] = useState<{ placa: string; modelo: string; anoModelo?: number | string | null } | undefined>()
+  const [isConsultingPlate, setIsConsultingPlate] = useState(false)
+  const [plateConsultError, setPlateConsultError] = useState('')
   const catalogoDaArea = catalogoServicos.filter((servico) => servico.area === servicoArea)
   const areasEntrada: Array<{ area: PatioEntradaServicoInput['area']; label: string }> = [
     { area: 'borracharia', label: 'Borracharia' },
@@ -9116,6 +9131,20 @@ function PatioEntrada({
     }
   }
 
+  const handleConsultPlate = async () => {
+    if (!onConsultPlate) return
+    setIsConsultingPlate(true)
+    setPlateConsultError('')
+    setPlateConsultResult(undefined)
+    try {
+      setPlateConsultResult(await onConsultPlate(query))
+    } catch (error) {
+      setPlateConsultError(error instanceof Error ? error.message : 'Nao foi possivel consultar a placa.')
+    } finally {
+      setIsConsultingPlate(false)
+    }
+  }
+
   return (
     <section className="panel wide">
       <div className="panel-header">
@@ -9127,11 +9156,40 @@ function PatioEntrada({
       <div className="filters-grid">
         <label>
           Placa, cliente ou motorista
-          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Ex.: ABC1D23, cliente ou motorista" />
+          <input
+            value={query}
+            onChange={(event) => {
+              setPlateConsultResult(undefined)
+              setPlateConsultError('')
+              onQueryChange(event.target.value)
+            }}
+            placeholder="Ex.: ABC1D23, cliente ou motorista"
+          />
         </label>
       </div>
       {isLoading && <div className="empty-state">Buscando no historico do patio...</div>}
-      {!isLoading && query.trim().length >= 2 && results.length === 0 && <div className="empty-state">Nenhum veiculo encontrado.</div>}
+      {!isLoading && query.trim().length >= 2 && results.length === 0 && (
+        <div className="empty-state">
+          <strong>Nenhum veiculo encontrado.</strong>
+          {onConsultPlate && (
+            <button className="button" type="button" disabled={isConsultingPlate} onClick={() => void handleConsultPlate()}>
+              {isConsultingPlate ? 'Consultando placa...' : 'Buscar placa na API'}
+            </button>
+          )}
+        </div>
+      )}
+      {plateConsultError && <div className="inline-error">{plateConsultError}</div>}
+      {plateConsultResult && (
+        <div className="panel subtle">
+          <div className="panel-header">
+            <div>
+              <h3>Dados encontrados na API</h3>
+              <p>{plateConsultResult.placa} - {plateConsultResult.modelo} {plateConsultResult.anoModelo ? `- ${plateConsultResult.anoModelo}` : ''}</p>
+            </div>
+          </div>
+          <p className="muted-text">Use esses dados para cadastrar ou corrigir o veiculo quando o fluxo de novo cadastro estiver liberado no banco combinado.</p>
+        </div>
+      )}
       {query.trim().length < 2 && <div className="empty-state">Digite ao menos 2 caracteres para consultar.</div>}
       {allowRegister && selected && (
         <form className="panel subtle" onSubmit={submitEntrada}>

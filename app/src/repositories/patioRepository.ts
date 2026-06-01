@@ -227,6 +227,12 @@ export type PatioRevisaoResultado = {
   diasDesdeAcao: number
 }
 
+export type PatioPlateConsultResult = {
+  placa: string
+  modelo: string
+  anoModelo?: number | string | null
+}
+
 type FilaRow = {
   id: string
   patio_item_id: number
@@ -764,6 +770,35 @@ export async function registerPatioEntrada(input: PatioEntradaInput): Promise<nu
 
   if (error) throw error
   return Number(data)
+}
+
+export async function consultPatioPlate(placa: string): Promise<PatioPlateConsultResult> {
+  const supabase = await getSupabase()
+  if (!supabase) throw new Error('Supabase nao configurado para consultar placa.')
+
+  const { data, error } = await supabase.functions.invoke('consult-vehicle-plate', {
+    body: { placa },
+  })
+
+  if (error) throw error
+  if (!data?.ok || !data.vehicle) throw new Error(data?.error ?? 'Nao foi possivel consultar a placa.')
+  return data.vehicle as PatioPlateConsultResult
+}
+
+export async function notifyPatioBoxFinalized(input: {
+  patioExecucaoId: number
+  finalizadoPor?: string
+  observacaoFinal?: string
+}): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase) return
+
+  const { data, error } = await supabase.functions.invoke('send-patio-telegram', {
+    body: input,
+  })
+
+  if (error) throw error
+  if (data && data.ok === false) throw new Error(data.error ?? 'Nao foi possivel enviar notificacao do patio.')
 }
 
 export async function listPatioAlocacaoVeiculos(): Promise<PatioAlocacaoVeiculo[]> {
