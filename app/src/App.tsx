@@ -187,6 +187,7 @@ import {
   revertPatioVisit,
   searchPatioVeiculos,
   unassignPatioBox,
+  updatePatioAtendimentoItemTipo,
   updatePatioClienteDados,
   updatePatioVeiculoMediaKm,
   updatePatioVeiculoDados,
@@ -496,6 +497,9 @@ function App() {
   const [patioConcluidosTotal, setPatioConcluidosTotal] = useState(0)
   const [patioConcluidosPage, setPatioConcluidosPage] = useState(1)
   const [patioConcluidosQuery, setPatioConcluidosQuery] = useState('')
+  const [patioConcluidosStartDate, setPatioConcluidosStartDate] = useState(() => addDays(new Date().toISOString().slice(0, 10), -30))
+  const [patioConcluidosEndDate, setPatioConcluidosEndDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [patioConcluidosItens, setPatioConcluidosItens] = useState<PatioAtendimentoItemResumo[]>([])
   const [isLoadingPatioConcluidos, setIsLoadingPatioConcluidos] = useState(false)
   const [patioRevisaoItems, setPatioRevisaoItems] = useState<PatioRevisaoProativa[]>([])
   const [patioRevisaoTotal, setPatioRevisaoTotal] = useState(0)
@@ -1103,13 +1107,20 @@ function App() {
           page: patioConcluidosPage,
           pageSize: 50,
           query: patioConcluidosQuery,
+          startDate: patioConcluidosStartDate,
+          endDate: patioConcluidosEndDate,
         })
+        const itens = await listPatioVeiculoAtendimentoItens(result.items.map((item) => item.patioExecucaoId))
         if (!isMounted) return
         setPatioConcluidos(result.items)
+        setPatioConcluidosItens(itens)
         setPatioConcluidosTotal(result.total)
         clearModuleError('patio-concluidos')
       } catch (exception) {
-        if (isMounted) setModuleError('patio-concluidos', exception instanceof Error ? exception.message : 'Nao foi possivel carregar concluidos.')
+        if (isMounted) {
+          setPatioConcluidosItens([])
+          setModuleError('patio-concluidos', exception instanceof Error ? exception.message : 'Nao foi possivel carregar concluidos.')
+        }
       } finally {
         if (isMounted) setIsLoadingPatioConcluidos(false)
       }
@@ -1120,7 +1131,7 @@ function App() {
       isMounted = false
       window.clearTimeout(handle)
     }
-  }, [isCheckingSession, patioConcluidosPage, patioConcluidosQuery, session, view])
+  }, [isCheckingSession, patioConcluidosEndDate, patioConcluidosPage, patioConcluidosQuery, patioConcluidosStartDate, session, view])
 
   useEffect(() => {
     let isMounted = true
@@ -2034,6 +2045,9 @@ function App() {
               await finishPatioBox(input)
               setPatioBoxesAtivos(await listPatioBoxesPainel())
             }}
+            onRefresh={async () => {
+              setPatioBoxesAtivos(await listPatioBoxesPainel())
+            }}
             onOpenClient={async (clienteId) => {
               await ensureClientInMemory(clienteId)
               setSelectedClientId(clienteId)
@@ -2048,23 +2062,41 @@ function App() {
           <PatioConcluidos
             items={patioConcluidos}
             total={patioConcluidosTotal}
+            servicos={patioConcluidosItens}
             page={patioConcluidosPage}
             pageSize={50}
             query={patioConcluidosQuery}
+            startDate={patioConcluidosStartDate}
+            endDate={patioConcluidosEndDate}
             isLoading={isLoadingPatioConcluidos}
             onQueryChange={(nextQuery) => {
               setPatioConcluidosQuery(nextQuery)
               setPatioConcluidosPage(1)
             }}
+            onDateRangeChange={(startDate, endDate) => {
+              setPatioConcluidosStartDate(startDate)
+              setPatioConcluidosEndDate(endDate)
+              setPatioConcluidosPage(1)
+            }}
             onPageChange={setPatioConcluidosPage}
+            onUpdateTipoAtendimento={async (servicoId, tipoAtendimento) => {
+              await updatePatioAtendimentoItemTipo(servicoId, tipoAtendimento)
+              setPatioConcluidosItens((current) => current.map((item) => (
+                item.id === servicoId ? { ...item, tipoAtendimento } : item
+              )))
+            }}
             onReverter={async (patioExecucaoId) => {
               await revertPatioVisit(patioExecucaoId)
               const result = await listPatioConcluidos({
                 page: patioConcluidosPage,
                 pageSize: 50,
                 query: patioConcluidosQuery,
+                startDate: patioConcluidosStartDate,
+                endDate: patioConcluidosEndDate,
               })
+              const itens = await listPatioVeiculoAtendimentoItens(result.items.map((item) => item.patioExecucaoId))
               setPatioConcluidos(result.items)
+              setPatioConcluidosItens(itens)
               setPatioConcluidosTotal(result.total)
               setView('patio-alocacao')
             }}
@@ -10391,6 +10423,7 @@ function PatioBoxes({
   onAddServico,
   onRetirar,
   onFinalizar,
+  onRefresh,
   onOpenClient,
 }: {
   items: PatioPainelBox[]
@@ -10400,6 +10433,7 @@ function PatioBoxes({
   onAddServico: (input: { patioExecucaoId: number; area: PatioBoxServico['area']; servicoNome: string; quantidade: number }) => Promise<void>
   onRetirar: (patioExecucaoId: number) => Promise<void>
   onFinalizar: (input: { patioExecucaoId: number; servicos: Array<{ id: string; quantidade: number; observacaoExecucao?: string }>; observacaoFinal?: string }) => Promise<void>
+  onRefresh: () => Promise<void>
   onOpenClient: (clienteId: string) => void
 }) {
   const activeCount = items.filter((item) => item.patioExecucaoId).length
@@ -10510,6 +10544,20 @@ function PatioBoxes({
     }
   }
 
+  const handleRefresh = async () => {
+    setSavingAction('refresh')
+    setError('')
+    try {
+      await onRefresh()
+      setExpanded(undefined)
+      setServicosByExecucao({})
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel sincronizar os boxes.')
+    } finally {
+      setSavingAction('')
+    }
+  }
+
   return (
     <section className="panel wide">
       <div className="panel-header">
@@ -10517,7 +10565,12 @@ function PatioBoxes({
           <h2>Visao Geral dos Boxes</h2>
           <p>Monitore, atualize e finalize os servicos em cada box.</p>
         </div>
-        <strong>{activeCount} ativos</strong>
+        <div className="inline-actions">
+          <button className="button" type="button" disabled={savingAction === 'refresh'} onClick={() => void handleRefresh()}>
+            {savingAction === 'refresh' ? 'Sincronizando...' : 'Sincronizar Todos os Boxes'}
+          </button>
+          <strong>{activeCount} ativos</strong>
+        </div>
       </div>
       {error && <div className="inline-error">{error}</div>}
       {isLoading && <div className="empty-state">Carregando boxes...</div>}
@@ -10675,28 +10728,47 @@ function PatioBoxes({
 function PatioConcluidos({
   items,
   total,
+  servicos,
   page,
   pageSize,
   query,
+  startDate,
+  endDate,
   isLoading,
   onQueryChange,
+  onDateRangeChange,
   onPageChange,
+  onUpdateTipoAtendimento,
   onReverter,
   onOpenClient,
 }: {
   items: PatioAtendimentoResumo[]
   total: number
+  servicos: PatioAtendimentoItemResumo[]
   page: number
   pageSize: number
   query: string
+  startDate: string
+  endDate: string
   isLoading: boolean
   onQueryChange: (query: string) => void
+  onDateRangeChange: (startDate: string, endDate: string) => void
   onPageChange: (page: number) => void
+  onUpdateTipoAtendimento: (servicoId: string, tipoAtendimento: string) => Promise<void>
   onReverter: (patioExecucaoId: number) => Promise<void>
   onOpenClient: (clienteId: string) => void
 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const servicosByExecucao = useMemo(() => {
+    const grouped = new Map<number, PatioAtendimentoItemResumo[]>()
+    servicos.forEach((servico) => {
+      if (!servico.patioExecucaoId) return
+      grouped.set(servico.patioExecucaoId, [...(grouped.get(servico.patioExecucaoId) ?? []), servico])
+    })
+    return grouped
+  }, [servicos])
   const [savingId, setSavingId] = useState<number | undefined>()
+  const [savingTipoId, setSavingTipoId] = useState<string | undefined>()
   const [error, setError] = useState('')
   const [termTarget, setTermTarget] = useState<PatioAtendimentoResumo | null>(null)
   const [termConditions, setTermConditions] = useState<Record<string, boolean>>({})
@@ -10720,6 +10792,18 @@ function PatioConcluidos({
 
   const selectedTermConditions = PATIO_TERMO_CONDICOES.filter((condition) => termConditions[condition.id])
 
+  const handleTipoAtendimentoChange = async (servicoId: string, tipoAtendimento: string) => {
+    setSavingTipoId(servicoId)
+    setError('')
+    try {
+      await onUpdateTipoAtendimento(servicoId, tipoAtendimento)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar o tipo de atendimento.')
+    } finally {
+      setSavingTipoId(undefined)
+    }
+  }
+
   return (
     <section className="panel wide">
       <div className="panel-header">
@@ -10735,11 +10819,21 @@ function PatioConcluidos({
           Buscar
           <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Cliente, placa ou motorista" />
         </label>
+        <label>
+          Inicio
+          <input type="date" value={startDate} onChange={(event) => onDateRangeChange(event.target.value, endDate)} />
+        </label>
+        <label>
+          Fim
+          <input type="date" value={endDate} onChange={(event) => onDateRangeChange(startDate, event.target.value)} />
+        </label>
       </div>
       {isLoading && <div className="empty-state">Carregando concluidos...</div>}
       {!isLoading && items.length === 0 && <div className="empty-state">Nenhum atendimento encontrado.</div>}
       <div className="table-list">
-        {items.map((item) => (
+        {items.map((item) => {
+          const itemServicos = servicosByExecucao.get(item.patioExecucaoId) ?? []
+          return (
           <article className="panel subtle" key={item.patioExecucaoId}>
             <div className="panel-header">
               <div>
@@ -10763,8 +10857,49 @@ function PatioConcluidos({
               <div className="status-row"><span>Motorista</span><strong>{item.nomeMotorista || 'Nao informado'}</strong></div>
               <div className="status-row"><span>Feedback</span><strong>{item.dataFeedback ? dateLabel(item.dataFeedback) : 'Pendente'}</strong></div>
             </div>
+            <div className="panel-subsection">
+              <h4>Servicos realizados nesta visita</h4>
+              {itemServicos.length === 0 ? (
+                <p className="muted">Nenhum servico detalhado encontrado para esta visita.</p>
+              ) : (
+                <div className="compact-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Area</th>
+                        <th>Servico</th>
+                        <th>Qtd.</th>
+                        <th>Tipo</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {itemServicos.map((servico) => (
+                        <tr key={servico.id}>
+                          <td>{areaLabel(servico.area)}</td>
+                          <td>{servico.servicoNome || servico.descricao || 'Servico'}</td>
+                          <td>{numberLabel(servico.quantidade ?? 1)}</td>
+                          <td>
+                            <select
+                              value={servico.tipoAtendimento || 'Normal'}
+                              disabled={savingTipoId === servico.id}
+                              onChange={(event) => void handleTipoAtendimentoChange(servico.id, event.target.value)}
+                            >
+                              <option value="Normal">Normal</option>
+                              <option value="Retorno">Retorno</option>
+                            </select>
+                          </td>
+                          <td>{servico.status || 'finalizado'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </article>
-        ))}
+          )
+        })}
       </div>
       {termTarget && (
         <div className="patio-term-workspace">

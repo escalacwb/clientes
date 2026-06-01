@@ -394,6 +394,18 @@ export async function listPatioVeiculoAtendimentoItens(patioExecucaoIds: number[
   return (data as AtendimentoItemRow[] | null ?? []).map(mapAtendimentoItem)
 }
 
+export async function updatePatioAtendimentoItemTipo(id: string, tipoAtendimento: string): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase) return
+
+  const { error } = await supabase
+    .from('patio_atendimento_itens')
+    .update({ tipo_atendimento: tipoAtendimento })
+    .eq('id', id)
+
+  if (error) throw error
+}
+
 export async function listPatioFeedbackPendente(input: {
   page: number
   pageSize: number
@@ -964,6 +976,8 @@ export async function listPatioConcluidos(input: {
   page: number
   pageSize: number
   query?: string
+  startDate?: string
+  endDate?: string
 }): Promise<{ items: PatioAtendimentoResumo[]; total: number }> {
   const supabase = await getSupabase()
   if (!supabase) return { items: [], total: 0 }
@@ -976,6 +990,8 @@ export async function listPatioConcluidos(input: {
     .order('fim_execucao', { ascending: false, nullsFirst: false })
     .range(from, to)
 
+  if (input.startDate) query = query.gte('fim_execucao', `${input.startDate}T00:00:00`)
+  if (input.endDate) query = query.lte('fim_execucao', `${input.endDate}T23:59:59`)
   if (input.query?.trim()) {
     const term = `%${input.query.trim()}%`
     query = query.or(`cliente_nome.ilike.${term},placa.ilike.${term},nome_motorista.ilike.${term}`)

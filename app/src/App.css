@@ -1646,10 +1646,39 @@ h3 {
   margin: 0;
 }
 
+.panel-subsection h4 {
+  font-size: 14px;
+  margin: 0;
+}
+
 .panel-subsection p {
   color: #64736f;
   font-size: 13px;
   margin: 3px 0 0;
+}
+
+.compact-table {
+  overflow-x: auto;
+}
+
+.compact-table table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.compact-table th,
+.compact-table td {
+  border-bottom: 1px solid #e6ece8;
+  font-size: 13px;
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.compact-table th {
+  color: #51615d;
+  font-size: 11px;
+  text-transform: uppercase;
 }
 
 .positive {
