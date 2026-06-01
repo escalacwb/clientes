@@ -3478,8 +3478,8 @@ h3 {
 .pdf-export-stage .proposal-lines div,
 .pdf-export-stage .proposal-alternatives div {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 125px;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(138px, auto);
+  gap: 14px;
   align-items: start;
   border-bottom: 1px solid #eef2ef;
   padding: 4px 0;
@@ -3487,13 +3487,13 @@ h3 {
 
 .pdf-export-stage .proposal-preview.proposal-compact .proposal-lines div,
 .pdf-export-stage .proposal-preview.proposal-compact .proposal-alternatives div {
-  grid-template-columns: minmax(0, 1fr) 108px;
+  grid-template-columns: minmax(0, 1fr) minmax(124px, auto);
   padding: 3px 0;
 }
 
 .pdf-export-stage .proposal-preview.proposal-ultra-compact .proposal-lines div,
 .pdf-export-stage .proposal-preview.proposal-ultra-compact .proposal-alternatives div {
-  grid-template-columns: minmax(0, 1fr) 96px;
+  grid-template-columns: minmax(0, 1fr) minmax(112px, auto);
   padding: 2px 0;
 }
 
@@ -3528,9 +3528,25 @@ h3 {
 .pdf-export-stage .proposal-block-totals div,
 .pdf-export-stage .proposal-condition-block div {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 130px;
+  grid-template-columns: minmax(0, 1fr) minmax(152px, auto);
   align-items: center;
-  gap: 12px;
+  gap: 14px;
+}
+
+.pdf-export-stage .proposal-preview.proposal-compact .proposal-subtotal,
+.pdf-export-stage .proposal-preview.proposal-compact .proposal-total,
+.pdf-export-stage .proposal-preview.proposal-compact .proposal-block-conditions div,
+.pdf-export-stage .proposal-preview.proposal-compact .proposal-block-totals div,
+.pdf-export-stage .proposal-preview.proposal-compact .proposal-condition-block div {
+  grid-template-columns: minmax(0, 1fr) minmax(136px, auto);
+}
+
+.pdf-export-stage .proposal-preview.proposal-ultra-compact .proposal-subtotal,
+.pdf-export-stage .proposal-preview.proposal-ultra-compact .proposal-total,
+.pdf-export-stage .proposal-preview.proposal-ultra-compact .proposal-block-conditions div,
+.pdf-export-stage .proposal-preview.proposal-ultra-compact .proposal-block-totals div,
+.pdf-export-stage .proposal-preview.proposal-ultra-compact .proposal-condition-block div {
+  grid-template-columns: minmax(0, 1fr) minmax(122px, auto);
 }
 
 .pdf-export-stage .proposal-subtotal {

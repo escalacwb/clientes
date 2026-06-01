@@ -8497,7 +8497,7 @@ async function downloadElementPdf(element: HTMLElement | null, filename: string)
       const remaining = canvas.height - sourceY
       if (remaining < 24) break
       const maxSliceHeight = Math.min(pageCanvasHeight, canvas.height - sourceY)
-      const sliceHeight = findPdfSliceHeight(canvas, sourceY, maxSliceHeight)
+      const sliceHeight = findPdfSliceHeight(canvas, sourceY, maxSliceHeight, exportElement)
       const pageCanvas = document.createElement('canvas')
       pageCanvas.width = canvas.width
       pageCanvas.height = sliceHeight
@@ -8517,8 +8517,15 @@ async function downloadElementPdf(element: HTMLElement | null, filename: string)
   }
 }
 
-function findPdfSliceHeight(canvas: HTMLCanvasElement, sourceY: number, maxSliceHeight: number) {
+function findPdfSliceHeight(
+  canvas: HTMLCanvasElement,
+  sourceY: number,
+  maxSliceHeight: number,
+  exportElement?: HTMLElement,
+) {
   if (sourceY + maxSliceHeight >= canvas.height) return maxSliceHeight
+  const protectedSliceHeight = findProtectedPdfSliceHeight(canvas, sourceY, maxSliceHeight, exportElement)
+  if (protectedSliceHeight) return protectedSliceHeight
   const context = canvas.getContext('2d', { willReadFrequently: true })
   if (!context) return maxSliceHeight
 
@@ -8546,6 +8553,36 @@ function findPdfSliceHeight(canvas: HTMLCanvasElement, sourceY: number, maxSlice
   }
 
   return maxSliceHeight
+}
+
+function findProtectedPdfSliceHeight(
+  canvas: HTMLCanvasElement,
+  sourceY: number,
+  maxSliceHeight: number,
+  exportElement?: HTMLElement,
+) {
+  if (!exportElement) return null
+  const protectedBlocks = Array.from(exportElement.querySelectorAll<HTMLElement>('[data-pdf-keep-together="true"]'))
+  if (protectedBlocks.length === 0) return null
+
+  const scaleY = canvas.height / Math.max(exportElement.scrollHeight, 1)
+  const pageStart = sourceY
+  const pageEnd = sourceY + maxSliceHeight
+  const minSliceHeight = Math.floor(maxSliceHeight * 0.45)
+
+  for (const block of protectedBlocks) {
+    const blockTop = Math.floor(block.offsetTop * scaleY)
+    const blockBottom = Math.ceil((block.offsetTop + block.offsetHeight) * scaleY)
+    const blockHeight = blockBottom - blockTop
+    const startsInsidePage = blockTop > pageStart + 8 && blockTop < pageEnd - 8
+    const wouldBeSplit = startsInsidePage && blockBottom > pageEnd
+    const canMoveWholeBlock = blockHeight < maxSliceHeight * 0.92 && blockTop - pageStart >= minSliceHeight
+    if (wouldBeSplit && canMoveWholeBlock) {
+      return Math.max(24, blockTop - pageStart - 8)
+    }
+  }
+
+  return null
 }
 
 async function downloadQuotePdf(element: HTMLElement | null, clienteNome: string, date?: string) {
@@ -8714,7 +8751,7 @@ function QuoteProposalPreview({
           const mainItems = block.items.filter((item) => (item.apresentacao ?? 'normal') !== 'alternativa')
           const alternativeItems = block.items.filter((item) => (item.apresentacao ?? 'normal') === 'alternativa')
           return (
-            <section className={`proposal-block ${block.kind}`} key={`${block.title}-${blockIndex}`}>
+            <section className={`proposal-block ${block.kind}`} data-pdf-keep-together="true" key={`${block.title}-${blockIndex}`}>
               <div className="proposal-block-title">
                 <strong>{blockTitle}</strong>
                 <span>{quoteBlockHint(block.kind)}</span>
