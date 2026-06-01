@@ -1,0 +1,52 @@
+create or replace function public.corrigir_km_atendimento_patio_crm(
+  p_patio_execucao_id bigint,
+  p_quilometragem integer
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_atendimento public.patio_atendimentos%rowtype;
+begin
+  if not public.patio_usuario_operacional() then
+    raise exception 'Sem permissao para corrigir KM do patio.';
+  end if;
+
+  if p_quilometragem is null or p_quilometragem <= 0 then
+    raise exception 'Informe uma quilometragem valida.';
+  end if;
+
+  select * into v_atendimento
+  from public.patio_atendimentos
+  where patio_execucao_id = p_patio_execucao_id;
+
+  if v_atendimento.patio_execucao_id is null then
+    raise exception 'Atendimento nao encontrado.';
+  end if;
+
+  update public.patio_atendimentos
+  set quilometragem = p_quilometragem,
+      raw_data = coalesce(raw_data, '{}'::jsonb) || jsonb_build_object(
+        'km_corrigido_em', now(),
+        'km_anterior', v_atendimento.quilometragem
+      ),
+      sincronizado_em = now()
+  where patio_execucao_id = p_patio_execucao_id;
+
+  update public.patio_atendimento_itens
+  set quilometragem = p_quilometragem,
+      atualizado_em = now(),
+      sincronizado_em = now()
+  where patio_execucao_id = p_patio_execucao_id;
+
+  update public.patio_veiculos_snapshot
+  set raw_data = coalesce(raw_data, '{}'::jsonb) || jsonb_build_object('ultima_correcao_km_em', now()),
+      sincronizado_em = now()
+  where patio_veiculo_id = v_atendimento.patio_veiculo_id;
+end;
+$$;
+
+grant execute on function public.corrigir_km_atendimento_patio_crm(bigint, integer)
+to anon, authenticated, service_role;

@@ -190,6 +190,7 @@ import {
   revertPatioVisit,
   searchPatioVeiculos,
   unassignPatioBox,
+  updatePatioAtendimentoKm,
   updatePatioAtendimentoItemTipo,
   updatePatioClienteDados,
   updatePatioVeiculoMediaKm,
@@ -3424,6 +3425,7 @@ function App() {
               await updatePatioVeiculoMediaKm(input)
               setPatioEntradaResults(await searchPatioVeiculos(patioEntradaQuery))
             }}
+            onSaveAtendimentoKm={updatePatioAtendimentoKm}
           />
         )}
         {session.role === 'admin' && view === 'patio-resultados' && (
@@ -10087,6 +10089,7 @@ function PatioKmMedio({
   onQueryChange,
   onLoadHistorico,
   onSaveMedia,
+  onSaveAtendimentoKm,
 }: {
   query: string
   results: PatioVeiculoBusca[]
@@ -10094,20 +10097,26 @@ function PatioKmMedio({
   onQueryChange: (query: string) => void
   onLoadHistorico: (patioVeiculoId: number) => Promise<{ atendimentos: PatioAtendimentoResumo[]; itens: PatioAtendimentoItemResumo[] }>
   onSaveMedia: (input: { patioVeiculoId: number; veiculoId?: string; mediaKmDiaria: number }) => Promise<void>
+  onSaveAtendimentoKm: (input: { patioExecucaoId: number; quilometragem: number }) => Promise<void>
 }) {
   const [selected, setSelected] = useState<PatioVeiculoBusca | undefined>()
   const [atendimentos, setAtendimentos] = useState<PatioAtendimentoResumo[]>([])
   const [isLoadingHistorico, setIsLoadingHistorico] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [savingKmId, setSavingKmId] = useState<number | undefined>()
   const [feedback, setFeedback] = useState('')
+  const [kmDrafts, setKmDrafts] = useState<Record<number, string>>({})
+  const [manualMedia, setManualMedia] = useState('')
 
   const selectVehicle = async (vehicle: PatioVeiculoBusca) => {
     setSelected(vehicle)
     setFeedback('')
+    setManualMedia('')
     setIsLoadingHistorico(true)
     try {
       const result = await onLoadHistorico(vehicle.patioVeiculoId)
       setAtendimentos(result.atendimentos)
+      setKmDrafts(Object.fromEntries(result.atendimentos.map((item) => [item.patioExecucaoId, item.quilometragem ? String(item.quilometragem) : ''])))
     } finally {
       setIsLoadingHistorico(false)
     }
@@ -10130,18 +10139,41 @@ function PatioKmMedio({
     : 0
   const deltaKm = first?.quilometragem && last?.quilometragem ? last.quilometragem - first.quilometragem : 0
   const calculated = days > 0 && deltaKm >= 0 ? deltaKm / days : 0
+  const mediaToSave = manualMedia.trim() ? Number(manualMedia.replace(',', '.')) : calculated
 
   const save = async () => {
-    if (!selected || !calculated) return
+    if (!selected || !mediaToSave || mediaToSave <= 0) return
     setIsSaving(true)
     setFeedback('')
     try {
-      await onSaveMedia({ patioVeiculoId: selected.patioVeiculoId, veiculoId: selected.veiculoId, mediaKmDiaria: Number(calculated.toFixed(2)) })
-      setFeedback(`Media atualizada para ${calculated.toFixed(2)} km/dia.`)
+      await onSaveMedia({ patioVeiculoId: selected.patioVeiculoId, veiculoId: selected.veiculoId, mediaKmDiaria: Number(mediaToSave.toFixed(2)) })
+      setSelected({ ...selected, mediaKmDiaria: Number(mediaToSave.toFixed(2)) })
+      setFeedback(`Media atualizada para ${mediaToSave.toFixed(2)} km/dia.`)
     } catch (exception) {
       setFeedback(exception instanceof Error ? exception.message : 'Nao foi possivel salvar a media.')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const saveVisitKm = async (visit: PatioAtendimentoResumo) => {
+    const nextKm = Number(kmDrafts[visit.patioExecucaoId])
+    if (!nextKm || nextKm <= 0) {
+      setFeedback('Informe um KM valido para a visita.')
+      return
+    }
+    setSavingKmId(visit.patioExecucaoId)
+    setFeedback('')
+    try {
+      await onSaveAtendimentoKm({ patioExecucaoId: visit.patioExecucaoId, quilometragem: nextKm })
+      setAtendimentos((current) => current.map((item) =>
+        item.patioExecucaoId === visit.patioExecucaoId ? { ...item, quilometragem: Math.round(nextKm) } : item,
+      ))
+      setFeedback('KM da visita atualizado. Confira a nova media calculada antes de salvar.')
+    } catch (exception) {
+      setFeedback(exception instanceof Error ? exception.message : 'Nao foi possivel corrigir o KM da visita.')
+    } finally {
+      setSavingKmId(undefined)
     }
   }
 
@@ -10177,7 +10209,7 @@ function PatioKmMedio({
               <h3>{selected.placa ?? 'Sem placa'} - {selected.clienteNome ?? 'Cliente sem vinculo'}</h3>
               <p>Media atual: {selected.mediaKmDiaria ? `${numberLabel(Math.round(selected.mediaKmDiaria))} km/dia` : 'sem media'}</p>
             </div>
-            <button className="button primary" type="button" disabled={!calculated || isSaving} onClick={() => void save()}>
+            <button className="button primary" type="button" disabled={!mediaToSave || mediaToSave <= 0 || isSaving} onClick={() => void save()}>
               {isSaving ? 'Salvando...' : 'Salvar nova media'}
             </button>
           </div>
@@ -10190,11 +10222,38 @@ function PatioKmMedio({
                 <Metric icon={Gauge} label="Delta KM" value={numberLabel(Math.max(0, deltaKm))} tone="blue" />
                 <Metric icon={RefreshCw} label="Nova media" value={calculated ? `${calculated.toFixed(2)} km/dia` : 'Nao calculada'} tone="green" />
               </div>
+              <div className="filters-grid">
+                <label>
+                  Media final manual
+                  <input
+                    inputMode="decimal"
+                    value={manualMedia}
+                    onChange={(event) => setManualMedia(event.target.value.replace(/[^0-9,.]/g, ''))}
+                    placeholder={calculated ? `${calculated.toFixed(2)} km/dia calculado` : 'Ex.: 165'}
+                  />
+                </label>
+              </div>
               <div className="status-list">
                 {visits.slice(-8).map((visit) => (
                   <div className="status-row" key={visit.patioExecucaoId}>
                     <span>{dateLabel(visit.fimExecucao)}</span>
-                    <strong>{visit.quilometragem ? `${numberLabel(visit.quilometragem)} km` : 'KM nao informado'}</strong>
+                    <div className="inline-actions">
+                      <input
+                        className="compact-input"
+                        inputMode="numeric"
+                        value={kmDrafts[visit.patioExecucaoId] ?? ''}
+                        onChange={(event) => setKmDrafts((current) => ({ ...current, [visit.patioExecucaoId]: event.target.value.replace(/\D/g, '') }))}
+                        aria-label={`KM da visita ${dateLabel(visit.fimExecucao)}`}
+                      />
+                      <button
+                        className="button tiny-button"
+                        type="button"
+                        disabled={savingKmId === visit.patioExecucaoId || kmDrafts[visit.patioExecucaoId] === String(visit.quilometragem ?? '')}
+                        onClick={() => void saveVisitKm(visit)}
+                      >
+                        {savingKmId === visit.patioExecucaoId ? 'Salvando...' : 'Salvar KM'}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
