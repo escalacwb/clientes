@@ -20,6 +20,18 @@ create sequence if not exists public.crm_patio_item_seq start with 1000000000 in
 create sequence if not exists public.crm_patio_veiculo_seq start with 1000000000 increment by 1;
 create sequence if not exists public.crm_patio_cliente_seq start with 1000000000 increment by 1;
 
+create index if not exists idx_patio_atendimentos_status_box
+on public.patio_atendimentos (status, box_id, patio_execucao_id);
+
+create index if not exists idx_patio_atendimentos_status_veiculo
+on public.patio_atendimentos (status, patio_veiculo_id, patio_execucao_id);
+
+create index if not exists idx_patio_itens_status_execucao
+on public.patio_atendimento_itens (status, patio_execucao_id);
+
+create index if not exists idx_patio_itens_status_area
+on public.patio_atendimento_itens (status, area, patio_execucao_id);
+
 create or replace function public.patio_normalizar_area(p_area text)
 returns text
 language sql
