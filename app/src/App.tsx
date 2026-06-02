@@ -10578,10 +10578,10 @@ function PatioFila({
     return [item.placa, item.clienteNome, item.listaServicos].some((value) => value?.toLowerCase().includes(term))
   })
   return (
-    <section className="panel wide patio-tv-panel">
+    <section className="panel wide patio-queue-panel">
       <div className="panel-header">
         <div>
-          <h2>Painel Operacional do Patio</h2>
+          <h2>Fila operacional do Patio</h2>
           <p>
             Mesma visao de trabalho do controle de patio: atendimento atual e fila de espera.
             {lastUpdated ? ` Atualizado ${new Date(lastUpdated).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.` : ''}
@@ -10607,7 +10607,7 @@ function PatioFila({
       {isLoading && <div className="empty-state">Carregando fila...</div>}
       {!isLoading && (
         <>
-          <h2 className="patio-section-title">EM ATENDIMENTO</h2>
+          <h2 className="patio-section-title">Em atendimento</h2>
           {boxesEmAtendimento.length === 0 && <div className="empty-state">Nenhum veiculo em atendimento nos boxes no momento.</div>}
           <div className="patio-tv-grid">
             {boxesEmAtendimento.map((box) => (
@@ -10621,7 +10621,7 @@ function PatioFila({
             ))}
           </div>
 
-          <h2 className="patio-section-title">FILA DE ESPERA</h2>
+          <h2 className="patio-section-title">Fila de espera</h2>
           {filteredFila.length === 0 && <div className="empty-state">Fila de espera vazia.</div>}
           <div className="patio-tv-grid queue">
             {filteredFila.map((item, index) => (

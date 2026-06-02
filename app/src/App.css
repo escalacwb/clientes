@@ -84,6 +84,97 @@
   line-height: 1;
 }
 
+.patio-queue-panel .panel-header {
+  border-bottom: 1px solid #e4ebe6;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+}
+
+.patio-queue-panel .panel-header > strong {
+  align-self: flex-start;
+  border-radius: 999px;
+  background: #eaf4ef;
+  color: #12312f;
+  font-size: 13px;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.patio-queue-panel .filters-grid {
+  margin: 0 0 18px;
+}
+
+.patio-queue-panel .patio-section-title {
+  margin: 20px 0 12px;
+  color: #12312f;
+  font-size: 18px;
+  line-height: 1.25;
+  text-align: left;
+  text-transform: none;
+}
+
+.patio-queue-panel .patio-tv-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.patio-queue-panel .patio-tv-card {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 0;
+  border: 1px solid #dfe7e2;
+  border-left: 4px solid #12312f;
+  border-radius: 8px;
+  background: #fbfdfb;
+  color: #17211f;
+  padding: 14px;
+}
+
+.patio-queue-panel .patio-tv-card h3 {
+  color: #12312f;
+  font-size: 15px;
+  margin: 0;
+}
+
+.patio-queue-panel .patio-tv-card p {
+  color: #263430;
+  line-height: 1.35;
+}
+
+.patio-queue-panel .patio-plate {
+  margin: 0 0 4px;
+  border: 1px solid #d7e5dc;
+  background: #ffffff;
+  color: #12312f;
+  font-size: 24px;
+  padding: 9px;
+}
+
+.patio-queue-panel .patio-service-list {
+  border-top: 1px solid #e3ebe6;
+  color: #33413d;
+  font-style: normal;
+  margin-top: 4px;
+  padding-top: 10px;
+}
+
+.patio-queue-panel .queue-number {
+  color: #12312f;
+  font-size: 18px;
+  margin-right: 6px;
+}
+
+.patio-queue-panel details.panel {
+  margin-top: 16px;
+}
+
+.patio-queue-panel summary {
+  color: #12312f;
+  cursor: pointer;
+  font-weight: 800;
+}
+
 .patio-box-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -1638,7 +1729,7 @@ h3 {
 
 .metric strong {
   font-size: 30px;
-  line-height: 1;
+  line-height: 1.12;
 }
 
 .metric.green svg { color: #0f766e; }
