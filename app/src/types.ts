@@ -391,6 +391,7 @@ export type PatioAtendimentoItemResumo = {
   status?: string
   quilometragem?: number
   solicitadoEm?: string
+  atualizadoEm?: string
   tipoAtendimento?: string
 }
 

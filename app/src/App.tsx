@@ -171,6 +171,7 @@ import {
   listPatioBoxesPainel,
   listPatioBoxesLivres,
   listPatioCatalogoServicos,
+  listPatioConcluidoAtendimentoItens,
   listPatioConcluidos,
   listPatioContatosExportacao,
   listPatioFeedbackPendente,
@@ -1130,7 +1131,7 @@ function App() {
           startDate: patioConcluidosStartDate,
           endDate: patioConcluidosEndDate,
         })
-        const itens = await listPatioVeiculoAtendimentoItens(result.items.map((item) => item.patioExecucaoId))
+        const itens = await listPatioConcluidoAtendimentoItens(result.items.map((item) => item.patioExecucaoId))
         if (!isMounted) return
         setPatioConcluidos(result.items)
         setPatioConcluidosItens(itens)
@@ -9054,6 +9055,19 @@ function patioQuantidadeLabel(value?: number | null) {
   return numberLabel(value)
 }
 
+function dateTimeLabel(date?: string) {
+  if (!date) return 'Sem registro'
+  const parsed = new Date(date)
+  if (Number.isNaN(parsed.getTime())) return 'Sem registro'
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(parsed)
+}
+
 function waMeUrl(phone?: string, message?: string) {
   if (!phone) return ''
   let digits = phone.replace(/\D/g, '')
@@ -11263,6 +11277,8 @@ function PatioConcluidos({
                         <th>Area</th>
                         <th>Servico</th>
                         <th>Qtd.</th>
+                        <th>Cadastrado</th>
+                        <th>Finalizado</th>
                         <th>Tipo</th>
                         <th>Status</th>
                       </tr>
@@ -11273,6 +11289,8 @@ function PatioConcluidos({
                           <td>{areaLabel(servico.area)}</td>
                           <td>{servico.servicoNome || servico.descricao || 'Servico'}</td>
                           <td>{patioQuantidadeLabel(servico.quantidade)}</td>
+                          <td>{dateTimeLabel(servico.solicitadoEm)}</td>
+                          <td>{dateTimeLabel(servico.atualizadoEm || item.fimExecucao)}</td>
                           <td>
                             <select
                               value={servico.tipoAtendimento || 'Normal'}

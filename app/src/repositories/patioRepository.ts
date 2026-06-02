@@ -58,6 +58,7 @@ type AtendimentoItemRow = {
   status: string | null
   quilometragem: number | null
   solicitado_em: string | null
+  atualizado_em: string | null
   tipo_atendimento: string | null
 }
 
@@ -399,6 +400,21 @@ export async function listPatioVeiculoAtendimentoItens(patioExecucaoIds: number[
   const { data, error } = await supabase
     .from('patio_atendimento_itens')
     .select('id,patio_execucao_id,cliente_id,veiculo_id,area,servico_nome,descricao,quantidade,status,quilometragem,solicitado_em,tipo_atendimento')
+    .in('patio_execucao_id', patioExecucaoIds)
+    .order('area', { ascending: true })
+    .order('servico_nome', { ascending: true })
+
+  if (error) throw error
+  return (data as AtendimentoItemRow[] | null ?? []).map(mapAtendimentoItem)
+}
+
+export async function listPatioConcluidoAtendimentoItens(patioExecucaoIds: number[]): Promise<PatioAtendimentoItemResumo[]> {
+  const supabase = await getSupabase()
+  if (!supabase || patioExecucaoIds.length === 0) return []
+
+  const { data, error } = await supabase
+    .from('patio_atendimento_itens')
+    .select('id,patio_execucao_id,cliente_id,veiculo_id,area,servico_nome,descricao,quantidade,status,quilometragem,solicitado_em,atualizado_em,tipo_atendimento')
     .in('patio_execucao_id', patioExecucaoIds)
     .order('area', { ascending: true })
     .order('servico_nome', { ascending: true })
@@ -1170,6 +1186,7 @@ function mapAtendimentoItem(row: AtendimentoItemRow): PatioAtendimentoItemResumo
     status: row.status ?? undefined,
     quilometragem: row.quilometragem ?? undefined,
     solicitadoEm: row.solicitado_em ?? undefined,
+    atualizadoEm: row.atualizado_em ?? undefined,
     tipoAtendimento: row.tipo_atendimento ?? undefined,
   }
 }
