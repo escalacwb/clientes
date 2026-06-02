@@ -1,0 +1,10 @@
+# Keep EAS uploads minimal and deterministic
+node_modules/
+.npm-cache/
+.expo/
+android/.gradle/
+android/build/
+android/app/build/
+*.log
+desktop.ini
+**/desktop.ini

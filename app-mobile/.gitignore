@@ -1,0 +1,8 @@
+desktop.ini
+**/desktop.ini
+.npm-cache/
+node_modules/
+.env
+.env.*
+!.env.example
+.expo/

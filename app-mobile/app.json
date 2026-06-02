@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Controle Patio",
+    "slug": "controle-patio-mobile",
+    "version": "0.1.0",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d66f27a7-9703-4f47-b178-85f1e11c5dd7"
+      }
+    },
+    "owner": "tunecraftbrasil"
+  }
+}
