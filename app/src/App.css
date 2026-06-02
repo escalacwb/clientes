@@ -105,6 +105,25 @@
   border-left: 4px solid #12312f;
 }
 
+.patio-box-card .status-list {
+  grid-template-columns: 1fr;
+}
+
+.patio-box-card .status-row {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  align-items: start;
+}
+
+.patio-box-card .status-row > span {
+  white-space: nowrap;
+}
+
+.patio-box-card .status-row > strong {
+  text-align: right;
+  line-height: 1.35;
+}
+
 .patio-box-services {
   margin-top: 12px;
   padding: 12px;
@@ -174,9 +193,10 @@
   border: 1px solid #dce7e1;
   border-radius: 8px;
   background: #f8fbf8;
-  padding: 10px;
+  padding: 10px 12px;
   display: grid;
   gap: 3px;
+  min-width: 0;
 }
 
 .patio-entry-flow span {
@@ -192,6 +212,25 @@
   flex-wrap: wrap;
   gap: 8px;
   margin: 12px 0;
+}
+
+.patio-service-suggestions .button {
+  justify-content: flex-start;
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+
+.patio-selected-services .status-row {
+  display: grid;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.patio-selected-services .status-row span {
+  color: #263430;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .patio-diagnostic-preview {
@@ -211,6 +250,12 @@
   flex-wrap: wrap;
   gap: 8px;
   margin: 12px 0 16px;
+}
+
+.patio-history-results .button {
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
 }
 
 .patio-term-workspace {
@@ -557,22 +602,31 @@
   gap: 24px;
   align-items: flex-start;
   margin-bottom: 24px;
+  min-width: 0;
 }
 
 .topbar-title {
   display: flex;
   align-items: flex-start;
+  flex: 1 1 auto;
+  min-width: 0;
   gap: 14px;
 }
 
+.topbar-title > div {
+  min-width: 0;
+}
+
 .topbar-title .brand-logo {
-  width: 150px;
+  flex: 0 0 auto;
+  width: 132px;
   max-height: 78px;
   object-fit: contain;
   object-position: left center;
 }
 
 .topbar-actions {
+  flex: 0 1 min(620px, 50vw);
   width: min(620px, 100%);
   display: grid;
   gap: 8px;
@@ -595,9 +649,11 @@ p {
 }
 
 h1 {
-  font-size: 30px;
+  font-size: 28px;
   line-height: 1.1;
   letter-spacing: 0;
+  max-width: 760px;
+  overflow-wrap: normal;
 }
 
 h2 {
@@ -1478,12 +1534,54 @@ h3 {
   display: grid;
   gap: 6px;
   color: #52625d;
+  font-size: 12px;
   font-weight: 800;
+}
+
+.filters-grid input,
+.filters-grid select,
+.filters-grid textarea,
+.wide-field input,
+.wide-field select,
+.wide-field textarea,
+.panel input,
+.panel select,
+.panel textarea {
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid #cfd8d3;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1b1f23;
+  font: inherit;
+  line-height: 1.25;
+  padding: 8px 10px;
+}
+
+.filters-grid textarea,
+.wide-field textarea,
+.panel textarea {
+  min-height: 78px;
+  resize: vertical;
+}
+
+.filters-grid input:focus,
+.filters-grid select:focus,
+.filters-grid textarea:focus,
+.wide-field input:focus,
+.wide-field select:focus,
+.wide-field textarea:focus,
+.panel input:focus,
+.panel select:focus,
+.panel textarea:focus {
+  border-color: #0f4f49;
+  box-shadow: 0 0 0 3px rgba(15, 79, 73, 0.1);
+  outline: none;
 }
 
 .table-list {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .metric,
@@ -1568,7 +1666,7 @@ h3 {
 }
 
 .panel {
-  padding: 18px;
+  padding: 16px 18px;
   min-width: 0;
 }
 
@@ -1577,9 +1675,15 @@ h3 {
 }
 
 .panel-header {
+  display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 16px;
+}
+
+.panel-header > div {
+  min-width: 0;
 }
 
 .panel-header p {
@@ -1612,7 +1716,7 @@ h3 {
 
 .table-row {
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px 12px;
   background: #f8faf7;
   color: #26312f;
 }
@@ -1701,10 +1805,11 @@ h3 {
 .compact-table th,
 .compact-table td {
   border-bottom: 1px solid #e6ece8;
-  font-size: 13px;
-  padding: 8px 10px;
+  font-size: 12px;
+  padding: 7px 9px;
   text-align: left;
   vertical-align: top;
+  overflow-wrap: anywhere;
 }
 
 .compact-table th {
@@ -2272,6 +2377,8 @@ h3 {
 
 .row-actions {
   gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .row-actions button,
@@ -2290,6 +2397,7 @@ h3 {
   cursor: pointer;
   font: inherit;
   padding: 0 10px;
+  white-space: nowrap;
 }
 
 .task-action-stack,
@@ -2603,7 +2711,11 @@ h3 {
 .budget-related-list .button {
   justify-content: space-between;
   width: 100%;
+  min-height: auto;
+  white-space: normal;
   text-align: left;
+  line-height: 1.25;
+  padding: 7px 10px;
 }
 
 .budget-summary {
@@ -3947,6 +4059,22 @@ h3 {
   padding: 10px;
 }
 
+.patio-box-action-bar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.patio-box-action-bar span {
+  grid-column: 1 / -1;
+}
+
+.patio-box-action-bar .button {
+  width: 100%;
+  white-space: normal;
+  text-align: center;
+}
+
 .patio-box-action-bar span,
 .patio-action-guide {
   min-width: 0;
@@ -4533,7 +4661,8 @@ h3 {
 
 .status-list {
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px 14px;
 }
 
 .quality-list {
@@ -4541,10 +4670,22 @@ h3 {
 }
 
 .status-row {
+  min-width: 0;
   justify-content: space-between;
   gap: 12px;
   border-bottom: 1px solid #eef1ee;
-  padding-bottom: 10px;
+  padding: 7px 0;
+}
+
+.status-row > span,
+.status-row > strong,
+.status-row > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.status-row > strong {
+  text-align: right;
 }
 
 .status-row.danger-row {
@@ -5778,6 +5919,21 @@ h3 {
 @media (max-width: 1100px) {
   .app-shell {
     grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .topbar-actions {
+    flex: none;
+    width: 100%;
+    justify-items: stretch;
+  }
+
+  .topbar-title {
+    width: 100%;
   }
 
   .sidebar {
