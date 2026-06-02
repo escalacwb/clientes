@@ -8,16 +8,35 @@ import { BrandMark } from "../components/BrandMark";
 import { EyeClosedIcon, EyeOpenIcon } from "../components/icons/AppIcons";
 import { theme } from "../theme";
 
+const LOGIN_USERS = [
+  {
+    name: "Wagner Fonseca",
+    role: "Admin",
+    email: "wagner.fonseca@capitaltruck.local",
+  },
+  {
+    name: "William Brandenburg",
+    role: "Vendedor",
+    email: "william.brandenburg@capitaltruck.local",
+  },
+  {
+    name: "Mateus Silva",
+    role: "Gerente",
+    email: "mateus.silva@capitaltruck.local",
+  },
+];
+
 export function LoginScreen() {
-  const [username, setUsername] = useState("");
+  const [selectedUser, setSelectedUser] = useState(LOGIN_USERS[0]);
+  const [showUsers, setShowUsers] = useState(false);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signIn } = useAuth();
 
   async function handleLogin() {
-    if (!username || !password) {
-      Alert.alert("Preencha usuario e senha");
+    if (!selectedUser?.email || !password) {
+      Alert.alert("Selecione o usuario e preencha a senha");
       return;
     }
 
@@ -31,7 +50,7 @@ export function LoginScreen() {
 
     setLoading(true);
     try {
-      const response = await api.post("/auth/login", { username, password });
+      const response = await api.post("/auth/login", { username: selectedUser.email, password });
       await signIn(
         response.data.access_token,
         response.data.user_role,
@@ -105,13 +124,63 @@ export function LoginScreen() {
         >
           Entre com seu usuario e senha para continuar
         </Text>
-        <Field
-          label="Usuario"
-          placeholder="Digite seu usuario"
-          value={username}
-          onChangeText={setUsername}
-          autoCapitalize="none"
-        />
+        <View style={{ marginBottom: theme.spacing.sm }}>
+          <Text style={{ fontWeight: "600", marginBottom: 6 }}>Usuario</Text>
+          <TouchableOpacity
+            onPress={() => setShowUsers((prev) => !prev)}
+            activeOpacity={0.85}
+            style={{
+              borderWidth: 1,
+              borderColor: theme.colors.border,
+              borderRadius: theme.radius.sm,
+              minHeight: 48,
+              paddingHorizontal: theme.spacing.sm,
+              paddingVertical: theme.spacing.sm,
+              backgroundColor: theme.colors.card,
+              justifyContent: "center",
+            }}
+          >
+            <Text style={{ fontWeight: "700", color: theme.colors.text }}>
+              {selectedUser.name}
+            </Text>
+            <Text style={{ color: theme.colors.muted, marginTop: 2 }}>
+              {selectedUser.role}
+            </Text>
+          </TouchableOpacity>
+          {showUsers ? (
+            <View
+              style={{
+                borderWidth: 1,
+                borderColor: theme.colors.border,
+                borderRadius: theme.radius.sm,
+                marginTop: 6,
+                overflow: "hidden",
+                backgroundColor: theme.colors.card,
+              }}
+            >
+              {LOGIN_USERS.map((user) => (
+                <TouchableOpacity
+                  key={user.email}
+                  onPress={() => {
+                    setSelectedUser(user);
+                    setShowUsers(false);
+                  }}
+                  style={{
+                    paddingHorizontal: theme.spacing.sm,
+                    paddingVertical: 10,
+                    borderBottomWidth: user.email === LOGIN_USERS[LOGIN_USERS.length - 1].email ? 0 : 1,
+                    borderBottomColor: theme.colors.border,
+                    backgroundColor:
+                      selectedUser.email === user.email ? theme.colors.primarySoft : theme.colors.card,
+                  }}
+                >
+                  <Text style={{ fontWeight: "700", color: theme.colors.text }}>{user.name}</Text>
+                  <Text style={{ color: theme.colors.muted, marginTop: 2 }}>{user.role}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
+        </View>
         <Field
           label="Senha"
           placeholder="Digite sua senha"
