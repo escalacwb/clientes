@@ -9297,15 +9297,30 @@ function PatioEntrada({
         <form className="panel subtle" onSubmit={submitEntrada}>
           <div className="panel-header">
             <div>
-              <h3>Registrar entrada: {selected.placa ?? 'Sem placa'}</h3>
+              <h3>Entrada: {selected.placa ?? 'Sem placa'}</h3>
               <p>{selected.clienteNome ?? 'Cliente sem vinculo'} - {selected.veiculoDescricao ?? 'Veiculo sem descricao'}</p>
             </div>
             <div className="inline-actions">
               {onEditVehicle && <button className="button" type="button" onClick={() => onEditVehicle(selected)}>Alterar Veiculo</button>}
               {onEditVehicle && <button className="button" type="button" onClick={() => onEditVehicle(selected)}>Alterar Empresa/Responsavel</button>}
+              <button className="button" type="button" onClick={() => setSelected(undefined)}>Trocar veiculo</button>
             </div>
           </div>
           {formError && <div className="inline-error">{formError}</div>}
+          <div className="patio-entry-flow">
+            <div>
+              <strong>1. Conferir cadastro</strong>
+              <span>KM, motorista e WhatsApp atualizados.</span>
+            </div>
+            <div>
+              <strong>2. Diagnostico rapido</strong>
+              <span>Use quando houver alinhamento, puxando, vibracao ou observacao.</span>
+            </div>
+            <div>
+              <strong>3. Servicos para fila</strong>
+              <span>Adicione os servicos antes de enviar para alocacao.</span>
+            </div>
+          </div>
           <div className="filters-grid">
             <label>
               KM atual
@@ -9322,7 +9337,7 @@ function PatioEntrada({
           </div>
           <div className="patio-entry-steps">
             <article className="panel subtle">
-              <h3>2. Diagnostico rapido</h3>
+              <h3>Diagnostico rapido</h3>
               <div className="filters-grid">
                 <label>
                   Numero de eixos
@@ -9375,7 +9390,7 @@ function PatioEntrada({
             <article className="panel subtle">
               <div className="panel-header compact-header">
                 <div>
-                  <h3>3. Servicos da entrada</h3>
+                  <h3>Servicos para a fila</h3>
                   <p>Escolha a area, informe quantidade e clique em adicionar. Os atalhos abaixo ja adicionam direto.</p>
                 </div>
                 <strong>{servicos.length} adicionados</strong>
@@ -9447,7 +9462,7 @@ function PatioEntrada({
           </div>
         </form>
       )}
-      <div className="table-list">
+      {!selected && <div className="table-list">
         {results.map((item) => (
           <article className="panel subtle" key={item.patioVeiculoId}>
             <div className="panel-header">
@@ -9469,7 +9484,7 @@ function PatioEntrada({
             </div>
           </article>
         ))}
-      </div>
+      </div>}
     </section>
   )
 }
