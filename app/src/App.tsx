@@ -9298,9 +9298,6 @@ function PatioEntrada({
             <div className="inline-actions">
               {onEditVehicle && <button className="button" type="button" onClick={() => onEditVehicle(selected)}>Alterar Veiculo</button>}
               {onEditVehicle && <button className="button" type="button" onClick={() => onEditVehicle(selected)}>Alterar Empresa/Responsavel</button>}
-              <button className="button primary" type="submit" disabled={isSaving || servicos.length === 0}>
-                {isSaving ? 'Registrando...' : servicos.length === 0 ? 'Adicione servicos para registrar' : 'Registrar e enviar para fila'}
-              </button>
             </div>
           </div>
           {formError && <div className="inline-error">{formError}</div>}
@@ -9434,6 +9431,15 @@ function PatioEntrada({
               </div>
             </article>
           </div>
+          <div className="patio-entry-submit-bar">
+            <span>
+              <strong>{servicos.length} servico{servicos.length === 1 ? '' : 's'} para enviar a fila</strong>
+              <small>{selected.placa ?? 'Sem placa'} - {selected.clienteNome ?? 'Cliente sem vinculo'} - KM {quilometragem || 'nao informado'}</small>
+            </span>
+            <button className="button primary" type="submit" disabled={isSaving || servicos.length === 0}>
+              {isSaving ? 'Registrando...' : servicos.length === 0 ? 'Adicione servicos para registrar' : 'Enviar para fila'}
+            </button>
+          </div>
         </form>
       )}
       <div className="table-list">
@@ -9445,7 +9451,7 @@ function PatioEntrada({
                 <p>{item.veiculoDescricao ?? 'Veiculo sem descricao'} · ultimo atendimento {dateLabel(item.ultimoAtendimentoEm)}</p>
               </div>
               <div className="inline-actions">
-                {allowRegister && <button className="button primary" type="button" onClick={() => setSelected(item)}>Registrar entrada</button>}
+                {allowRegister && <button className="button primary" type="button" onClick={() => setSelected(item)}>Iniciar entrada</button>}
                 {allowRegister && onEditVehicle && <button className="button" type="button" onClick={() => onEditVehicle(item)}>Alterar dados</button>}
                 {item.clienteId && <button className="button" type="button" onClick={() => onOpenClient(item.clienteId!)}>Abrir ficha CRM</button>}
               </div>

@@ -375,7 +375,6 @@ export async function listImportacaoQualidadeIssues(limit = 40): Promise<Importa
       .select('id,nome,cidade,uf')
       .is('excluido_em', null)
       .is('vendedor_id', null)
-      .order('total_comprado', { ascending: false })
       .limit(perGroup),
     supabase
       .from('clientes')
@@ -384,12 +383,7 @@ export async function listImportacaoQualidadeIssues(limit = 40): Promise<Importa
       .eq('origem_base', 'desconhecida')
       .order('total_comprado', { ascending: false })
       .limit(perGroup),
-    supabase
-      .from('servicos_itens')
-      .select('id,cliente_id,servico_nome,data_servico,clientes(nome)')
-      .or('placa.is.null,placa.eq.')
-      .order('data_servico', { ascending: false })
-      .limit(perGroup),
+    Promise.resolve({ data: [], error: null }),
     supabase
       .from('importacao_conflitos')
       .select('id,tipo_conflito,dados_recebidos')

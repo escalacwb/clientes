@@ -496,6 +496,14 @@ export async function searchPatioVeiculos(queryText: string): Promise<PatioVeicu
   const supabase = await getSupabase()
   if (!supabase || queryText.trim().length < 2) return []
 
+  const { data: rpcData, error: rpcError } = await supabase
+    .rpc('buscar_patio_veiculos', {
+      p_query: queryText.trim(),
+      p_limit: 30,
+    })
+
+  if (!rpcError) return (rpcData as VeiculoBuscaRow[] | null ?? []).map(mapVeiculoBusca)
+
   const term = `%${queryText.trim()}%`
   const { data, error } = await supabase
     .from('vw_patio_veiculos_busca')
@@ -736,6 +744,16 @@ export async function listPatioRevisaoResultados(input: {
   const supabase = await getSupabase()
   if (!supabase) return []
 
+  const { data: rpcData, error: rpcError } = await supabase
+    .rpc('listar_patio_revisao_resultados', {
+      p_status: input.status ?? 'todos',
+      p_limit: input.limit ?? 300,
+    })
+
+  if (!rpcError) {
+    return (rpcData as PatioRevisaoResultadoRow[] | null ?? []).map(mapPatioRevisaoResultado)
+  }
+
   let query = supabase
     .from('vw_patio_revisao_resultados')
     .select('*')
@@ -746,7 +764,11 @@ export async function listPatioRevisaoResultados(input: {
 
   const { data, error } = await query
   if (error) throw error
-  return (data as PatioRevisaoResultadoRow[] | null ?? []).map((row) => ({
+  return (data as PatioRevisaoResultadoRow[] | null ?? []).map(mapPatioRevisaoResultado)
+}
+
+function mapPatioRevisaoResultado(row: PatioRevisaoResultadoRow): PatioRevisaoResultado {
+  return {
     patioVeiculoId: Number(row.patio_veiculo_id),
     clienteId: row.cliente_id,
     clienteNome: row.cliente_nome ?? undefined,
@@ -762,7 +784,7 @@ export async function listPatioRevisaoResultados(input: {
     retornoKm: row.retorno_km ?? undefined,
     resultado: (row.resultado as PatioRevisaoResultado['resultado']) ?? 'aguardando',
     diasDesdeAcao: Number(row.dias_desde_acao ?? 0),
-  }))
+  }
 }
 
 export async function registerPatioEntrada(input: PatioEntradaInput): Promise<number> {

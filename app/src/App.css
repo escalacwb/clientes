@@ -3893,6 +3893,26 @@ h3 {
   padding: 8px;
 }
 
+.patio-entry-submit-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #dce7e1;
+  border-radius: 8px;
+  background: #f8fbf8;
+  padding: 12px;
+}
+
+.patio-entry-submit-bar span {
+  display: grid;
+  gap: 3px;
+}
+
+.patio-entry-submit-bar small {
+  color: #64736f;
+}
+
 .management-loss-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
