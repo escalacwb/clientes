@@ -203,6 +203,19 @@ create table public.catalogo_regras_desconto (
   atualizado_em timestamptz not null default now()
 );
 
+create table public.catalogo_midias (
+  id uuid primary key default gen_random_uuid(),
+  catalogo_item_id uuid not null references public.catalogo_itens(id) on delete cascade,
+  titulo text,
+  imagem_url text not null,
+  link_url text,
+  ativo boolean not null default true,
+  prioridade integer not null default 1,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now(),
+  unique (catalogo_item_id)
+);
+
 create table public.orcamentos (
   id uuid primary key default gen_random_uuid(),
   cliente_id uuid not null references public.clientes(id),
@@ -652,6 +665,7 @@ where status = 'aberta' and origem is not null;
 create index orcamento_versoes_orcamento_idx on public.orcamento_versoes(orcamento_id, numero desc);
 create index orcamento_aprovacoes_orcamento_idx on public.orcamento_aprovacoes(orcamento_id, criado_em desc);
 create index orcamento_condicoes_orcamento_idx on public.orcamento_condicoes(orcamento_id, ordem);
+create index catalogo_midias_item_idx on public.catalogo_midias(catalogo_item_id, ativo, prioridade);
 create index metas_vendedores_mes_idx on public.metas_vendedores(mes_referencia, vendedor_id);
 
 create or replace function public.set_atualizado_em()
@@ -670,6 +684,10 @@ for each row execute function public.set_atualizado_em();
 
 create trigger orcamentos_set_atualizado_em
 before update on public.orcamentos
+for each row execute function public.set_atualizado_em();
+
+create trigger catalogo_midias_set_atualizado_em
+before update on public.catalogo_midias
 for each row execute function public.set_atualizado_em();
 
 create trigger metas_vendedores_set_atualizado_em
@@ -1975,6 +1993,7 @@ alter table public.produto_aliases enable row level security;
 alter table public.listas_preco enable row level security;
 alter table public.catalogo_itens enable row level security;
 alter table public.catalogo_regras_desconto enable row level security;
+alter table public.catalogo_midias enable row level security;
 alter table public.catalogo_precos enable row level security;
 alter table public.produto_precos enable row level security;
 alter table public.campanhas enable row level security;
@@ -2322,6 +2341,16 @@ create policy catalogo_regras_desconto_read_authenticated
 on public.catalogo_regras_desconto for select
 using (auth.role() = 'authenticated');
 
+create policy catalogo_midias_read_authenticated
+on public.catalogo_midias for select
+to authenticated
+using (true);
+
+create policy catalogo_midias_read_anon
+on public.catalogo_midias for select
+to anon
+using (ativo = true);
+
 create policy produto_precos_read_authenticated
 on public.produto_precos for select
 using (auth.role() = 'authenticated');
@@ -2355,6 +2384,36 @@ create policy admin_manage_catalogo_regras_desconto
 on public.catalogo_regras_desconto for all
 using (public.current_user_is_admin())
 with check (public.current_user_is_admin());
+
+create policy admin_manage_catalogo_midias
+on public.catalogo_midias for all
+using (public.current_user_is_admin())
+with check (public.current_user_is_admin());
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'catalogo-fotos',
+  'catalogo-fotos',
+  true,
+  5242880,
+  array['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+)
+on conflict (id) do update
+set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+create policy catalogo_fotos_public_read
+on storage.objects for select
+to anon, authenticated
+using (bucket_id = 'catalogo-fotos');
+
+create policy admin_manage_catalogo_fotos
+on storage.objects for all
+to authenticated
+using (bucket_id = 'catalogo-fotos' and public.current_user_is_admin())
+with check (bucket_id = 'catalogo-fotos' and public.current_user_is_admin());
 
 create policy admin_manage_produto_precos
 on public.produto_precos for all

@@ -1,5 +1,5 @@
 import { getSupabase } from '../lib/supabase'
-import type { CatalogoItem, CatalogoRegraDesconto } from '../types'
+import type { CatalogoItem, CatalogoItemMidia, CatalogoRegraDesconto } from '../types'
 
 type CatalogoRow = {
   id: string
@@ -11,6 +11,17 @@ type CatalogoRow = {
   subgrupo: string | null
   marca: string | null
   ativo: boolean
+  catalogo_midias?: CatalogoMidiaRow[] | CatalogoMidiaRow | null
+}
+
+type CatalogoMidiaRow = {
+  id: string
+  catalogo_item_id: string
+  titulo: string | null
+  imagem_url: string
+  link_url: string | null
+  ativo: boolean
+  prioridade: number
 }
 
 type PrecoRow = {
@@ -96,7 +107,7 @@ export async function listCatalogoItens(): Promise<CatalogoItem[]> {
   const [{ data: itens, error: itensError }, { data: precos, error: precosError }] = await Promise.all([
     supabase
       .from('catalogo_itens')
-      .select('id,tipo,codigo,descricao,unidade,grupo,subgrupo,marca,ativo')
+      .select('id,tipo,codigo,descricao,unidade,grupo,subgrupo,marca,ativo,catalogo_midias(id,catalogo_item_id,titulo,imagem_url,link_url,ativo,prioridade)')
       .eq('ativo', true)
       .order('tipo', { ascending: true })
       .order('descricao', { ascending: true }),
@@ -174,7 +185,7 @@ export async function listCatalogoPage(input: {
   const to = from + input.pageSize - 1
   let query = supabase
     .from('catalogo_itens')
-    .select('id,tipo,codigo,descricao,unidade,grupo,subgrupo,marca,ativo', { count: 'exact' })
+    .select('id,tipo,codigo,descricao,unidade,grupo,subgrupo,marca,ativo,catalogo_midias(id,catalogo_item_id,titulo,imagem_url,link_url,ativo,prioridade)', { count: 'exact' })
 
   if (input.tipo && input.tipo !== 'todos') query = query.eq('tipo', input.tipo)
   if (!input.ativo || input.ativo === 'ativos') query = query.eq('ativo', true)
@@ -243,6 +254,88 @@ export async function listCatalogoPrecos(catalogoItemId: string): Promise<Catalo
       ? preco.importacao_arquivos[0]?.arquivo_nome ?? undefined
       : preco.importacao_arquivos?.arquivo_nome ?? undefined,
   }))
+}
+
+export async function upsertCatalogoMidia(input: {
+  catalogoItemId: string
+  titulo?: string
+  imagemUrl: string
+  linkUrl?: string
+  ativo?: boolean
+}): Promise<CatalogoItemMidia> {
+  const supabase = await getSupabase()
+  if (!supabase) {
+    return {
+      catalogoItemId: input.catalogoItemId,
+      titulo: input.titulo,
+      imagemUrl: input.imagemUrl,
+      linkUrl: input.linkUrl,
+      ativo: input.ativo ?? true,
+      prioridade: 1,
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('catalogo_midias')
+    .upsert({
+      catalogo_item_id: input.catalogoItemId,
+      titulo: input.titulo?.trim() || null,
+      imagem_url: input.imagemUrl.trim(),
+      link_url: input.linkUrl?.trim() || null,
+      ativo: input.ativo ?? true,
+      prioridade: 1,
+    }, { onConflict: 'catalogo_item_id' })
+    .select('id,catalogo_item_id,titulo,imagem_url,link_url,ativo,prioridade')
+    .single()
+
+  if (error) throw error
+  return mapCatalogoMidia(data as CatalogoMidiaRow)
+}
+
+export async function uploadCatalogoImagem(input: {
+  catalogoItemId: string
+  codigo: string
+  file: File
+}): Promise<string> {
+  const supabase = await getSupabase()
+  if (!supabase) throw new Error('Supabase nao configurado para upload de imagens.')
+
+  const extension = input.file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+  const safeCode = input.codigo
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase() || input.catalogoItemId
+  const path = `${input.catalogoItemId}/${safeCode}-${Date.now()}.${extension}`
+
+  const { error } = await supabase.storage
+    .from('catalogo-fotos')
+    .upload(path, input.file, {
+      cacheControl: '31536000',
+      upsert: true,
+      contentType: input.file.type || undefined,
+    })
+
+  if (error) throw error
+
+  const { data } = supabase.storage
+    .from('catalogo-fotos')
+    .getPublicUrl(path)
+
+  return data.publicUrl
+}
+
+export async function deleteCatalogoMidia(catalogoItemId: string): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase) return
+
+  const { error } = await supabase
+    .from('catalogo_midias')
+    .delete()
+    .eq('catalogo_item_id', catalogoItemId)
+
+  if (error) throw error
 }
 
 export async function listCatalogoPriceChanges(limit = 20): Promise<CatalogoPriceChange[]> {
@@ -350,5 +443,25 @@ function mapCatalogoItem(item: CatalogoRow, preco?: PrecoRow): CatalogoItem {
     preco: preco?.valor ?? 0,
     descontoMaximo: preco?.desconto_maximo ?? undefined,
     estoque: preco?.estoque ?? undefined,
+    midia: firstActiveCatalogoMidia(item.catalogo_midias),
+  }
+}
+
+function firstActiveCatalogoMidia(value: CatalogoRow['catalogo_midias']): CatalogoItemMidia | undefined {
+  const rows = (Array.isArray(value) ? value : value ? [value] : [])
+    .filter((item) => item.ativo && item.imagem_url)
+    .sort((a, b) => Number(a.prioridade ?? 1) - Number(b.prioridade ?? 1))
+  return rows[0] ? mapCatalogoMidia(rows[0]) : undefined
+}
+
+function mapCatalogoMidia(row: CatalogoMidiaRow): CatalogoItemMidia {
+  return {
+    id: row.id,
+    catalogoItemId: row.catalogo_item_id,
+    titulo: row.titulo ?? undefined,
+    imagemUrl: row.imagem_url,
+    linkUrl: row.link_url ?? undefined,
+    ativo: row.ativo,
+    prioridade: Number(row.prioridade ?? 1),
   }
 }

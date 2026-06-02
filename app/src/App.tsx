@@ -90,6 +90,9 @@ import {
   listCatalogoPrecos,
   listCatalogoRegrasDesconto,
   listCatalogoSugestoes,
+  uploadCatalogoImagem,
+  upsertCatalogoMidia,
+  deleteCatalogoMidia,
   type CatalogoAtivoFilter,
   type CatalogoPrecoHistorico,
   type CatalogoPriceChange,
@@ -218,6 +221,7 @@ import type {
   CampanhaEnvio,
   CarteiraFiltro,
   CatalogoItem,
+  CatalogoItemMidia,
   CatalogoRegraDesconto,
   Cliente,
   ClienteAlteracao,
@@ -3368,6 +3372,11 @@ function App() {
               setCatalogoPage(1)
             }}
             onPageChange={setCatalogoPage}
+            onMediaChange={(itemId, midia) => {
+              const updateCatalogItem = (item: CatalogoItem) => item.id === itemId ? { ...item, midia } : item
+              setCatalogo((current) => current.map(updateCatalogItem))
+              setCatalogoLista((current) => current.map(updateCatalogItem))
+            }}
             onQuoteItem={(item) => {
               setQuoteSourceView('catalogo')
               setQuoteOriginContext({
@@ -6096,6 +6105,7 @@ function Catalogo({
   onTipoFilterChange,
   onAtivoFilterChange,
   onPageChange,
+  onMediaChange,
   onQuoteItem,
 }: {
   itens: CatalogoItem[]
@@ -6110,6 +6120,7 @@ function Catalogo({
   onTipoFilterChange: (filter: CatalogoTipoFilter) => void
   onAtivoFilterChange: (filter: CatalogoAtivoFilter) => void
   onPageChange: (page: number) => void
+  onMediaChange: (itemId: string, midia?: CatalogoItemMidia) => void
   onQuoteItem: (item: CatalogoItem) => void
 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
@@ -6121,9 +6132,16 @@ function Catalogo({
   const [suggestions, setSuggestions] = useState<CatalogoSugestao[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [historyError, setHistoryError] = useState('')
+  const [mediaDraft, setMediaDraft] = useState({ titulo: '', imagemUrl: '', linkUrl: '' })
+  const [isSavingMedia, setIsSavingMedia] = useState(false)
 
   async function openPriceHistory(item: CatalogoItem) {
     setSelectedItem(item)
+    setMediaDraft({
+      titulo: item.midia?.titulo ?? '',
+      imagemUrl: item.midia?.imagemUrl ?? '',
+      linkUrl: item.midia?.linkUrl ?? '',
+    })
     setIsLoadingHistory(true)
     setHistoryError('')
     try {
@@ -6139,6 +6157,82 @@ function Catalogo({
       setSuggestions([])
     } finally {
       setIsLoadingHistory(false)
+    }
+  }
+
+  async function saveCatalogMedia() {
+    if (!selectedItem) return
+    if (!mediaDraft.imagemUrl.trim()) {
+      setHistoryError('Informe a URL da imagem do pneu antes de salvar.')
+      return
+    }
+
+    setIsSavingMedia(true)
+    setHistoryError('')
+    try {
+      const saved = await upsertCatalogoMidia({
+        catalogoItemId: selectedItem.id,
+        titulo: mediaDraft.titulo,
+        imagemUrl: mediaDraft.imagemUrl,
+        linkUrl: mediaDraft.linkUrl,
+        ativo: true,
+      })
+      setSelectedItem({ ...selectedItem, midia: saved })
+      onMediaChange(selectedItem.id, saved)
+      setMediaDraft({
+        titulo: saved.titulo ?? '',
+        imagemUrl: saved.imagemUrl,
+        linkUrl: saved.linkUrl ?? '',
+      })
+    } catch (exception) {
+      setHistoryError(exception instanceof Error ? exception.message : 'Nao foi possivel salvar a foto do catalogo.')
+    } finally {
+      setIsSavingMedia(false)
+    }
+  }
+
+  async function uploadCatalogMedia(file?: File | null) {
+    if (!selectedItem || !file) return
+    if (!file.type.startsWith('image/')) {
+      setHistoryError('Selecione um arquivo de imagem valido.')
+      return
+    }
+
+    setIsSavingMedia(true)
+    setHistoryError('')
+    try {
+      const publicUrl = await uploadCatalogoImagem({
+        catalogoItemId: selectedItem.id,
+        codigo: selectedItem.codigo,
+        file,
+      })
+      setMediaDraft((current) => ({
+        ...current,
+        imagemUrl: publicUrl,
+        titulo: current.titulo || selectedItem.descricao,
+      }))
+    } catch (exception) {
+      setHistoryError(exception instanceof Error ? exception.message : 'Nao foi possivel enviar a imagem.')
+    } finally {
+      setIsSavingMedia(false)
+    }
+  }
+
+  async function removeCatalogMedia() {
+    if (!selectedItem) return
+    if (!window.confirm('Remover a foto/link deste item do catalogo?')) return
+
+    setIsSavingMedia(true)
+    setHistoryError('')
+    try {
+      await deleteCatalogoMidia(selectedItem.id)
+      setSelectedItem({ ...selectedItem, midia: undefined })
+      onMediaChange(selectedItem.id, undefined)
+      setMediaDraft({ titulo: '', imagemUrl: '', linkUrl: '' })
+    } catch (exception) {
+      setHistoryError(exception instanceof Error ? exception.message : 'Nao foi possivel remover a foto do catalogo.')
+    } finally {
+      setIsSavingMedia(false)
     }
   }
 
@@ -6192,7 +6286,11 @@ function Catalogo({
         {itens.map((item) => (
           <div className="table-row catalog-row" key={item.id}>
             <span><strong>{item.codigo}</strong><small>{item.unidade || 'un.'}</small></span>
-            <span><strong>{item.descricao}</strong><small>{item.subgrupo || item.grupo || 'Sem classificacao'}</small></span>
+            <span>
+              <strong>{item.descricao}</strong>
+              <small>{item.subgrupo || item.grupo || 'Sem classificacao'}</small>
+              {item.midia && <small className="catalog-media-marker">Foto/link cadastrados</small>}
+            </span>
             <span>{item.tipo === 'produto' ? 'Produto' : 'Servico'}</span>
             <span>{item.marca || item.grupo || 'Nao informado'}</span>
             <strong>{money(item.preco)}</strong>
@@ -6225,6 +6323,68 @@ function Catalogo({
             <button className="button" type="button" onClick={() => setSelectedItem(undefined)}>Fechar</button>
           </div>
           {historyError && <div className="alert">{historyError}</div>}
+          <div className="catalog-media-editor">
+            <div>
+              <h3>Foto e link para proposta</h3>
+              <p>Essa imagem aparece no PDF e fica clicavel para abrir o link do pneu.</p>
+            </div>
+            <div className="catalog-media-form">
+              <label>
+                Titulo da foto
+                <input
+                  value={mediaDraft.titulo}
+                  onChange={(event) => setMediaDraft((current) => ({ ...current, titulo: event.target.value }))}
+                  placeholder="Ex.: Michelin X Multi Z"
+                />
+              </label>
+              <label>
+                URL da imagem
+                <input
+                  value={mediaDraft.imagemUrl}
+                  onChange={(event) => setMediaDraft((current) => ({ ...current, imagemUrl: event.target.value }))}
+                  placeholder="https://..."
+                />
+              </label>
+              <label>
+                Link ao clicar
+                <input
+                  value={mediaDraft.linkUrl}
+                  onChange={(event) => setMediaDraft((current) => ({ ...current, linkUrl: event.target.value }))}
+                  placeholder="https://pagina-do-produto"
+                />
+              </label>
+            </div>
+            <div className="catalog-media-actions">
+              {mediaDraft.imagemUrl.trim() && (
+                <a className="catalog-media-preview" href={mediaDraft.linkUrl || mediaDraft.imagemUrl} target="_blank" rel="noreferrer">
+                  <img src={mediaDraft.imagemUrl} alt={mediaDraft.titulo || selectedItem.descricao} />
+                  <span>{mediaDraft.titulo || 'Abrir imagem'}</span>
+                </a>
+              )}
+              <div className="inline-actions">
+                <label className="button">
+                  <FileUp size={16} /> Selecionar imagem
+                  <input
+                    className="visually-hidden-file"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    onChange={(event) => {
+                      void uploadCatalogMedia(event.target.files?.[0])
+                      event.currentTarget.value = ''
+                    }}
+                  />
+                </label>
+                <button className="button primary" type="button" onClick={() => void saveCatalogMedia()} disabled={isSavingMedia}>
+                  {isSavingMedia ? 'Salvando...' : 'Salvar foto/link'}
+                </button>
+                {selectedItem.midia && (
+                  <button className="button danger" type="button" onClick={() => void removeCatalogMedia()} disabled={isSavingMedia}>
+                    Remover
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
           {isLoadingHistory && <div className="empty-state">Carregando historico...</div>}
           {!isLoadingHistory && suggestions.length > 0 && (
             <div className="catalog-suggestions">
@@ -7966,6 +8126,7 @@ function OrcamentoEditor({
             <QuoteProposalPreview
               cliente={cliente}
               itens={validItems}
+              catalogo={catalogo}
               total={total}
               validade={validade}
               condicoes={paymentScenarios}
@@ -8512,6 +8673,7 @@ async function downloadElementPdf(element: HTMLElement | null, filename: string)
       useCORS: true,
       windowWidth: exportElement.scrollWidth,
     })
+    const pdfLinks = collectPdfLinks(exportElement, canvas)
     const pdf = new jsPDF('p', 'mm', 'a4')
     const pageWidth = pdf.internal.pageSize.getWidth()
     const pageHeight = pdf.internal.pageSize.getHeight()
@@ -8529,6 +8691,7 @@ async function downloadElementPdf(element: HTMLElement | null, filename: string)
       const fittedHeight = (canvas.height * fittedWidth) / canvas.width
       const fittedX = margin + (contentWidth - fittedWidth) / 2
       pdf.addImage(canvas.toDataURL('image/png'), 'PNG', fittedX, margin, fittedWidth, fittedHeight)
+      addPdfLinksForFullPage(pdf, pdfLinks, canvas, fittedX, margin, fittedWidth, fittedHeight)
       pdf.save(filename.endsWith('.pdf') ? filename : `${filename}.pdf`)
       return
     }
@@ -8550,6 +8713,7 @@ async function downloadElementPdf(element: HTMLElement | null, filename: string)
       if (pageIndex > 0) pdf.addPage()
       const sliceImageHeight = (sliceHeight * imageWidth) / canvas.width
       pdf.addImage(pageCanvas.toDataURL('image/png'), 'PNG', margin, margin, imageWidth, Math.min(sliceImageHeight, contentHeight))
+      addPdfLinksForSlice(pdf, pdfLinks, canvas, sourceY, sliceHeight, margin, margin, imageWidth, sliceImageHeight)
       sourceY += sliceHeight
       pageIndex += 1
     }
@@ -8558,6 +8722,86 @@ async function downloadElementPdf(element: HTMLElement | null, filename: string)
   } finally {
     exportStage.remove()
   }
+}
+
+type PdfLinkRect = {
+  href: string
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+function collectPdfLinks(exportElement: HTMLElement, canvas: HTMLCanvasElement): PdfLinkRect[] {
+  const anchors = Array.from(exportElement.querySelectorAll<HTMLAnchorElement>('a[href][data-pdf-link="true"]'))
+  if (!anchors.length) return []
+
+  const elementRect = exportElement.getBoundingClientRect()
+  const scaleX = canvas.width / Math.max(exportElement.scrollWidth, 1)
+  const scaleY = canvas.height / Math.max(exportElement.scrollHeight, 1)
+
+  return anchors.flatMap((anchor) => {
+    const href = anchor.href
+    if (!href || href.startsWith('javascript:')) return []
+    const rect = anchor.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return []
+    return [{
+      href,
+      x: (rect.left - elementRect.left) * scaleX,
+      y: (rect.top - elementRect.top) * scaleY,
+      width: rect.width * scaleX,
+      height: rect.height * scaleY,
+    }]
+  })
+}
+
+function addPdfLinksForFullPage(
+  pdf: jsPDF,
+  links: PdfLinkRect[],
+  canvas: HTMLCanvasElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  links.forEach((link) => {
+    pdf.link(
+      x + (link.x / canvas.width) * width,
+      y + (link.y / canvas.height) * height,
+      (link.width / canvas.width) * width,
+      (link.height / canvas.height) * height,
+      { url: link.href },
+    )
+  })
+}
+
+function addPdfLinksForSlice(
+  pdf: jsPDF,
+  links: PdfLinkRect[],
+  canvas: HTMLCanvasElement,
+  sourceY: number,
+  sliceHeight: number,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  const sliceEnd = sourceY + sliceHeight
+  links.forEach((link) => {
+    const linkTop = link.y
+    const linkBottom = link.y + link.height
+    const overlapTop = Math.max(linkTop, sourceY)
+    const overlapBottom = Math.min(linkBottom, sliceEnd)
+    if (overlapBottom <= overlapTop) return
+
+    pdf.link(
+      x + (link.x / canvas.width) * width,
+      y + ((overlapTop - sourceY) / sliceHeight) * height,
+      (link.width / canvas.width) * width,
+      ((overlapBottom - overlapTop) / sliceHeight) * height,
+      { url: link.href },
+    )
+  })
 }
 
 function findPdfSliceHeight(
@@ -8746,6 +8990,7 @@ function quoteAdjustedTotal(total: number, adjustment: number) {
 function QuoteProposalPreview({
   cliente,
   itens,
+  catalogo = [],
   total,
   validade,
   condicoes,
@@ -8754,6 +8999,7 @@ function QuoteProposalPreview({
 }: {
   cliente: Cliente
   itens: OrcamentoItemInput[]
+  catalogo?: CatalogoItem[]
   total: number
   validade?: string
   condicoes?: QuoteConditionScenario[]
@@ -8803,7 +9049,7 @@ function QuoteProposalPreview({
                 <div className="proposal-lines">
                   {mainItems.map((item, index) => (
                     <div key={`${item.descricao}-${index}`}>
-                      <span>{index + 1}. {formatQuantity(item.quantidade)}x {item.descricao}</span>
+                      <ProposalLineContent item={item} index={index} catalogo={catalogo} />
                       <strong>{money(item.valorTotal ?? 0)}</strong>
                     </div>
                   ))}
@@ -8814,7 +9060,7 @@ function QuoteProposalPreview({
                   <strong>Alternativas do bloco</strong>
                   {alternativeItems.map((item, index) => (
                     <div key={`${item.descricao}-alternative-${index}`}>
-                      <span>Opcao {String.fromCharCode(65 + index)}. {formatQuantity(item.quantidade)}x {item.descricao}</span>
+                      <ProposalLineContent item={item} index={index} catalogo={catalogo} alternativeLabel={`Opcao ${String.fromCharCode(65 + index)}`} />
                       <strong>{money(item.valorTotal ?? 0)}</strong>
                     </div>
                   ))}
@@ -8880,6 +9126,56 @@ function QuoteProposalPreview({
       </div>
     </>
   )
+}
+
+function ProposalLineContent({
+  item,
+  index,
+  catalogo,
+  alternativeLabel,
+}: {
+  item: OrcamentoItemInput
+  index: number
+  catalogo: CatalogoItem[]
+  alternativeLabel?: string
+}) {
+  const media = quoteMediaForItem(item, catalogo)
+  const label = alternativeLabel ?? `${index + 1}.`
+  const link = media?.linkUrl || media?.imagemUrl
+
+  return (
+    <span className={media ? 'proposal-line-content with-media' : 'proposal-line-content'}>
+      {media && link && (
+        <a
+          className="proposal-item-media"
+          href={link}
+          target="_blank"
+          rel="noreferrer"
+          data-pdf-link="true"
+          title={media.titulo || item.descricao}
+        >
+          <img
+            src={media.imagemUrl}
+            alt={media.titulo || item.descricao}
+            crossOrigin="anonymous"
+            referrerPolicy="no-referrer"
+          />
+        </a>
+      )}
+      <span>
+        {label} {formatQuantity(item.quantidade)}x {item.descricao}
+        {media && <small>{media.titulo || 'Imagem do produto clicavel'}</small>}
+      </span>
+    </span>
+  )
+}
+
+function quoteMediaForItem(item: OrcamentoItemInput, catalogo: CatalogoItem[]) {
+  if (item.tipo !== 'produto') return undefined
+  const catalogItem = item.catalogoItemId
+    ? catalogo.find((entry) => entry.id === item.catalogoItemId)
+    : catalogo.find((entry) => entry.tipo === item.tipo && entry.codigo === item.codigo)
+  return catalogItem?.midia
 }
 
 function quoteBlockHint(kind: NonNullable<OrcamentoItemInput['apresentacao']>) {
@@ -17085,6 +17381,7 @@ function OrcamentoWorkspace({
               <QuoteProposalPreview
                 cliente={cliente}
                 itens={validItems}
+                catalogo={catalogo}
                 total={orcamento.valorTotal}
                 validade={orcamento.validade}
                 condicoes={scenarios}

@@ -2403,6 +2403,71 @@ h3 {
   margin-top: 16px;
 }
 
+.catalog-media-marker {
+  color: #0c6b53;
+  font-weight: 700;
+}
+
+.catalog-media-editor {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #dfe7e2;
+  border-radius: 8px;
+  background: #f8fbf9;
+  padding: 12px;
+}
+
+.catalog-media-editor h3,
+.catalog-media-editor p {
+  margin: 0;
+}
+
+.catalog-media-editor p {
+  color: #64736f;
+  font-size: 13px;
+}
+
+.catalog-media-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(260px, 1.2fr) minmax(260px, 1.2fr);
+  gap: 10px;
+}
+
+.catalog-media-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.catalog-media-form input {
+  width: 100%;
+}
+
+.catalog-media-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.catalog-media-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #12312f;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.catalog-media-preview img {
+  width: 72px;
+  height: 52px;
+  object-fit: contain;
+  border: 1px solid #dfe7e2;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
 .catalog-price-row {
   grid-template-columns: 130px 120px 120px 120px minmax(220px, 1fr);
 }
@@ -3439,6 +3504,43 @@ h3 {
   min-width: 0;
 }
 
+.proposal-line-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-right: 10px;
+}
+
+.proposal-line-content > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.proposal-line-content small {
+  color: #64736f;
+  font-size: 10px;
+}
+
+.proposal-item-media {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 42px;
+  border: 1px solid #dfe7e2;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.proposal-item-media img {
+  max-width: 52px;
+  max-height: 36px;
+  object-fit: contain;
+  display: block;
+}
+
 .proposal-alternatives {
   border-top: 1px dashed #d9e5dd;
   margin-top: 4px;
@@ -4165,6 +4267,14 @@ h3 {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+
+.visually-hidden-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .compact-header {

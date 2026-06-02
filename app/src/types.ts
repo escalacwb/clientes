@@ -193,6 +193,17 @@ export type CatalogoItem = {
   preco: number
   descontoMaximo?: number
   estoque?: number
+  midia?: CatalogoItemMidia
+}
+
+export type CatalogoItemMidia = {
+  id?: string
+  catalogoItemId: string
+  titulo?: string
+  imagemUrl: string
+  linkUrl?: string
+  ativo: boolean
+  prioridade: number
 }
 
 export type CatalogoRegraDesconto = {
