@@ -3913,6 +3913,45 @@ h3 {
   color: #64736f;
 }
 
+.patio-box-action-bar,
+.patio-action-guide {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #dce7e1;
+  border-radius: 8px;
+  background: #f8fbf8;
+  padding: 10px;
+}
+
+.patio-box-action-bar span,
+.patio-action-guide {
+  min-width: 0;
+}
+
+.patio-box-action-bar span {
+  display: grid;
+  gap: 2px;
+  margin-right: auto;
+}
+
+.patio-box-action-bar small,
+.patio-action-guide span {
+  color: #5f706b;
+  line-height: 1.4;
+}
+
+.patio-action-guide {
+  align-items: flex-start;
+  justify-content: flex-start;
+  margin-bottom: 12px;
+}
+
+.patio-action-guide strong {
+  flex: 0 0 auto;
+}
+
 .management-loss-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

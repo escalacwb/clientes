@@ -9049,6 +9049,11 @@ function numberLabel(value: number) {
   return value.toLocaleString('pt-BR')
 }
 
+function patioQuantidadeLabel(value?: number | null) {
+  if (!value || value <= 0) return 'Nao informada'
+  return numberLabel(value)
+}
+
 function waMeUrl(phone?: string, message?: string) {
   if (!phone) return ''
   let digits = phone.replace(/\D/g, '')
@@ -10860,8 +10865,13 @@ function PatioBoxes({
     }
   }
 
-  const handleRetirar = async (patioExecucaoId: number) => {
-    if (!window.confirm('Retirar este veiculo do box e devolver os servicos para a fila?')) return
+  const boxActionLabel = (item: PatioPainelBox) =>
+    `BOX ${item.boxId} - ${item.placa ?? 'sem placa'} - ${item.clienteNome ?? 'cliente sem vinculo'}`
+
+  const handleRetirar = async (item: PatioPainelBox) => {
+    if (!item.patioExecucaoId) return
+    if (!window.confirm(`Retirar do box?\n\n${boxActionLabel(item)}\n\nOs servicos voltarao para a fila de alocacao.`)) return
+    const patioExecucaoId = item.patioExecucaoId
     setSavingAction(`retirar-${patioExecucaoId}`)
     setError('')
     try {
@@ -10879,8 +10889,10 @@ function PatioBoxes({
     }
   }
 
-  const handleFinalizar = async (patioExecucaoId: number) => {
-    if (!window.confirm('Finalizar este box e gravar os servicos executados?')) return
+  const handleFinalizar = async (item: PatioPainelBox) => {
+    if (!item.patioExecucaoId) return
+    if (!window.confirm(`Finalizar atendimento?\n\n${boxActionLabel(item)}\n\nConfira quantidades e observacoes antes de confirmar.`)) return
+    const patioExecucaoId = item.patioExecucaoId
     setSavingAction(`finalizar-${patioExecucaoId}`)
     setError('')
     try {
@@ -10960,12 +10972,16 @@ function PatioBoxes({
                   {item.veiculoDescricao && <div className="status-row"><span>Modelo</span><strong>{item.veiculoDescricao}</strong></div>}
                 </div>
                 {item.listaServicos && <div className="patio-box-services" dangerouslySetInnerHTML={{ __html: item.listaServicos }} />}
-                <div className="row-actions">
+                <div className="patio-box-action-bar">
+                  <span>
+                    <strong>{item.placa ?? 'Sem placa'}</strong>
+                    <small>{item.clienteNome ?? 'Cliente sem vinculo'} - BOX {item.boxId}</small>
+                  </span>
                   <button
                     className="button"
                     type="button"
                     disabled={savingAction === `retirar-${item.patioExecucaoId}`}
-                    onClick={() => void handleRetirar(item.patioExecucaoId!)}
+                    onClick={() => void handleRetirar(item)}
                   >
                     Retirar do Box
                   </button>
@@ -10976,7 +10992,7 @@ function PatioBoxes({
                     className="button primary"
                     type="button"
                     disabled={savingAction === `finalizar-${item.patioExecucaoId}`}
-                    onClick={() => void handleFinalizar(item.patioExecucaoId!)}
+                    onClick={() => void handleFinalizar(item)}
                   >
                     {savingAction === `finalizar-${item.patioExecucaoId}` ? 'Finalizando...' : 'Finalizar Box'}
                   </button>
@@ -11241,7 +11257,7 @@ function PatioConcluidos({
                         <tr key={servico.id}>
                           <td>{areaLabel(servico.area)}</td>
                           <td>{servico.servicoNome || servico.descricao || 'Servico'}</td>
-                          <td>{numberLabel(servico.quantidade ?? 1)}</td>
+                          <td>{patioQuantidadeLabel(servico.quantidade)}</td>
                           <td>
                             <select
                               value={servico.tipoAtendimento || 'Normal'}
@@ -11519,6 +11535,10 @@ function PatioFeedback({
           <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Cliente, placa ou motorista" />
         </label>
       </div>
+      <div className="patio-action-guide">
+        <strong>Fluxo recomendado</strong>
+        <span>1. Abrir WhatsApp com a mensagem pronta. 2. Registrar o retorno no campo de observacao. 3. Marcar como feito ou criar retorno comercial se o cliente pedir cotacao, reclamar ou demonstrar interesse.</span>
+      </div>
       {isLoading && <div className="empty-state">Carregando feedbacks...</div>}
       {!isLoading && items.length === 0 && <div className="empty-state">Nenhum feedback pendente com os filtros atuais.</div>}
       <div className="table-list">
@@ -11545,6 +11565,7 @@ function PatioFeedback({
               <div className="status-list">
                 <div className="status-row"><span>Contato</span><strong>{item.contatoNome || item.nomeMotorista || 'Nao informado'}</strong></div>
                 <div className="status-row"><span>Servicos</span><strong>{item.servicos.slice(0, 3).join(', ') || 'Servico de patio'}</strong></div>
+                <div className="status-row"><span>Objetivo</span><strong>Confirmar satisfacao e capturar oportunidade ou problema</strong></div>
               </div>
               <label className="wide-field">
                 Observacao do feedback
@@ -11662,6 +11683,10 @@ function PatioRevisao({
           <input type="number" value={diasMin} onChange={(event) => onDiasMinChange(Number(event.target.value || 0))} />
         </label>}
       </div>
+      <div className="patio-action-guide">
+        <strong>Por que aparece aqui?</strong>
+        <span>O sistema cruza ultima visita, KM medio por dia e tempo parado. Use o contato recomendado, confirme a KM atual e marque contato feito para medir retorno da revisao proativa.</span>
+      </div>
       {isLoading && <div className="empty-state">Carregando revisoes...</div>}
       {!isLoading && items.length === 0 && <div className="empty-state">Nenhum veiculo encontrado com esses criterios.</div>}
       <div className="table-list">
@@ -11692,6 +11717,8 @@ function PatioRevisao({
               <div className="status-list">
                 <div className="status-row"><span>Motorista/contato</span><strong>{item.contatoNome || item.nomeMotorista || 'Nao informado'}</strong></div>
                 <div className="status-row"><span>Ultima visita</span><strong>{dateLabel(item.ultimoAtendimentoEm)}</strong></div>
+                <div className="status-row"><span>Estimativa atual</span><strong>{item.ultimoKm ? `${numberLabel(item.ultimoKm + item.kmEstimadoDesdeVisita)} km` : 'Sem KM base'}</strong></div>
+                <div className="status-row"><span>Motivo da acao</span><strong>{mode === 'km' ? `Passou de ${numberLabel(kmMin)} km estimados` : `Mais de ${diasMin} dias sem visita`}</strong></div>
               </div>
               <label className="wide-field">
                 Observacao do contato
