@@ -177,12 +177,14 @@
 
 .patio-box-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .patio-box-card {
-  min-height: 120px;
+  min-height: 132px;
+  padding: 10px;
+  font-size: 13px;
 }
 
 .patio-box-card.free {
@@ -193,17 +195,35 @@
 }
 
 .patio-box-card.active {
-  border-left: 4px solid #12312f;
+  border-left: 3px solid #12312f;
+}
+
+.patio-box-card h3 {
+  font-size: 15px;
+  line-height: 1.1;
+}
+
+.patio-box-card .panel-header {
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.patio-box-card .panel-header p {
+  font-size: 12px;
 }
 
 .patio-box-card .status-list {
   grid-template-columns: 1fr;
+  gap: 0;
 }
 
 .patio-box-card .status-row {
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
+  grid-template-columns: 74px minmax(0, 1fr);
   align-items: start;
+  gap: 6px;
+  padding: 6px 0;
+  font-size: 12px;
 }
 
 .patio-box-card .status-row > span {
@@ -211,18 +231,21 @@
 }
 
 .patio-box-card .status-row > strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
   text-align: right;
-  line-height: 1.35;
+  line-height: 1.25;
 }
 
 .patio-box-services {
-  margin-top: 12px;
-  padding: 12px;
+  margin-top: 8px;
+  padding: 8px;
   border: 1px solid #dfe8e1;
   border-radius: 8px;
   background: #f8fbf8;
   color: #25302c;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .patio-box-detail {
@@ -278,6 +301,18 @@
 
 .patio-box-final-note textarea {
   min-height: 86px;
+}
+
+@media (max-width: 1440px) {
+  .patio-box-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1120px) {
+  .patio-box-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .patio-entry-steps {
@@ -4179,18 +4214,23 @@ h3 {
 
 .patio-box-action-bar {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   align-items: stretch;
+  gap: 6px;
+  padding: 8px;
 }
 
 .patio-box-action-bar span {
-  grid-column: 1 / -1;
+  grid-column: auto;
 }
 
 .patio-box-action-bar .button {
   width: 100%;
   white-space: normal;
   text-align: center;
+  min-height: 32px;
+  padding: 6px 8px;
+  font-size: 12px;
 }
 
 .patio-box-action-bar span,
@@ -4207,7 +4247,7 @@ h3 {
 .patio-box-action-bar small,
 .patio-action-guide span {
   color: #5f706b;
-  line-height: 1.4;
+  line-height: 1.25;
 }
 
 .patio-action-guide {
