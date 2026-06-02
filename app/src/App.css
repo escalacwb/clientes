@@ -111,7 +111,7 @@
 
 .patio-box-card .status-row {
   display: grid;
-  grid-template-columns: 90px minmax(0, 1fr);
+  grid-template-columns: 112px minmax(0, 1fr);
   align-items: start;
 }
 
@@ -162,8 +162,22 @@
 }
 
 .patio-box-extra {
-  grid-template-columns: minmax(200px, 1fr) 160px 90px auto;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.7fr);
   border-bottom: 0;
+}
+
+.patio-box-extra label,
+.patio-box-extra .button {
+  min-width: 0;
+}
+
+.patio-box-extra label:first-child {
+  grid-column: 1 / -1;
+}
+
+.patio-box-extra .button {
+  grid-column: 1 / -1;
+  width: 100%;
 }
 
 .patio-box-final-note {
@@ -1556,6 +1570,19 @@ h3 {
   font: inherit;
   line-height: 1.25;
   padding: 8px 10px;
+}
+
+.filters-grid input,
+.filters-grid select,
+.filters-grid textarea,
+.wide-field input,
+.wide-field select,
+.wide-field textarea,
+.panel label > input,
+.panel label > select,
+.panel label > textarea {
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .filters-grid textarea,

@@ -16,6 +16,10 @@ type ImportacaoRow = {
   status: string
 }
 
+type DashboardResumoRow = {
+  clientes_sem_vendedor?: number | null
+}
+
 export type ImportacaoPreviewInput = {
   tipo: Importacao['tipo']
   arquivoNome: string
@@ -276,10 +280,9 @@ export async function getImportacaoQualidadeResumo(): Promise<ImportacaoQualidad
       .is('excluido_em', null)
       .or('whatsapp_principal.is.null,whatsapp_principal.eq.'),
     supabase
-      .from('clientes')
-      .select('id', { count: 'exact', head: true })
-      .is('excluido_em', null)
-      .is('vendedor_id', null),
+      .from('vw_dashboard_resumo')
+      .select('clientes_sem_vendedor')
+      .maybeSingle(),
     supabase
       .from('clientes')
       .select('id', { count: 'exact', head: true })
@@ -343,7 +346,7 @@ export async function getImportacaoQualidadeResumo(): Promise<ImportacaoQualidad
     oportunidadesAtivas: oportunidadesAtivas.count ?? 0,
     oportunidadesDesatualizadas: Boolean(importacaoTime && (!oportunidadeTime || oportunidadeTime < importacaoTime)),
     clientesSemWhatsapp: semWhatsapp.count ?? 0,
-    clientesSemVendedor: semVendedor.count ?? 0,
+    clientesSemVendedor: Number((semVendedor.data as DashboardResumoRow | null)?.clientes_sem_vendedor ?? 0),
     clientesOrigemDesconhecida: origemDesconhecida.count ?? 0,
     conflitosPendentes: conflitosPendentes.count ?? 0,
     arquivosObrigatoriosOk: latestRequired.size,
