@@ -307,11 +307,19 @@
   .patio-box-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .cockpit-workflow-grid {
+    grid-template-columns: repeat(3, minmax(220px, 1fr));
+  }
 }
 
 @media (max-width: 1120px) {
   .patio-box-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cockpit-workflow-grid {
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
   }
 }
 
@@ -1382,6 +1390,139 @@ h3 {
 .cockpit-next-actions {
   display: grid;
   gap: 14px;
+}
+
+.cockpit-workflow {
+  display: grid;
+  gap: 14px;
+}
+
+.cockpit-workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(190px, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+
+.cockpit-workflow-card {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 10px;
+  border: 1px solid #dfe8e2;
+  border-top: 4px solid #9fb5ae;
+  border-radius: 8px;
+  background: #fbfdfa;
+  padding: 10px;
+  min-width: 0;
+}
+
+.cockpit-workflow-card.responder {
+  border-top-color: #0f766e;
+}
+
+.cockpit-workflow-card.checar {
+  border-top-color: #386fa4;
+}
+
+.cockpit-workflow-card.propostas {
+  border-top-color: #9a5b00;
+}
+
+.cockpit-workflow-card.tarefas {
+  border-top-color: #c2410c;
+}
+
+.cockpit-workflow-card.oportunidades {
+  border-top-color: #7c3aed;
+}
+
+.cockpit-workflow-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.cockpit-workflow-heading span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cockpit-workflow-heading strong,
+.cockpit-workflow-heading small {
+  display: block;
+}
+
+.cockpit-workflow-heading strong {
+  color: #102b28;
+}
+
+.cockpit-workflow-heading small {
+  color: #64736f;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.cockpit-workflow-heading b {
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #103b35;
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.cockpit-workflow-list {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.cockpit-workflow-item {
+  display: grid;
+  gap: 7px;
+  border: 1px solid #e1e8e4;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 9px;
+  min-width: 0;
+}
+
+.cockpit-workflow-item strong,
+.cockpit-workflow-item small {
+  display: block;
+}
+
+.cockpit-workflow-item strong {
+  color: #072c2a;
+  font-size: 13px;
+}
+
+.cockpit-workflow-item small,
+.cockpit-workflow-item p {
+  color: #64736f;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.cockpit-workflow-item p {
+  margin: 0;
+}
+
+.success-banner {
+  border: 1px solid #b7e4c7;
+  border-radius: 8px;
+  background: #f0fff4;
+  color: #14532d;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.success-banner.compact {
+  padding: 8px 10px;
 }
 
 .cockpit-followups {
@@ -6236,6 +6377,7 @@ h3 {
   .cockpit-layout,
   .cockpit-hero,
   .cockpit-kpis,
+  .cockpit-workflow-grid,
   .cockpit-list.two-col,
   .next-action-card,
   .next-action-content,

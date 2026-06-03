@@ -3919,6 +3919,50 @@ function Cockpit({
     })),
   ].sort((a, b) => b.priority - a.priority)
   const nextActions = uniqueBy(nextActionCandidates, (item) => item.clienteId).slice(0, 14)
+  const responderAgoraActions = nextActions.filter((item) => item.kind === 'campanha' && ['respondeu', 'virou_orcamento'].includes(item.envio.status)).slice(0, 4)
+  const checarEnviadosActions = nextActions.filter((item) => item.kind === 'campanha' && item.envio.status === 'enviado').slice(0, 4)
+  const propostaActions = nextActions.filter((item) => item.kind === 'orcamento').slice(0, 4)
+  const tarefaActions = nextActions.filter((item) => item.kind === 'tarefa').slice(0, 4)
+  const oportunidadeActions = nextActions.filter((item) => ['lead', 'oportunidade'].includes(item.kind)).slice(0, 4)
+  const campanhasComResposta = campanhas.filter((envio) => ['respondeu', 'virou_orcamento'].includes(envio.status))
+  const campanhasParaChecar = campanhas.filter((envio) => envio.status === 'enviado')
+  const routineGroups = [
+    {
+      id: 'responder',
+      title: 'Responder agora',
+      description: 'Cliente respondeu, pediu cotacao ou precisa de retorno humano.',
+      empty: 'Nenhuma resposta aguardando atendimento.',
+      actions: responderAgoraActions,
+    },
+    {
+      id: 'checar',
+      title: 'Checar enviados',
+      description: 'Abra o WhatsApp e veja se houve resposta antes de marcar resultado.',
+      empty: 'Nenhuma mensagem enviada aguardando checagem.',
+      actions: checarEnviadosActions,
+    },
+    {
+      id: 'propostas',
+      title: 'Propostas',
+      description: 'Retomar orcamentos vencidos ou em negociacao.',
+      empty: 'Nenhuma proposta urgente para retomar.',
+      actions: propostaActions,
+    },
+    {
+      id: 'tarefas',
+      title: 'Tarefas do dia',
+      description: 'Follow-ups planejados, atrasados ou de alta prioridade.',
+      empty: 'Nenhuma tarefa critica agora.',
+      actions: tarefaActions,
+    },
+    {
+      id: 'oportunidades',
+      title: 'Oportunidades',
+      description: 'Clientes inativos, lista externa e sinais de recompra.',
+      empty: 'Nenhuma oportunidade prioritaria agora.',
+      actions: oportunidadeActions,
+    },
+  ]
   const primaryAction = nextActions[0]
   const actionReason = (item: typeof nextActions[number]) => {
     if (item.kind === 'campanha') return campaignRoutineReason(item.envio.status)
@@ -3927,6 +3971,67 @@ function Cockpit({
     if (item.kind === 'lead') return 'Lista externa ainda nao qualificada para virar cliente ativo.'
     return opportunityRoutineReason(item.oportunidade)
   }
+  const actionDetail = (item: typeof nextActions[number]) => {
+    if (item.kind === 'campanha') return item.envio.status === 'enviado'
+      ? `Mensagem enviada. Checar conversa: ${item.envio.campanhaNome ?? 'Campanha'}.`
+      : item.detail
+    return item.detail
+  }
+  const actionButtons = (item: typeof nextActions[number], compact = false) => (
+    <>
+      <button className="button" type="button" onClick={() => onOpenClient(item.clienteId)}>{compact ? 'Ficha' : 'Abrir ficha'}</button>
+      {item.kind === 'campanha' && (
+        <>
+          {campaignWhatsappUrl(item.envio) && (
+            <a className="button" href={campaignWhatsappUrl(item.envio)} target="_blank" rel="noreferrer">
+              Abrir conversa
+            </a>
+          )}
+          <button
+            className="button primary"
+            type="button"
+            onClick={() => onOpenBudget(item.clienteId, { kind: 'campanha', sourceId: item.envio.campanhaId, label: item.envio.campanhaNome ?? 'Campanha' })}
+          >
+            {item.envio.status === 'virou_orcamento' ? 'Criar proposta' : 'Nova proposta'}
+          </button>
+        </>
+      )}
+      {item.kind === 'tarefa' && (
+        <>
+          {taskWhatsappUrl(item.tarefa) && (
+            <a className="button" href={taskWhatsappUrl(item.tarefa)} target="_blank" rel="noreferrer">
+              Abrir conversa
+            </a>
+          )}
+          <button className="button" type="button" onClick={() => openReschedule(item.tarefa)}>Reagendar</button>
+          <button className="button primary" type="button" disabled={busyTaskId === item.tarefa.id} onClick={() => complete(item.tarefa.id)}>
+            {busyTaskId === item.tarefa.id ? 'Concluindo...' : 'Concluir'}
+          </button>
+        </>
+      )}
+      {item.kind === 'orcamento' && (
+        <button
+          className="button primary"
+          type="button"
+          onClick={() => onOpenBudget(item.clienteId, { kind: 'cliente', sourceId: item.orcamento.id, label: 'Retomada de proposta vencida' })}
+        >
+          Revisar proposta
+        </button>
+      )}
+      {item.kind === 'lead' && (
+        <button className="button primary" type="button" onClick={() => onOpenClient(item.clienteId)}>Qualificar</button>
+      )}
+      {item.kind === 'oportunidade' && (
+        <button
+          className="button primary"
+          type="button"
+          onClick={() => onOpenBudget(item.clienteId, { kind: 'cliente', sourceId: item.oportunidade.id, label: item.oportunidade.proximaAcao || 'Oportunidade' })}
+        >
+          Nova proposta
+        </button>
+      )}
+    </>
+  )
 
   async function complete(id: string) {
     setBusyTaskId(id)
@@ -4011,10 +4116,10 @@ function Cockpit({
         <div className="cockpit-kpis">
           <Info label="Atrasadas" value={tarefasVencidas.length.toString()} />
           <Info label="Follow-ups" value={contactFollowups.length.toString()} />
-          <Info label="Respostas campanha" value={campanhas.length.toString()} />
+          <Info label="Respostas campanha" value={campanhasComResposta.length.toString()} />
+          <Info label="Checar envios" value={campanhasParaChecar.length.toString()} />
           <Info label="Prop. vencidas" value={orcamentos.length.toString()} />
           <Info label="Sem cadastro" value={rodobens.length.toString()} />
-          <Info label="Sem prox. acao" value={clientesSemProximaAcao.length.toString()} />
         </div>
       </section>
 
@@ -4030,71 +4135,57 @@ function Cockpit({
             <small>{primaryAction.detail}</small>
           </div>
           <div className="toolbar-actions">
-            <button className="button" type="button" onClick={() => onOpenClient(primaryAction.clienteId)}>Abrir ficha</button>
-            {primaryAction.kind === 'campanha' && (
-              <>
-                {campaignWhatsappUrl(primaryAction.envio) && (
-                  <a
-                    className="button"
-                    href={campaignWhatsappUrl(primaryAction.envio)}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Abrir conversa
-                  </a>
-                )}
-                <button
-                  className="button primary"
-                  type="button"
-                  onClick={() => onOpenBudget(primaryAction.clienteId, { kind: 'campanha', sourceId: primaryAction.envio.campanhaId, label: primaryAction.envio.campanhaNome ?? 'Campanha' })}
-                >
-                  Criar proposta
-                </button>
-              </>
-            )}
-            {primaryAction.kind === 'tarefa' && (
-              <>
-                {taskWhatsappUrl(primaryAction.tarefa) && (
-                  <a className="button" href={taskWhatsappUrl(primaryAction.tarefa)} target="_blank" rel="noreferrer">
-                    Abrir conversa
-                  </a>
-                )}
-                <button className="button" type="button" onClick={() => openReschedule(primaryAction.tarefa)}>Reagendar</button>
-                <button className="button primary" type="button" disabled={busyTaskId === primaryAction.tarefa.id} onClick={() => complete(primaryAction.tarefa.id)}>
-                  {busyTaskId === primaryAction.tarefa.id ? 'Concluindo...' : 'Concluir'}
-                </button>
-              </>
-            )}
-            {primaryAction.kind === 'orcamento' && (
-              <button
-                className="button primary"
-                type="button"
-                onClick={() => onOpenBudget(primaryAction.clienteId, { kind: 'cliente', sourceId: primaryAction.orcamento.id, label: 'Retomada de proposta vencida' })}
-              >
-                Revisar proposta
-              </button>
-            )}
-            {primaryAction.kind === 'lead' && (
-              <button className="button primary" type="button" onClick={() => onOpenClient(primaryAction.clienteId)}>Qualificar</button>
-            )}
-            {primaryAction.kind === 'oportunidade' && (
-              <button
-                className="button primary"
-                type="button"
-                onClick={() => onOpenBudget(primaryAction.clienteId, { kind: 'cliente', sourceId: primaryAction.oportunidade.id, label: primaryAction.oportunidade.proximaAcao || 'Oportunidade' })}
-              >
-                Criar proposta
-              </button>
-            )}
+            {actionButtons(primaryAction)}
           </div>
         </section>
       )}
 
+      <section className="panel wide cockpit-workflow">
+        <div className="panel-header">
+          <div>
+            <h2>Fluxo de trabalho</h2>
+            <p>Trabalhe por tipo de acao. Respostas e checagens ficam antes de oportunidades frias.</p>
+          </div>
+          <button className="button" type="button" onClick={runFollowups} disabled={isRunningFollowups}>
+            {isRunningFollowups ? 'Sincronizando...' : 'Sincronizar follow-ups'}
+          </button>
+        </div>
+        {followupAutomationMessage && <div className="success-banner compact">{followupAutomationMessage}</div>}
+        <div className="cockpit-workflow-grid">
+          {routineGroups.map((group) => (
+            <article className={`cockpit-workflow-card ${group.id}`} key={group.id}>
+              <div className="cockpit-workflow-heading">
+                <span>
+                  <strong>{group.title}</strong>
+                  <small>{group.description}</small>
+                </span>
+                <b>{group.actions.length}</b>
+              </div>
+              <div className="cockpit-workflow-list">
+                {group.actions.map((item) => (
+                  <div className={`cockpit-workflow-item ${item.kind}`} key={item.id}>
+                    <span>
+                      <strong>{item.title}</strong>
+                      <small>{item.subtitle}</small>
+                    </span>
+                    <p>{actionReason(item)}</p>
+                    <div className="row-actions">
+                      {actionButtons(item, true)}
+                    </div>
+                  </div>
+                ))}
+                {group.actions.length === 0 && <div className="empty-state compact">{group.empty}</div>}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section className="panel wide cockpit-next-actions">
         <div className="panel-header">
           <div>
-            <h2>Proxima acao</h2>
-            <p>Fila unica para trabalhar sem alternar entre modulos.</p>
+            <h2>Fila completa priorizada</h2>
+            <p>Lista unica deduplicada quando o mesmo cliente aparece em mais de uma frente.</p>
           </div>
           <div className="toolbar-actions">
             <button className="button" type="button" onClick={() => onOpenModule('tarefas')}>Tarefas</button>
@@ -4114,66 +4205,11 @@ function Cockpit({
                 </div>
                 <div>
                   <small className="next-action-why">{actionReason(item)}</small>
-                  <p>{item.detail}</p>
+                  <p>{actionDetail(item)}</p>
                 </div>
               </div>
               <div className="next-action-actions">
-                <button className="button" type="button" onClick={() => onOpenClient(item.clienteId)}>Ficha</button>
-                {item.kind === 'campanha' && (
-                  <>
-                    {campaignWhatsappUrl(item.envio) && (
-                      <a
-                        className="button"
-                        href={campaignWhatsappUrl(item.envio)}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Abrir conversa
-                      </a>
-                    )}
-                    <button
-                      className="button primary"
-                      type="button"
-                      onClick={() => onOpenBudget(item.clienteId, { kind: 'campanha', sourceId: item.envio.campanhaId, label: item.envio.campanhaNome ?? 'Campanha' })}
-                    >
-                      Nova proposta
-                    </button>
-                  </>
-                )}
-                {item.kind === 'tarefa' && (
-                  <>
-                    {taskWhatsappUrl(item.tarefa) && (
-                      <a className="button" href={taskWhatsappUrl(item.tarefa)} target="_blank" rel="noreferrer">
-                        Abrir conversa
-                      </a>
-                    )}
-                    <button className="button" type="button" onClick={() => openReschedule(item.tarefa)}>Reagendar</button>
-                    <button className="button primary" type="button" disabled={busyTaskId === item.tarefa.id} onClick={() => complete(item.tarefa.id)}>
-                      {busyTaskId === item.tarefa.id ? 'Concluindo...' : 'Concluir'}
-                    </button>
-                  </>
-                )}
-                {item.kind === 'orcamento' && (
-                  <button
-                    className="button primary"
-                    type="button"
-                    onClick={() => onOpenBudget(item.clienteId, { kind: 'cliente', sourceId: item.orcamento.id, label: 'Retomada de proposta vencida' })}
-                  >
-                    Revisar
-                  </button>
-                )}
-                {item.kind === 'lead' && (
-                  <button className="button primary" type="button" onClick={() => onOpenClient(item.clienteId)}>Qualificar</button>
-                )}
-                {item.kind === 'oportunidade' && (
-                  <button
-                    className="button primary"
-                    type="button"
-                    onClick={() => onOpenBudget(item.clienteId, { kind: 'cliente', sourceId: item.oportunidade.id, label: item.oportunidade.proximaAcao || 'Oportunidade' })}
-                  >
-                    Nova proposta
-                  </button>
-                )}
+                {actionButtons(item, true)}
               </div>
             </article>
           ))}
@@ -4297,7 +4333,7 @@ function Cockpit({
           <button className="button" type="button" onClick={() => onOpenModule('campanhas')}>Abrir campanhas</button>
         </div>
         <div className="cockpit-list">
-          {campanhas.map((envio) => (
+          {campanhasComResposta.map((envio) => (
             <article className="cockpit-card" key={envio.id}>
               <div>
                 <strong>{envio.clienteNome}</strong>
@@ -4321,7 +4357,7 @@ function Cockpit({
               </div>
             </article>
           ))}
-          {campanhas.length === 0 && <div className="empty-state compact">Nenhuma resposta de campanha pendente.</div>}
+          {campanhasComResposta.length === 0 && <div className="empty-state compact">Nenhuma resposta de campanha pendente.</div>}
         </div>
       </section>
 
@@ -15398,21 +15434,21 @@ function Campanhas({
           vendedorId: cliente.vendedorId,
           telefone: cliente.whatsapp,
           mensagemFinal: finalMessage,
-          status: 'pendente',
+          status: 'enviado',
         })
         await onAddInteraction({
           clienteId: cliente.id,
           vendedorId: cliente.vendedorId ?? currentUser.id,
           canal: 'Campanha',
           tipo: 'campanha',
-          resumo: campaignSummary('pendente', finalMessage),
-          resultado: 'pendente',
+          resumo: campaignSummary('enviado', finalMessage),
+          resultado: 'enviado',
           campanhaId: envio.campanhaId,
         })
-        setStatuses((current) => ({ ...current, [cliente.id]: 'pendente' }))
+        setStatuses((current) => ({ ...current, [cliente.id]: 'enviado' }))
         refreshCampaignResumo().catch(() => undefined)
       } catch (exception) {
-        setCampaignError(exception instanceof Error ? exception.message : 'WhatsApp aberto, mas nao foi possivel registrar a abertura da campanha.')
+        setCampaignError(exception instanceof Error ? exception.message : 'WhatsApp aberto, mas nao foi possivel registrar o envio da campanha.')
       }
     }
 
@@ -16197,7 +16233,7 @@ function Campanhas({
                 {readiness.blocked && <small className="score danger">{readiness.reason}</small>}
               </span>
               <span>{finalMessage}</span>
-              <span className="status-pill">{statuses[cliente.id] ?? 'pendente'}</span>
+              <span className="status-pill">{campaignStatusLabel(statuses[cliente.id] ?? 'pendente')}</span>
               <span className="campaign-actions">
                 <button
                   className={canOpenNormally ? 'button' : 'button disabled'}
@@ -16205,13 +16241,10 @@ function Campanhas({
                   disabled={!canOpenNormally}
                   onClick={() => openCampaignWhatsapp(cliente, finalMessage)}
                 >
-                  <MessageCircle size={16} /> Abrir
+                  <MessageCircle size={16} /> Abrir conversa
                 </button>
                 <button className="button" type="button" onClick={() => openCampaignContactEdit(cliente)}>
                   Editar contato
-                </button>
-                <button className="button" type="button" disabled={!canOpenNormally} onClick={() => markStatus(cliente, 'enviado', finalMessage)}>
-                  Marcar enviado
                 </button>
                 <button className="button" type="button" onClick={() => markStatus(cliente, 'respondeu', finalMessage)}>
                   Respondeu
@@ -16237,6 +16270,7 @@ function Campanhas({
                     const nextAction = event.target.value
                     event.target.value = ''
                     if (nextAction === 'reenviar') void openCampaignWhatsapp(cliente, finalMessage, { forceRegister: true })
+                    if (nextAction === 'enviado') void markStatus(cliente, 'enviado', finalMessage)
                     if (nextAction === 'pendente') void markStatus(cliente, 'pendente', finalMessage)
                     if (nextAction === 'sem_resposta') void markStatus(cliente, 'nao_respondeu', finalMessage)
                     if (nextAction === 'ganhou') void markStatus(cliente, 'ganhou', finalMessage)
@@ -16246,6 +16280,7 @@ function Campanhas({
                 >
                   <option value="">Mais acoes</option>
                   <option value="reenviar" disabled={!canResend}>Reenviar WhatsApp</option>
+                  <option value="enviado" disabled={!canResend}>Marcar enviado</option>
                   <option value="pendente">Voltar para pendente</option>
                   <option value="sem_resposta">Marcar sem resposta</option>
                   <option value="ganhou">Marcar ganho</option>
