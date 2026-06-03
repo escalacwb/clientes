@@ -3899,7 +3899,7 @@ function Cockpit({
     ...oportunidades.slice(0, 10).map((oportunidade) => ({
       id: `oportunidade-${oportunidade.id}`,
       kind: 'oportunidade' as const,
-      priority: oportunidade.prioridade,
+      priority: Math.min(oportunidade.prioridade, 94),
       title: oportunidade.clienteNome,
       label: opportunityTypeLabel(oportunidade.tipo),
       subtitle: `Prioridade ${oportunidade.prioridade}`,
@@ -3908,7 +3908,7 @@ function Cockpit({
       oportunidade,
     })),
   ].sort((a, b) => b.priority - a.priority)
-  const nextActions = uniqueBy(nextActionCandidates, (item) => item.id).slice(0, 14)
+  const nextActions = uniqueBy(nextActionCandidates, (item) => item.clienteId).slice(0, 14)
   const primaryAction = nextActions[0]
   const actionReason = (item: typeof nextActions[number]) => {
     if (item.kind === 'campanha') return item.envio.status === 'respondeu' ? 'Cliente respondeu campanha e precisa de retorno.' : 'Envio de campanha ainda precisa de tratamento.'
