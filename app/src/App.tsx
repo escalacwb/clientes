@@ -12676,31 +12676,12 @@ function Cliente360({
   return (
     <section className="client360">
       <div className="panel wide client360-hero">
-        <button className="button" type="button" onClick={onBack}>Voltar para clientes</button>
         <div>
           <span className="status-pill">{origemLabel(cliente.origemBase)}</span>
           <h2>{cliente.nome}</h2>
           <p>{cliente.cidade}/{cliente.uf} · {cliente.tipoCliente} · {cliente.vendedorNome ?? 'Sem vendedor responsavel'}</p>
         </div>
         <div className="client360-actions">
-          {whatsappUrl && (
-            <button className="button primary" type="button" onClick={() => void openWhatsappAndRegister()}>
-              <MessageCircle size={16} /> Abrir WhatsApp
-            </button>
-          )}
-          {orcamentoAbertoPrincipal ? (
-            <button className="button primary" type="button" onClick={() => onOpenBudget(orcamentoAbertoPrincipal.id)}>
-              Abrir proposta aberta
-            </button>
-          ) : (
-            <button className="button primary" type="button" onClick={() => onCreateQuote()}>Nova proposta</button>
-          )}
-          {orcamentoAbertoPrincipal && (
-            <button className="button" type="button" onClick={() => onCreateQuote()}>Nova proposta</button>
-          )}
-          <button className="button" type="button" onClick={handleCreateTask} disabled={isCreatingTask}>
-            {isCreatingTask ? 'Criando...' : 'Criar tarefa'}
-          </button>
           <button className="button" type="button" onClick={() => setIsEditingClient((current) => !current)}>
             {isEditingClient ? 'Fechar cadastro' : 'Editar cadastro'}
           </button>
@@ -12840,6 +12821,31 @@ function Cliente360({
 
       <section className="client360-workbench">
         <div className="panel client360-contact-panel">
+          <div className="client360-contact-lead">
+            <div>
+              <span className="next-action-label">Atendimento do cliente</span>
+              <h2>{cliente.nome}</h2>
+              <p>{cliente.cidade}/{cliente.uf} - {cliente.vendedorNome ?? 'Sem vendedor responsavel'} - {cliente.status}</p>
+            </div>
+            <div className="client360-contact-lead-actions">
+              {whatsappUrl && (
+                <button className="button primary" type="button" onClick={() => void openWhatsappAndRegister()}>
+                  <MessageCircle size={16} /> Abrir WhatsApp
+                </button>
+              )}
+              {orcamentoAbertoPrincipal ? (
+                <button className="button primary" type="button" onClick={() => onOpenBudget(orcamentoAbertoPrincipal.id)}>
+                  Abrir proposta aberta
+                </button>
+              ) : (
+                <button className="button primary" type="button" onClick={() => onCreateQuote()}>Nova proposta</button>
+              )}
+              <button className="button" type="button" onClick={handleCreateTask} disabled={isCreatingTask}>
+                {isCreatingTask ? 'Criando...' : 'Criar tarefa'}
+              </button>
+              <button className="button" type="button" onClick={onBack}>Voltar</button>
+            </div>
+          </div>
           <div className="panel-header">
             <div>
               <h2>Atendimento agora</h2>

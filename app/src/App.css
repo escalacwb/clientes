@@ -4695,10 +4695,45 @@ h3 {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.75fr);
   gap: 16px;
+  order: -1;
 }
 
 .client360-contact-panel {
   align-content: start;
+}
+
+.client360-contact-lead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  border: 1px solid #d7e4dd;
+  border-radius: 8px;
+  background: #f4fbf7;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.client360-contact-lead h2,
+.client360-contact-lead p {
+  margin: 0;
+}
+
+.client360-contact-lead h2 {
+  color: #072c2a;
+  font-size: 24px;
+}
+
+.client360-contact-lead p {
+  color: #52625d;
+  line-height: 1.35;
+}
+
+.client360-contact-lead-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .client360-contact-grid {
@@ -6404,9 +6439,14 @@ h3 {
   .forecast-summary,
   .client360-command-center,
   .client360-workbench,
+  .client360-contact-lead,
   .client360-filters,
   .detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .client360-contact-lead-actions {
+    justify-content: flex-start;
   }
 
   .campaign-guide-summary {
