@@ -9595,6 +9595,7 @@ function PatioEntrada({
   const [servicoArea, setServicoArea] = useState<PatioEntradaServicoInput['area']>('borracharia')
   const [servicoQuantidade, setServicoQuantidade] = useState('1')
   const [servicoObservacao, setServicoObservacao] = useState('')
+  const [lastAddedServiceName, setLastAddedServiceName] = useState('')
   const [observacaoGeral, setObservacaoGeral] = useState('')
   const [numEixos, setNumEixos] = useState('2')
   const [eixosAlinhar, setEixosAlinhar] = useState<Record<number, boolean>>({})
@@ -9664,6 +9665,7 @@ function PatioEntrada({
     setServicoNome('')
     setServicoQuantidade('1')
     setServicoObservacao('')
+    setLastAddedServiceName(nome)
     setFormError('')
   }
 
@@ -9730,6 +9732,7 @@ function PatioEntrada({
             }}
             placeholder="Ex.: ABC1D23, cliente ou motorista"
           />
+          {isLoading && <small className="field-hint">Consultando base do patio...</small>}
         </label>
       </div>
       {isLoading && <div className="empty-state">Buscando no historico do patio...</div>}
@@ -9900,9 +9903,12 @@ function PatioEntrada({
                 ))}
               </div>
               <div className="inline-actions">
-                <button className="button primary" type="button" onClick={() => addServico()}>Adicionar servico digitado</button>
+                <button className={servicoNome.trim() ? 'button primary' : 'button'} type="button" disabled={!servicoNome.trim()} onClick={() => addServico()}>
+                  {servicoNome.trim() ? 'Adicionar servico digitado' : 'Digite um servico ou use um atalho'}
+                </button>
                 <button className="button ghost" type="button" onClick={() => setSelected(undefined)}>Cancelar entrada</button>
               </div>
+              {lastAddedServiceName && <small className="field-hint">Ultimo adicionado: {lastAddedServiceName}. Clicar novamente no mesmo atalho aumenta a quantidade.</small>}
               <div className="table-list compact-list patio-selected-services">
                 {servicos.map((servico, index) => (
                   <div className="status-row" key={`${servico.servicoNome}-${index}`}>
@@ -11161,8 +11167,22 @@ function PatioAlocacao({
     if (areas[0] && !selectedArea) setSelectedArea(areas[0].area)
   }, [areas, selectedArea])
 
+  useEffect(() => {
+    if (boxes[0] && (!selectedBox || !boxes.some((box) => String(box.patioBoxId) === selectedBox))) {
+      setSelectedBox(String(boxes[0].patioBoxId))
+    }
+  }, [boxes, selectedBox])
+
+  useEffect(() => {
+    if (funcionarios[0] && (!selectedFuncionario || !funcionarios.some((funcionario) => String(funcionario.patioFuncionarioId) === selectedFuncionario))) {
+      setSelectedFuncionario(String(funcionarios[0].patioFuncionarioId))
+    }
+  }, [funcionarios, selectedFuncionario])
+
   const selectedVehicle = veiculos.find((item) => String(item.patioVeiculoId) === selectedVehicleId)
   const selectedAreaInfo = areas.find((item) => item.area === selectedArea)
+  const selectedBoxInfo = boxes.find((box) => String(box.patioBoxId) === selectedBox)
+  const selectedFuncionarioInfo = funcionarios.find((funcionario) => String(funcionario.patioFuncionarioId) === selectedFuncionario)
 
   const handleVehicleChange = async (value: string) => {
     setSelectedVehicleId(value)
@@ -11208,6 +11228,13 @@ function PatioAlocacao({
       {veiculos.length > 0 && (
         <form className="panel subtle" onSubmit={submit}>
           {error && <div className="inline-error">{error}</div>}
+          <div className="patio-action-guide">
+            <strong>Sugestao automatica</strong>
+            <span>
+              {selectedArea ? areaLabel(selectedArea) : 'Area pendente'} - {selectedBoxInfo ? `Box ${selectedBoxInfo.patioBoxId}` : 'escolha um box'} - {selectedFuncionarioInfo?.nome ?? 'escolha um funcionario'}.
+              Ajuste apenas se precisar.
+            </span>
+          </div>
           <div className="filters-grid">
             <label>
               Selecione o Veiculo para Alocar

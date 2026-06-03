@@ -449,7 +449,7 @@ export async function listPatioFeedbackPendente(input: {
   let query = supabase
     .from('vw_patio_feedback_pendente')
     .select('*', { count: 'planned' })
-    .order('fim_execucao', { ascending: true })
+    .order('fim_execucao', { ascending: false, nullsFirst: false })
     .range(from, to)
 
   if (input.vendedorId) query = query.eq('vendedor_id', input.vendedorId)
