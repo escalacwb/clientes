@@ -26,7 +26,7 @@ function buildClienteOportunidades(cliente: Cliente, orcamentos: Orcamento[]): O
   }
 
   if (diasSemCompra > 180) {
-    oportunidades.push(create(cliente, 'inativo_180', 'Mais de 180 dias sem compra.', 'Campanha de reativacao', score + 20, bloqueada))
+    oportunidades.push(create(cliente, 'inativo_180', 'Mais de 180 dias sem compra.', 'Contato de reativacao', score + 20, bloqueada))
   } else if (diasSemCompra > 90) {
     oportunidades.push(create(cliente, 'recompra_90', 'Mais de 90 dias sem compra.', 'Enviar WhatsApp de recompra', score + 15, bloqueada))
   }

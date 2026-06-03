@@ -1,6 +1,4 @@
-drop view if exists public.oportunidades_clientes;
-
-create view public.oportunidades_clientes
+create or replace view public.oportunidades_clientes
 with (security_invoker = true) as
 with oportunidades as (
   select
@@ -43,7 +41,7 @@ with oportunidades as (
     c.vendedor_id,
     'cliente_risco_180',
     'Mais de 180 dias sem compra.',
-    'Campanha de reativacao',
+    'Contato de reativacao',
     public.calcular_score_oportunidade(c) + 20,
     c.status_comercial = 'nao_contatar'
   from public.clientes c
