@@ -3940,9 +3940,9 @@ function Cockpit({
     },
     {
       id: 'checar',
-      title: 'Checar enviados',
-      description: 'Abra o WhatsApp e veja se houve resposta antes de marcar resultado.',
-      empty: 'Nenhuma mensagem enviada aguardando checagem.',
+      title: 'Aguardando resposta',
+      description: 'Mensagens ja enviadas. Abra a conversa, confira se respondeu e registre o resultado na campanha.',
+      empty: 'Nenhuma mensagem aguardando resposta.',
       actions: checarEnviadosActions,
     },
     {
@@ -3977,7 +3977,7 @@ function Cockpit({
   }
   const actionDetail = (item: typeof nextActions[number]) => {
     if (item.kind === 'campanha') return item.envio.status === 'enviado'
-      ? `Mensagem enviada. Checar conversa: ${item.envio.campanhaNome ?? 'Campanha'}.`
+      ? `Aguardando resposta. Abra a conversa e registre o resultado quando o cliente retornar.`
       : item.detail
     return item.detail
   }
@@ -4121,7 +4121,7 @@ function Cockpit({
           <Info label="Atrasadas" value={tarefasVencidas.length.toString()} />
           <Info label="Follow-ups" value={contactFollowups.length.toString()} />
           <Info label="Respostas campanha" value={campanhasComResposta.length.toString()} />
-          <Info label="Checar envios" value={campanhasParaChecar.length.toString()} />
+          <Info label="Aguardando resposta" value={campanhasParaChecar.length.toString()} />
           <Info label="Prop. vencidas" value={orcamentos.length.toString()} />
           <Info label="Sem cadastro" value={rodobens.length.toString()} />
         </div>
@@ -4674,7 +4674,7 @@ function CampanhasInbox({
               <option value="todos">Todos os status</option>
               <option value="respondeu">Responderam</option>
               <option value="virou_orcamento">Virou proposta</option>
-              <option value="enviado">Enviados</option>
+              <option value="enviado">Aguardando resposta</option>
               <option value="nao_respondeu">Nao respondeu</option>
               <option value="comprar_depois">Comprar depois</option>
               <option value="pendente">Pendentes</option>
@@ -9426,7 +9426,7 @@ function origemDetalheLabel(cliente: Cliente) {
 function campaignStatusLabel(status: CampanhaEnvioStatus) {
   const labels: Record<CampanhaEnvioStatus, string> = {
     pendente: 'Pendente',
-    enviado: 'Checar resposta',
+    enviado: 'Aguardando resposta',
     respondeu: 'Respondeu',
     nao_respondeu: 'Nao respondeu',
     comprar_depois: 'Comprar depois',
@@ -9451,7 +9451,7 @@ function campaignRoutinePriority(status: CampanhaEnvioStatus) {
 function campaignRoutineLabel(status: CampanhaEnvioStatus) {
   const labels: Record<CampanhaEnvioStatus, string> = {
     pendente: 'Enviar campanha',
-    enviado: 'Checar resposta',
+    enviado: 'Aguardando resposta',
     respondeu: 'Responder agora',
     nao_respondeu: 'Retentar contato',
     comprar_depois: 'Comprar depois',
@@ -9466,7 +9466,7 @@ function campaignRoutineLabel(status: CampanhaEnvioStatus) {
 function campaignRoutineReason(status: CampanhaEnvioStatus) {
   const labels: Record<CampanhaEnvioStatus, string> = {
     pendente: 'Mensagem ainda nao foi marcada como enviada.',
-    enviado: 'Mensagem ja foi enviada. Abra a conversa e confira se o cliente respondeu antes de marcar resultado.',
+    enviado: 'Mensagem ja foi enviada. Abra a conversa e registre o resultado quando houver retorno.',
     respondeu: 'Cliente respondeu campanha e precisa de retorno humano.',
     nao_respondeu: 'Contato ficou sem resposta e pode precisar de nova tentativa.',
     comprar_depois: 'Cliente demonstrou abertura, mas pediu retorno futuro.',
@@ -15979,7 +15979,7 @@ function Campanhas({
         </div>
         <div className="info-grid campaign-summary">
           <Info label="Alcance" value={(activeCampaignResumo?.total ?? campanhaClientes.length).toString()} />
-          <Info label="Enviados" value={(activeCampaignResumo?.enviados ?? campaignCounts.enviado).toString()} />
+          <Info label="Aguardando resposta" value={(activeCampaignResumo?.enviados ?? campaignCounts.enviado).toString()} />
           <Info label="Responderam" value={(activeCampaignResumo?.responderam ?? campaignCounts.respondeu).toString()} />
           <Info label="Propostas" value={(activeCampaignResumo?.viraramOrcamento ?? campaignCounts.virou_orcamento).toString()} />
           <Info label="Ganhos" value={(activeCampaignResumo?.viraramVenda ?? campaignCounts.ganhou).toString()} />
@@ -16209,7 +16209,7 @@ function Campanhas({
             <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as CampanhaEnvioStatus | 'todos')}>
               <option value="todos">Todos os status da fila</option>
               <option value="pendente">Pendentes</option>
-              <option value="enviado">Enviados</option>
+              <option value="enviado">Aguardando resposta</option>
               <option value="respondeu">Responderam</option>
               <option value="virou_orcamento">Virou proposta</option>
               <option value="ganhou">Ganhos</option>
@@ -16550,7 +16550,7 @@ function campaignResultDefaults(status: CampanhaEnvioStatus, campanhaNome: strin
     },
     enviado: {
       resumo: `Campanha ${campanhaNome}: mensagem enviada, aguardando checagem de resposta.`,
-      proximaAcao: 'Checar resposta no WhatsApp',
+      proximaAcao: 'Checar retorno no WhatsApp',
       dataProximaAcao: addDays(today, 1),
     },
     respondeu: {
