@@ -3851,7 +3851,7 @@ function Cockpit({
     ...campanhas.map((envio) => ({
       id: `campanha-${envio.id}`,
       kind: 'campanha' as const,
-      priority: envio.status === 'respondeu' ? 120 : 108,
+      priority: envio.status === 'respondeu' ? 160 : 145,
       title: envio.clienteNome,
       label: envio.status === 'respondeu' ? 'Responder campanha' : 'Tratar campanha',
       subtitle: `${envio.campanhaNome ?? 'Campanha'} - ${campaignStatusLabel(envio.status)}`,
@@ -3864,7 +3864,7 @@ function Cockpit({
       return {
         id: `tarefa-${tarefa.id}`,
         kind: 'tarefa' as const,
-        priority: tarefa.prioridade + (sla.tone === 'danger' ? 20 : sla.tone === 'warn' ? 10 : 0),
+        priority: 130 + (sla.tone === 'danger' ? 10 : sla.tone === 'warn' ? 5 : 0) + Math.min(Math.max(tarefa.prioridade - 70, 0), 10),
         title: tarefa.titulo,
         label: sla.tone === 'danger' ? 'Tarefa critica' : 'Tarefa',
         subtitle: `${tarefa.clienteNome} - ${dateLabel(tarefa.dataVencimento)}`,
@@ -3877,7 +3877,7 @@ function Cockpit({
     ...orcamentos.map((orcamento) => ({
       id: `orcamento-${orcamento.id}`,
       kind: 'orcamento' as const,
-      priority: 96 + Math.min(Math.max(daysSince(orcamento.validade), 0), 30),
+      priority: 120 + Math.min(Math.max(daysSince(orcamento.validade), 0), 20),
       title: orcamento.clienteNome ?? 'Cliente',
       label: 'Retomar proposta',
       subtitle: `${money(orcamento.valorTotal)} - venceu ${dateLabel(orcamento.validade)}`,
@@ -3899,10 +3899,10 @@ function Cockpit({
     ...oportunidades.slice(0, 10).map((oportunidade) => ({
       id: `oportunidade-${oportunidade.id}`,
       kind: 'oportunidade' as const,
-      priority: Math.min(oportunidade.prioridade, 94),
+      priority: opportunityRoutinePriority(oportunidade),
       title: oportunidade.clienteNome,
       label: opportunityTypeLabel(oportunidade.tipo),
-      subtitle: `Prioridade ${oportunidade.prioridade}`,
+      subtitle: opportunityRoutineSubtitle(oportunidade),
       detail: opportunityRoutineDetail(oportunidade),
       clienteId: oportunidade.clienteId,
       oportunidade,
@@ -5463,6 +5463,20 @@ function opportunityRoutineDetail(oportunidade: Oportunidade) {
   if (oportunidade.tipo === 'rodobens_primeiro_contato') return oportunidade.motivo || 'Validar contato e decidir se vira cliente ativo.'
   if (oportunidade.tipo === 'sem_vendedor') return 'Distribuir carteira antes de iniciar rotina comercial.'
   return oportunidade.proximaAcao || oportunidade.motivo
+}
+
+function opportunityRoutinePriority(oportunidade: Oportunidade) {
+  if (oportunidade.tipo === 'sem_vendedor') return 90
+  if (oportunidade.tipo === 'rodobens_primeiro_contato') return 82
+  if (oportunidade.tipo === 'cliente_risco_180') return 70
+  return 75
+}
+
+function opportunityRoutineSubtitle(oportunidade: Oportunidade) {
+  if (oportunidade.tipo === 'cliente_risco_180') return 'Fila automatica de reativacao'
+  if (oportunidade.tipo === 'rodobens_primeiro_contato') return 'Lista externa'
+  if (oportunidade.tipo === 'sem_vendedor') return 'Precisa de carteira'
+  return `Score ${oportunidade.prioridade}`
 }
 
 function pipelineStageLabel(stage: OportunidadeEstagio) {
