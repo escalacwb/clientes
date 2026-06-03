@@ -183,27 +183,29 @@ function previewMovimento(
   let clienteAtual = ''
   let ordemAtual = ''
 
-  rows.forEach((row) => {
+  for (const row of rows) {
     const cells = row.map(text)
     const first = cells[0] ?? ''
+    const normalized = normalizeKey(cells.join(' '))
+    if (normalized.includes('total geral')) break
     const clienteMatch = first.match(/^(.+?)\s+\((\d{1,8})\)\s+CPF\/CNPJ/i)
     if (clienteMatch) {
       clienteAtual = clienteMatch[2].padStart(5, '0')
       clientes.add(clienteAtual)
-      return
+      continue
     }
     if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(first) && cells.length >= 9) {
       ordemAtual = [spec.kind, clienteAtual, cells[1], cells[2], first].join('|')
       ordens.add(ordemAtual)
-      return
+      continue
     }
     if (isVehicleNoteRow(cells)) {
       if (extractPlate(cells.join(' '))) placas += 1
       if (extractKm(cells.join(' '))) kms += 1
-      return
+      continue
     }
     if (clienteAtual && ordemAtual && /^\d+$/.test(first) && cells.length >= 7) itens += 1
-  })
+  }
 
   return makePreview(spec, fileName, {
     totalRows: rows.length,

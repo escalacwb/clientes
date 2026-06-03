@@ -145,6 +145,7 @@ export function parseMovimento(file, tipo) {
     const first = cells[0] ?? ''
     const normalized = normalize(cells.join(' '))
 
+    if (normalized.includes('total geral')) break
     if (normalized.includes('emissao nota pedido') || normalized.includes('vendas por cliente')) continue
     if (normalized.includes('total do cliente') || normalized.includes('total da fazenda')) continue
 
@@ -190,6 +191,7 @@ export function parseMovimento(file, tipo) {
     }
 
     if (!cliente || !movimento || !/^\d+$/.test(first) || cells.length < 7) continue
+    if (!isMovementItemDataRow(cells)) continue
 
     const produto = {
       tipo,
@@ -228,6 +230,15 @@ export function parseMovimento(file, tipo) {
   }
 
   return items
+}
+
+function isMovementItemDataRow(cells) {
+  const quantidade = number(cells[5])
+  const unitario = number(cells[6])
+  const total = number(cells[7])
+  if (!quantidade || quantidade < 0 || quantidade > 10000) return false
+  if (unitario < 0 || total < 0) return false
+  return unitario > 0 || total > 0
 }
 
 export function parseVehicleNote(value) {

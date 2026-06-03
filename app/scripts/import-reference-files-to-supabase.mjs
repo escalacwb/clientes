@@ -54,6 +54,7 @@ const precosServicos = take(parseListaPreco(REFERENCE_FILES.precoServicos, 'serv
 const vendasProdutos = take(parseMovimento(REFERENCE_FILES.vendasProdutos, 'produto'), limit)
 const vendasServicos = take(parseMovimento(REFERENCE_FILES.vendasServicos, 'servico'), limit)
 const movimentos = [...vendasProdutos, ...vendasServicos]
+const clientesImportacao = buildClientesImportacao(clientes, movimentos, carros)
 
 const veiculoResolver = buildVehicleResolver(carros)
 const movimentosComVeiculo = movimentos.map((movimento) => ({
@@ -82,7 +83,8 @@ const veiculoSourceRows = [
 ]
 
 const summary = {
-  clientes: clientes.length,
+  clientes: clientesImportacao.length,
+  clientesCadastro: clientes.length,
   carrosAtendidos: carros.length,
   vendasProdutos: vendasProdutos.length,
   vendasServicos: vendasServicos.length,
@@ -100,7 +102,7 @@ try {
   importacao = await step('criando importacao', () => createImportacao(summary))
   const arquivos = await step('registrando arquivos', () => upsertImportacaoArquivos(importacao.id))
   const appUsers = await step('carregando usuarios do app', () => fetchAppUsers())
-  const clienteIndex = await step('importando clientes', () => upsertClientes(clientes, appUsers))
+  const clienteIndex = await step('importando clientes', () => upsertClientes(clientesImportacao, appUsers))
   const veiculoIndex = await step('importando veiculos', () => upsertVeiculos(veiculoSourceRows, clienteIndex))
   const ordemIndex = await step('importando ordens/pedidos', () => upsertOrdens(movimentosComVeiculo, clienteIndex, veiculoIndex, importacao.id))
   const vendasResult = await step('importando itens de produtos', () => upsertVendas(movimentosComVeiculo.filter((item) => item.tipo === 'produto'), clienteIndex, veiculoIndex, ordemIndex, importacao.id))
@@ -109,8 +111,8 @@ try {
 
   const postProcessResult = await step('finalizando importacao e oportunidades', () => finalizarImportacaoDiaria())
   await updateImportacao(importacao.id, {
-    total_linhas: clientes.length + carros.length + movimentos.length + precosProdutos.length + precosServicos.length,
-    clientes_encontrados: clientes.length,
+    total_linhas: clientesImportacao.length + carros.length + movimentos.length + precosProdutos.length + precosServicos.length,
+    clientes_encontrados: clientesImportacao.length,
     clientes_criados: clienteIndex.size,
     conflitos: vendasResult.conflitos + servicosResult.conflitos,
     itens_criados: vendasResult.created + servicosResult.created,
@@ -164,6 +166,57 @@ async function createImportacao(stats) {
 
   if (error) throw error
   return data
+}
+
+function buildClientesImportacao(clientes, movimentos, carros) {
+  const byCodigo = new Map()
+  const add = (row, overwrite = false) => {
+    if (!row.codigo_erp) return
+    if (!overwrite && byCodigo.has(row.codigo_erp)) return
+    byCodigo.set(row.codigo_erp, row)
+  }
+
+  carros.forEach((carro) => add({
+    codigo_erp: carro.codigo_cliente_erp,
+    nome: carro.cliente_nome,
+    nome_fantasia: '',
+    vendedor_nome: '',
+    canal_venda: '',
+    cidade: '',
+    uf: '',
+    telefone_principal: '',
+    cpf_cnpj: '',
+    email: '',
+    email_comercial: '',
+    tipo_cliente: '',
+    raw: { ...carro.raw, origem_arquivo: 'carrosatendidos' },
+  }))
+
+  movimentos.forEach((movimento) => add({
+    codigo_erp: movimento.codigo_cliente_erp,
+    nome: movimento.cliente_nome,
+    nome_fantasia: '',
+    vendedor_nome: movimento.vendedor_nome,
+    canal_venda: '',
+    cidade: '',
+    uf: '',
+    telefone_principal: movimento.telefone_principal || '',
+    cpf_cnpj: movimento.cpf_cnpj,
+    email: '',
+    email_comercial: '',
+    tipo_cliente: '',
+    raw: {
+      origem_arquivo: movimento.tipo === 'produto' ? 'vendasprodutos' : 'vendasservicos',
+      codigo_erp: movimento.codigo_cliente_erp,
+      nome: movimento.cliente_nome,
+      cpf_cnpj: movimento.cpf_cnpj,
+      telefones: movimento.telefone_principal || '',
+      vendedor: movimento.vendedor_nome,
+    },
+  }))
+
+  clientes.forEach((cliente) => add(cliente, true))
+  return [...byCodigo.values()]
 }
 
 async function upsertImportacaoArquivos(importacaoId) {
@@ -231,9 +284,9 @@ async function upsertClientes(rows, appUsers) {
       canal_venda: cliente.canal_venda || null,
       cadastro_erp_em: cliente.cadastro_em || null,
       status_comercial: 'novo',
-      origem: 'listaclientessistema',
+      origem: cliente.raw?.origem_arquivo || 'listaclientessistema',
       origem_base: inferOrigemBase(cliente.raw, 'capital_truck'),
-      origem_detalhe: inferOrigemDetalhe(cliente.raw, 'Cadastro ERP Capital Truck Center'),
+      origem_detalhe: inferOrigemDetalhe(cliente.raw, cliente.raw?.origem_arquivo ? `Cadastro minimo criado por ${cliente.raw.origem_arquivo}` : 'Cadastro ERP Capital Truck Center'),
       raw_data: cliente.raw,
     }
   })

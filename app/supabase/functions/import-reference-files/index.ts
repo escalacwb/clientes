@@ -44,6 +44,7 @@ type MovimentoRow = {
   codigo_cliente_erp: string
   cpf_cnpj: string
   cliente_nome: string
+  telefone_principal?: string
   data: string
   nota: string
   pedido: string
@@ -159,6 +160,7 @@ Deno.serve(async (request) => {
     if (missing.length) return json({ error: `Arquivos obrigatorios ausentes: ${missing.join(', ')}.` }, 400)
 
     const movimentos = [...parsed.vendasProdutos, ...parsed.vendasServicos]
+    const clientesImportacao = buildClientesImportacao(parsed.clientes, movimentos, parsed.carros)
     const resolver = buildVehicleResolver(parsed.carros)
     const movimentosComVeiculo = movimentos.map((movimento) => ({
       ...movimento,
@@ -188,7 +190,7 @@ Deno.serve(async (request) => {
     activeImportacaoId = importacao.id
     const arquivos = await registerFiles(service, importacao.id, parsed)
     const appUsers = await fetchAppUsers(service)
-    const clienteIndex = await upsertClientes(service, parsed.clientes, appUsers)
+    const clienteIndex = await upsertClientes(service, clientesImportacao, appUsers)
     const veiculoIndex = await upsertVeiculos(service, vehicleRows, clienteIndex)
     const ordemIndex = await upsertOrdens(service, movimentosComVeiculo, clienteIndex, veiculoIndex, importacao.id)
     const vendas = await upsertVendas(service, movimentosComVeiculo.filter((item) => item.tipo === 'produto'), clienteIndex, veiculoIndex, ordemIndex, importacao.id)
@@ -200,7 +202,7 @@ Deno.serve(async (request) => {
       .from('importacoes')
       .update({
         total_linhas: parsed.clientes.length + parsed.carros.length + movimentos.length + parsed.precosProdutos.length + parsed.precosServicos.length,
-        clientes_encontrados: parsed.clientes.length,
+        clientes_encontrados: clientesImportacao.length,
         clientes_criados: clienteIndex.size,
         conflitos: vendas.conflitos + servicos.conflitos,
         itens_criados: vendas.created + servicos.created,
@@ -212,7 +214,7 @@ Deno.serve(async (request) => {
     return json({
       ok: true,
       importacaoId: importacao.id,
-      clientes: parsed.clientes.length,
+      clientes: clientesImportacao.length,
       veiculos: veiculoIndex.size,
       ordens: ordemIndex.size,
       vendas,
@@ -362,7 +364,7 @@ function parseCarros(rows: string[][]): CarroRow[] {
 
 function parseMovimento(rows: string[][], tipo: 'produto' | 'servico'): MovimentoRow[] {
   const items: MovimentoRow[] = []
-  let cliente: { nome: string; codigo_erp: string; cpf_cnpj: string } | null = null
+  let cliente: { nome: string; codigo_erp: string; cpf_cnpj: string; telefone_principal: string } | null = null
   let movimento: Record<string, string | number | VehicleRef | null> | null = null
   let orderItems: MovimentoRow[] = []
 
@@ -370,12 +372,18 @@ function parseMovimento(rows: string[][], tipo: 'produto' | 'servico'): Moviment
     const cells = row.map(text)
     const first = cells[0] ?? ''
     const normalized = normalize(cells.join(' '))
+    if (normalized.includes('total geral')) break
     if (normalized.includes('emissao nota pedido') || normalized.includes('vendas por cliente')) continue
     if (normalized.includes('total do cliente') || normalized.includes('total da fazenda')) continue
 
-    const clienteMatch = first.match(/^(.+?)\s+\((\d{1,8})\)\s+CPF\/CNPJ\s+([^ ]+)/i)
+    const clienteMatch = first.match(/^(.+?)\s+\((\d{1,8})\)\s+CPF\/CNPJ\s+([^ ]+)(?:\s+TEL\s*:\s*(.*))?$/i)
     if (clienteMatch) {
-      cliente = { nome: text(clienteMatch[1]), codigo_erp: leftPad(clienteMatch[2], 5), cpf_cnpj: onlyDigits(clienteMatch[3]) }
+      cliente = {
+        nome: text(clienteMatch[1]),
+        codigo_erp: leftPad(clienteMatch[2], 5),
+        cpf_cnpj: onlyDigits(clienteMatch[3]),
+        telefone_principal: normalizePhone(clienteMatch[4] || ''),
+      }
       movimento = null
       orderItems = []
       continue
@@ -412,6 +420,7 @@ function parseMovimento(rows: string[][], tipo: 'produto' | 'servico'): Moviment
       codigo_cliente_erp: cliente.codigo_erp,
       cpf_cnpj: cliente.cpf_cnpj,
       cliente_nome: cliente.nome,
+      telefone_principal: cliente.telefone_principal,
       data: String(movimento.data),
       nota: String(movimento.nota),
       pedido: String(movimento.pedido),
@@ -456,6 +465,57 @@ function isMovementItemDataRow(cells: string[]) {
   if (!quantity || quantity < 0 || quantity > 10000) return false
   if (unit < 0 || total < 0) return false
   return unit > 0 || total > 0
+}
+
+function buildClientesImportacao(clientes: ClienteRow[], movimentos: MovimentoRow[], carros: CarroRow[]) {
+  const byCodigo = new Map<string, ClienteRow>()
+  const add = (row: ClienteRow, overwrite = false) => {
+    if (!row.codigo_erp) return
+    if (!overwrite && byCodigo.has(row.codigo_erp)) return
+    byCodigo.set(row.codigo_erp, row)
+  }
+
+  carros.forEach((carro) => add({
+    codigo_erp: carro.codigo_cliente_erp,
+    nome: carro.cliente_nome,
+    nome_fantasia: '',
+    vendedor_nome: '',
+    canal_venda: '',
+    cidade: '',
+    uf: '',
+    telefone_principal: '',
+    cpf_cnpj: '',
+    email: '',
+    email_comercial: '',
+    tipo_cliente: '',
+    raw: { ...carro.raw, origem_arquivo: 'carrosatendidos' },
+  }))
+
+  movimentos.forEach((movimento) => add({
+    codigo_erp: movimento.codigo_cliente_erp,
+    nome: movimento.cliente_nome,
+    nome_fantasia: '',
+    vendedor_nome: movimento.vendedor_nome,
+    canal_venda: '',
+    cidade: '',
+    uf: '',
+    telefone_principal: movimento.telefone_principal || '',
+    cpf_cnpj: movimento.cpf_cnpj,
+    email: '',
+    email_comercial: '',
+    tipo_cliente: '',
+    raw: {
+      origem_arquivo: movimento.tipo === 'produto' ? 'vendasprodutos' : 'vendasservicos',
+      codigo_erp: movimento.codigo_cliente_erp,
+      nome: movimento.cliente_nome,
+      cpf_cnpj: movimento.cpf_cnpj,
+      telefones: movimento.telefone_principal || '',
+      vendedor: movimento.vendedor_nome,
+    },
+  }))
+
+  clientes.forEach((cliente) => add(cliente, true))
+  return [...byCodigo.values()]
 }
 
 function parseListaPreco(rows: string[][], tipo: 'produto' | 'servico'): CatalogRow[] {
@@ -574,9 +634,9 @@ async function upsertClientes(service: ReturnType<typeof createClient>, rows: Cl
       vendedor_nome_erp: vendedor.nome || null,
       canal_venda: cliente.canal_venda || null,
       status_comercial: 'novo',
-      origem: 'listaclientessistema',
+      origem: cliente.raw.origem_arquivo || 'listaclientessistema',
       origem_base: inferOrigemBase(cliente.raw, 'capital_truck'),
-      origem_detalhe: inferOrigemDetalhe(cliente.raw, 'Cadastro ERP Capital Truck Center'),
+      origem_detalhe: inferOrigemDetalhe(cliente.raw, cliente.raw.origem_arquivo ? `Cadastro minimo criado por ${cliente.raw.origem_arquivo}` : 'Cadastro ERP Capital Truck Center'),
       raw_data: cliente.raw,
     }
   })
