@@ -12041,7 +12041,11 @@ function PatioFeedback({
 }) {
   const [busyId, setBusyId] = useState<number | undefined>()
   const [notes, setNotes] = useState<Record<number, string>>({})
+  const [activeTab, setActiveTab] = useState<'recentes' | 'antigos'>('recentes')
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const recentItems = items.filter((item) => daysSince(item.fimExecucao) <= 3)
+  const oldItems = items.filter((item) => daysSince(item.fimExecucao) > 3)
+  const visibleItems = activeTab === 'recentes' ? recentItems : oldItems
   const feedbackStats = {
     comContato: items.filter((item) => item.contatoRecomendado || item.contatoMotorista).length,
     semContato: items.filter((item) => !item.contatoRecomendado && !item.contatoMotorista).length,
@@ -12081,16 +12085,29 @@ function PatioFeedback({
         <strong>Fluxo recomendado</strong>
         <span>1. Abrir WhatsApp com a mensagem pronta. 2. Registrar o retorno no campo de observacao. 3. Marcar como feito ou criar retorno comercial se o cliente pedir cotacao, reclamar ou demonstrar interesse.</span>
       </div>
+      <div className="patio-internal-tabs">
+        <button className={activeTab === 'recentes' ? 'active' : ''} type="button" onClick={() => setActiveTab('recentes')}>
+          Recentes <span>{recentItems.length}</span>
+        </button>
+        <button className={activeTab === 'antigos' ? 'active warn' : ''} type="button" onClick={() => setActiveTab('antigos')}>
+          Antigos <span>{oldItems.length}</span>
+        </button>
+      </div>
       <div className="patio-feedback-summary">
-        <span><strong>{items.length}</strong> nesta pagina</span>
+        <span><strong>{visibleItems.length}</strong> nesta aba</span>
         <span><strong>{feedbackStats.comContato}</strong> com WhatsApp</span>
         <span><strong>{feedbackStats.semContato}</strong> sem contato</span>
         <span><strong>{feedbackStats.atrasados}</strong> ha 3+ dias</span>
       </div>
       {isLoading && <div className="empty-state">Carregando feedbacks...</div>}
       {!isLoading && items.length === 0 && <div className="empty-state">Nenhum feedback pendente com os filtros atuais.</div>}
+      {!isLoading && items.length > 0 && visibleItems.length === 0 && (
+        <div className="empty-state">
+          {activeTab === 'recentes' ? 'Nenhum feedback recente nesta pagina.' : 'Nenhum feedback antigo nesta pagina.'}
+        </div>
+      )}
       <div className="table-list">
-        {items.map((item) => {
+        {visibleItems.map((item) => {
           const phone = item.contatoRecomendado || item.contatoMotorista
           const message = buildPatioFeedbackMessage(item)
           const whatsappUrl = waMeUrl(phone, message)
