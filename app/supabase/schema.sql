@@ -2444,6 +2444,11 @@ on public.campanhas for all
 using (public.current_user_is_admin())
 with check (public.current_user_is_admin());
 
+create policy campanhas_vendedor_manage_own
+on public.campanhas for all
+using (criada_por = public.current_app_user_id())
+with check (criada_por = public.current_app_user_id());
+
 create policy cliente_alteracoes_read_own_or_admin
 on public.cliente_alteracoes for select
 using (

@@ -817,6 +817,7 @@ export async function upsertCampanhaEnvio(input: {
   campanhaNome?: string
   clienteId: string
   vendedorId?: string
+  criadaPor?: string
   telefone?: string
   mensagemFinal: string
   status: CampanhaEnvioStatus
@@ -842,7 +843,7 @@ export async function upsertCampanhaEnvio(input: {
     }
   }
 
-  const campanhaId = await ensureCampanha(supabase, input.campanhaId, input.campanhaNome ?? input.campanhaId, input.mensagemFinal)
+  const campanhaId = await ensureCampanha(supabase, input.campanhaId, input.campanhaNome ?? input.campanhaId, input.mensagemFinal, input.criadaPor)
 
   const { data, error } = await supabase
     .from('campanha_envios')
@@ -934,6 +935,7 @@ async function ensureCampanha(
   externalId: string,
   nome: string,
   mensagemModelo: string,
+  criadaPor?: string,
 ) {
   if (isUuid(externalId)) return externalId
 
@@ -954,6 +956,7 @@ async function ensureCampanha(
       descricao: 'Campanha criada pelo app web',
       mensagem_modelo: mensagemModelo,
       filtro_usado: { origem: externalId },
+      criada_por: criadaPor ?? null,
     })
     .select('id')
     .single()

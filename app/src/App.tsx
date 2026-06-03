@@ -2588,6 +2588,7 @@ function App() {
                 campanhaNome: envio.campanhaNome,
                 clienteId: envio.clienteId,
                 vendedorId: envio.vendedorId ?? selectedClient.vendedorId ?? session.id,
+                criadaPor: session.id,
                 telefone: envio.telefone ?? selectedClient.whatsapp,
                 mensagemFinal: envio.mensagemFinal,
                 status,
@@ -2638,6 +2639,7 @@ function App() {
                   campanhaNome: quoteOriginContext.label,
                   clienteId: created.clienteId,
                   vendedorId: created.vendedorId,
+                  criadaPor: session.id,
                   telefone: selectedClient.whatsapp,
                   mensagemFinal: created.observacao || `Proposta ${created.id.slice(0, 8)} criada a partir da campanha ${quoteOriginContext.label}.`,
                   status: 'virou_orcamento',
@@ -3069,6 +3071,7 @@ function App() {
                 campanhaNome: item.campanhaNome,
                 clienteId: item.clienteId,
                 vendedorId: item.vendedorId,
+                criadaPor: session.id,
                 telefone: item.telefone,
                 mensagemFinal: item.mensagemFinal,
                 status,
@@ -3170,6 +3173,7 @@ function App() {
                 campanhaNome: item.campanhaNome,
                 clienteId: item.clienteId,
                 vendedorId: item.vendedorId,
+                criadaPor: session.id,
                 telefone: item.telefone,
                 mensagemFinal: item.mensagemFinal,
                 status,
@@ -15003,6 +15007,12 @@ function Campanhas({
     dataProximaAcao: '',
   })
   const appliedInitialCampanhaIdRef = useRef('')
+  const effectivePublicoFiltros = useMemo(
+    () => currentUser.role === 'vendedor'
+      ? { ...publicoFiltros, vendedorId: currentUser.id }
+      : publicoFiltros,
+    [currentUser.id, currentUser.role, publicoFiltros],
+  )
   const segmento = campanhaSegmentos.find((item) => item.id === segmentoId) ?? campanhaSegmentos[0]
   const activeCampaignResumo = campanhasResumo.find((resumo) => resumo.campanhaId === activeCampanhaId)
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
@@ -15054,7 +15064,7 @@ function Campanhas({
       page,
       pageSize,
       query,
-      filtros: publicoFiltros,
+      filtros: effectivePublicoFiltros,
       campanhaId: activeCampanhaId,
       clienteIds: activeSavedCampaign?.filtroUsado.clienteIds,
     })
@@ -15080,7 +15090,7 @@ function Campanhas({
     return () => {
       cancelled = true
     }
-  }, [segmentoId, page, query, publicoFiltros, activeCampanhaId, campanhasSalvas])
+  }, [segmentoId, page, query, effectivePublicoFiltros, activeCampanhaId, campanhasSalvas])
 
   useEffect(() => {
     setSelectedCampaignClientIds([])
@@ -15261,7 +15271,7 @@ function Campanhas({
         mensagemModelo,
         filtroUsado: {
           segmentoId,
-          filtros: publicoFiltros,
+          filtros: effectivePublicoFiltros,
           query,
           clienteIds: activeSavedCampaign?.filtroUsado.clienteIds,
           origemLista: activeSavedCampaign?.filtroUsado.origemLista,
@@ -15333,6 +15343,7 @@ function Campanhas({
         campanhaNome: activeCampanhaId ? saveName || segmento.campanhaNome : segmento.campanhaNome,
         clienteId: cliente.id,
         vendedorId: cliente.vendedorId,
+        criadaPor: currentUser.id,
         telefone: cliente.whatsapp,
         mensagemFinal,
         status,
@@ -15482,6 +15493,7 @@ function Campanhas({
           campanhaNome: activeCampanhaId ? saveName || segmento.campanhaNome : segmento.campanhaNome,
           clienteId: cliente.id,
           vendedorId: cliente.vendedorId,
+          criadaPor: currentUser.id,
           telefone: cliente.whatsapp,
           mensagemFinal: finalMessage,
           status: 'enviado',
