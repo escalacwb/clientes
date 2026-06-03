@@ -15028,6 +15028,10 @@ function Campanhas({
     },
     { bloqueados: 0, semWhatsapp: 0, optOut: 0 },
   )
+  const campaignPageReadyCount = campanhaClientes.filter((cliente) => {
+    const readiness = campaignContactReadiness(cliente, elegibilidade[cliente.id], numberFromInput(campaignWindowDays) || 7)
+    return !readiness.blocked && Boolean(cliente.whatsapp) && cliente.status !== 'Nao contatar' && cliente.leadQualificacaoStatus !== 'nao_contatar'
+  }).length
   const nextClient = campanhaClientes
     .filter((cliente) => (statuses[cliente.id] ?? 'pendente') === 'pendente' && !campaignContactReadiness(cliente, elegibilidade[cliente.id], numberFromInput(campaignWindowDays) || 7).blocked)
     .sort((a, b) => (b.totalComprado + b.totalServicos) - (a.totalComprado + a.totalServicos))[0]
@@ -15046,7 +15050,6 @@ function Campanhas({
     if (value === undefined || value === '' || value === 'todos' || value === false) return false
     return true
   }).length
-  const campaignReadyCount = Math.max(0, total - campaignQuality.bloqueados - campaignQuality.semWhatsapp - campaignQuality.optOut)
   const campaignStepHelp: Record<typeof campaignTab, string> = {
     publico: 'Escolha quem sera acionado. Comece por um objetivo pronto e refine apenas se precisar.',
     mensagem: 'Escreva o texto que o vendedor vai mandar no WhatsApp. A mensagem pode ser livre.',
@@ -15551,7 +15554,7 @@ function Campanhas({
             <strong>Envio rapido</strong>
             <small>{activeCampanhaId ? 'Campanha salva pronta para WhatsApp' : 'Use o texto atual ou escolha uma campanha salva'}</small>
           </span>
-          <b>{campaignReadyCount}</b>
+          <b>{campaignPageReadyCount}</b>
         </div>
         <label className="mobile-campaign-select">
           Campanha
@@ -15603,7 +15606,7 @@ function Campanhas({
       <div className="campaign-guide-summary">
         <div>
           <strong>{campaignStepHelp[campaignTab]}</strong>
-          <small>{activePublicoFilterCount} filtros ativos · {campaignReadyCount} prontos · {campaignQuality.bloqueados} bloqueados · {campaignQuality.semWhatsapp} sem WhatsApp</small>
+          <small>{activePublicoFilterCount} filtros ativos · {total} encontrados · {campaignPageReadyCount} prontos nesta pagina · {campaignQuality.bloqueados} bloqueados nesta pagina</small>
         </div>
         <div className="toolbar-actions">
           {campaignTab !== 'publico' && (
@@ -15979,19 +15982,21 @@ function Campanhas({
           {activeCampaignResumo && <span>{conversionRate(activeCampaignResumo.viraramVenda || activeCampaignResumo.viraramOrcamento, activeCampaignResumo.total)}% conversao</span>}
         </div>
         <div className="info-grid campaign-summary">
-          <Info label="Alcance" value={(activeCampaignResumo?.total ?? campanhaClientes.length).toString()} />
-          <Info label="Aguardando resposta" value={(activeCampaignResumo?.enviados ?? campaignCounts.enviado).toString()} />
-          <Info label="Responderam" value={(activeCampaignResumo?.responderam ?? campaignCounts.respondeu).toString()} />
-          <Info label="Propostas" value={(activeCampaignResumo?.viraramOrcamento ?? campaignCounts.virou_orcamento).toString()} />
-          <Info label="Ganhos" value={(activeCampaignResumo?.viraramVenda ?? campaignCounts.ganhou).toString()} />
+          <Info label="Publico total" value={(activeCampaignResumo?.total ?? total).toString()} />
+          <Info label="Nesta pagina" value={campanhaClientes.length.toString()} />
+          <Info label="Prontos pág." value={campaignPageReadyCount.toString()} />
+          <Info label={activeCampaignResumo ? 'Aguardando resposta' : 'Aguardando pág.'} value={(activeCampaignResumo?.enviados ?? campaignCounts.enviado).toString()} />
+          <Info label={activeCampaignResumo ? 'Responderam' : 'Responderam pág.'} value={(activeCampaignResumo?.responderam ?? campaignCounts.respondeu).toString()} />
+          <Info label={activeCampaignResumo ? 'Propostas' : 'Propostas pág.'} value={(activeCampaignResumo?.viraramOrcamento ?? campaignCounts.virou_orcamento).toString()} />
+          <Info label={activeCampaignResumo ? 'Ganhos' : 'Ganhos pág.'} value={(activeCampaignResumo?.viraramVenda ?? campaignCounts.ganhou).toString()} />
           <Info label="Receita atribuida" value={money(activeCampaignResumo?.receitaAtribuida ?? 0)} />
           <Info label="Custo" value={money(activeCampaignResumo?.custoEstimado ?? numberFromInput(campaignCost))} />
           <Info label="ROI" value={`${activeCampaignResumo?.roiPercent ?? 0}%`} />
           <Info label="Meta" value={money(activeCampaignResumo?.metaReceita ?? numberFromInput(campaignRevenueGoal))} />
-          <Info label="Perdidos" value={(activeCampaignResumo?.perdidos ?? campaignCounts.perdido).toString()} />
-          <Info label="Bloqueados" value={campaignQuality.bloqueados.toString()} />
-          <Info label="Sem WhatsApp" value={campaignQuality.semWhatsapp.toString()} />
-          <Info label="Opt-out" value={campaignQuality.optOut.toString()} />
+          <Info label={activeCampaignResumo ? 'Perdidos' : 'Perdidos pág.'} value={(activeCampaignResumo?.perdidos ?? campaignCounts.perdido).toString()} />
+          <Info label="Bloq. pág." value={campaignQuality.bloqueados.toString()} />
+          <Info label="Sem WhatsApp pág." value={campaignQuality.semWhatsapp.toString()} />
+          <Info label="Opt-out pág." value={campaignQuality.optOut.toString()} />
         </div>
       </div>
       <CampanhasInbox
