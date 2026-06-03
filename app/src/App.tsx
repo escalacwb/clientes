@@ -3903,7 +3903,7 @@ function Cockpit({
       title: oportunidade.clienteNome,
       label: opportunityTypeLabel(oportunidade.tipo),
       subtitle: `Prioridade ${oportunidade.prioridade}`,
-      detail: oportunidade.proximaAcao || oportunidade.motivo,
+      detail: opportunityRoutineDetail(oportunidade),
       clienteId: oportunidade.clienteId,
       oportunidade,
     })),
@@ -3915,7 +3915,7 @@ function Cockpit({
     if (item.kind === 'tarefa') return item.sla.tone === 'danger' ? 'Tarefa atrasada ou de alta prioridade.' : 'Follow-up planejado para agora.'
     if (item.kind === 'orcamento') return 'Proposta aberta passou da validade e precisa de retomada.'
     if (item.kind === 'lead') return 'Lista externa ainda nao qualificada para virar cliente ativo.'
-    return item.oportunidade.proximaAcao ? `Oportunidade: ${item.oportunidade.proximaAcao}` : `Oportunidade detectada: ${item.oportunidade.motivo}`
+    return opportunityRoutineReason(item.oportunidade)
   }
 
   async function complete(id: string) {
@@ -5441,7 +5441,7 @@ function opportunityTypeLabel(type: string) {
   const labels: Record<string, string> = {
     sem_vendedor: 'Sem vendedor',
     rodobens_primeiro_contato: 'Clientes sem cadastro',
-    cliente_risco_180: 'Risco 180d',
+    cliente_risco_180: 'Cliente inativo',
     recompra_90: 'Recompra 90d',
     alto_valor_sem_contato: 'Alto valor',
     orcamento_aberto: 'Orc. aberto',
@@ -5449,6 +5449,20 @@ function opportunityTypeLabel(type: string) {
     sem_whatsapp: 'Sem WhatsApp',
   }
   return labels[type] ?? type.replaceAll('_', ' ')
+}
+
+function opportunityRoutineReason(oportunidade: Oportunidade) {
+  if (oportunidade.tipo === 'cliente_risco_180') return 'Oportunidade: cliente sem compra recente.'
+  if (oportunidade.tipo === 'rodobens_primeiro_contato') return 'Oportunidade: lista externa para qualificar.'
+  if (oportunidade.tipo === 'sem_vendedor') return 'Oportunidade: cliente precisa ser distribuido para uma carteira.'
+  return oportunidade.proximaAcao ? `Oportunidade: ${oportunidade.proximaAcao}` : `Oportunidade detectada: ${oportunidade.motivo}`
+}
+
+function opportunityRoutineDetail(oportunidade: Oportunidade) {
+  if (oportunidade.tipo === 'cliente_risco_180') return 'Mais de 180 dias sem compra. Retome o contato ou monte uma proposta objetiva.'
+  if (oportunidade.tipo === 'rodobens_primeiro_contato') return oportunidade.motivo || 'Validar contato e decidir se vira cliente ativo.'
+  if (oportunidade.tipo === 'sem_vendedor') return 'Distribuir carteira antes de iniciar rotina comercial.'
+  return oportunidade.proximaAcao || oportunidade.motivo
 }
 
 function pipelineStageLabel(stage: OportunidadeEstagio) {
