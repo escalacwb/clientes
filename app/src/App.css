@@ -6158,12 +6158,22 @@ h3 {
   font-weight: 800;
 }
 
-.campaign-contact-modal input {
+.campaign-contact-modal input,
+.campaign-contact-modal select,
+.campaign-contact-modal textarea {
   min-height: 38px;
   border: 1px solid #cfd8d3;
   border-radius: 8px;
+  background: #ffffff;
+  color: #17211f;
   padding: 0 10px;
   font: inherit;
+}
+
+.campaign-contact-modal textarea {
+  min-height: 96px;
+  padding: 10px;
+  resize: vertical;
 }
 
 .compact-select {

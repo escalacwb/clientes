@@ -2385,6 +2385,55 @@ function App() {
               setTarefas((current) => [created, ...current])
               return created
             }}
+            onUpdateCampaignResult={async (item, status, result) => {
+              const updated = await upsertCampanhaEnvio({
+                campanhaId: item.campanhaId,
+                campanhaNome: item.campanhaNome,
+                clienteId: item.clienteId,
+                vendedorId: item.vendedorId ?? session.id,
+                criadaPor: session.id,
+                telefone: item.telefone,
+                mensagemFinal: item.mensagemFinal,
+                status,
+              })
+              await createInteracao({
+                clienteId: item.clienteId,
+                vendedorId: item.vendedorId ?? session.id,
+                canal: 'Campanha',
+                tipo: 'campanha_inbox',
+                resumo: result.resumo || campaignSummary(status, item.mensagemFinal),
+                resultado: campaignStatusLabel(status),
+                proximaAcao: result.proximaAcao || undefined,
+                dataProximaAcao: result.dataProximaAcao || undefined,
+                campanhaId: item.campanhaId,
+              })
+              const nextStatus = clientStatusFromCampaignStatus(status)
+              if (nextStatus) {
+                await updateClienteComercial(item.clienteId, { status: nextStatus })
+                setClientes((current) => current.map((cliente) => cliente.id === item.clienteId ? { ...cliente, status: nextStatus } : cliente))
+              }
+              if (result.proximaAcao && result.dataProximaAcao) {
+                const created = await createTarefa({
+                  clienteId: item.clienteId,
+                  vendedorId: item.vendedorId ?? session.id,
+                  titulo: result.proximaAcao,
+                  descricao: `Follow-up da campanha ${item.campanhaNome ?? item.campanhaId}. Resultado: ${campaignStatusLabel(status)}.`,
+                  dataVencimento: result.dataProximaAcao,
+                  prioridade: campaignTaskPriority(status),
+                  origem: `campanha:${item.campanhaId}:resultado:${status}`,
+                })
+                setCockpitTarefas((current) => [created, ...current])
+                setTarefas((current) => [created, ...current])
+              }
+              setCockpitCampanhas((current) => current.map((row) => row.id === item.id
+                ? { ...item, ...updated, clienteNome: item.clienteNome, clienteCidade: item.clienteCidade, clienteUf: item.clienteUf }
+                : row,
+              ))
+              setCampanhaInboxItems((current) => current.map((row) => row.id === item.id
+                ? { ...item, ...updated, clienteNome: item.clienteNome, clienteCidade: item.clienteCidade, clienteUf: item.clienteUf }
+                : row,
+              ))
+            }}
             onRunFollowupAutomations={async () => {
               const result = await runFollowupAutomations()
               setCockpitRefreshKey((current) => current + 1)
@@ -3776,6 +3825,7 @@ function Cockpit({
   onCompleteTask,
   onRescheduleTask,
   onCreateTask,
+  onUpdateCampaignResult,
   onRunFollowupAutomations,
 }: {
   currentUser: SessaoUsuario
@@ -3796,6 +3846,7 @@ function Cockpit({
   onCompleteTask: (id: string) => Promise<void>
   onRescheduleTask: (id: string, dataVencimento: string, motivo: string) => Promise<void>
   onCreateTask: (task: TarefaInput) => Promise<Tarefa>
+  onUpdateCampaignResult: (item: CampanhaInboxItem, status: CampanhaEnvioStatus, result: CampaignInboxResultForm) => Promise<void>
   onRunFollowupAutomations: () => Promise<{ total: number; orcamentos: number; campanhas: number }>
 }) {
   const [busyTaskId, setBusyTaskId] = useState('')
@@ -3807,6 +3858,10 @@ function Cockpit({
   const [slaAlertLimit, setSlaAlertLimit] = useState(3)
   const [isRunningFollowups, setIsRunningFollowups] = useState(false)
   const [followupAutomationMessage, setFollowupAutomationMessage] = useState('')
+  const [campaignResultTarget, setCampaignResultTarget] = useState<CampanhaInboxItem | null>(null)
+  const [campaignResultStatus, setCampaignResultStatus] = useState<CampanhaEnvioStatus>('respondeu')
+  const [campaignResultForm, setCampaignResultForm] = useState<CampaignInboxResultForm>({ resumo: '', proximaAcao: '', dataProximaAcao: '' })
+  const [busyCampaignId, setBusyCampaignId] = useState('')
   const todayTasks = uniqueBy(tarefas.filter((tarefa) => daysSince(tarefa.dataVencimento) >= 0), (tarefa) => tarefa.id)
   const contactFollowups = uniqueBy(
     tarefas.filter((tarefa) => isCommercialFollowupTask(tarefa)),
@@ -3981,6 +4036,25 @@ function Cockpit({
       : item.detail
     return item.detail
   }
+
+  function openCampaignResult(item: CampanhaInboxItem, status?: CampanhaEnvioStatus) {
+    const nextStatus = status ?? (item.status === 'virou_orcamento' ? 'virou_orcamento' : item.status === 'comprar_depois' ? 'comprar_depois' : 'respondeu')
+    setCampaignResultTarget(item)
+    setCampaignResultStatus(nextStatus)
+    setCampaignResultForm(campaignResultDefaults(nextStatus, item.campanhaNome ?? item.campanhaId))
+  }
+
+  async function submitCampaignResult() {
+    if (!campaignResultTarget) return
+    setBusyCampaignId(campaignResultTarget.id)
+    try {
+      await onUpdateCampaignResult(campaignResultTarget, campaignResultStatus, campaignResultForm)
+      setCampaignResultTarget(null)
+    } finally {
+      setBusyCampaignId('')
+    }
+  }
+
   const actionButtons = (item: typeof nextActions[number], compact = false) => (
     <>
       <button className="button" type="button" onClick={() => onOpenClient(item.clienteId)}>{compact ? 'Ficha' : 'Abrir ficha'}</button>
@@ -3991,12 +4065,21 @@ function Cockpit({
               Abrir conversa
             </a>
           )}
+          {['respondeu', 'virou_orcamento'].includes(item.envio.status) && (
+            <button
+              className="button primary"
+              type="button"
+              onClick={() => onOpenBudget(item.clienteId, { kind: 'campanha', sourceId: item.envio.campanhaId, label: item.envio.campanhaNome ?? 'Campanha' })}
+            >
+              {item.envio.status === 'virou_orcamento' ? 'Criar proposta' : 'Nova proposta'}
+            </button>
+          )}
           <button
-            className="button primary"
+            className={item.envio.status === 'enviado' ? 'button primary' : 'button'}
             type="button"
-            onClick={() => onOpenBudget(item.clienteId, { kind: 'campanha', sourceId: item.envio.campanhaId, label: item.envio.campanhaNome ?? 'Campanha' })}
+            onClick={() => openCampaignResult(item.envio, item.envio.status === 'enviado' ? 'respondeu' : item.envio.status)}
           >
-            {item.envio.status === 'virou_orcamento' ? 'Criar proposta' : 'Nova proposta'}
+            Registrar resultado
           </button>
         </>
       )}
@@ -4556,6 +4639,71 @@ function Cockpit({
             ))}
           </div>
         </section>
+      )}
+      {campaignResultTarget && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setCampaignResultTarget(null)}>
+          <div className="campaign-contact-modal" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <span>
+                <strong>Registrar resultado do contato</strong>
+                <small>{campaignResultTarget.clienteNome} - {campaignResultTarget.campanhaNome ?? 'Campanha'}</small>
+              </span>
+              <button className="button" type="button" onClick={() => setCampaignResultTarget(null)}>Fechar</button>
+            </div>
+            <label>
+              Resultado
+              <select
+                value={campaignResultStatus}
+                onChange={(event) => {
+                  const status = event.target.value as CampanhaEnvioStatus
+                  setCampaignResultStatus(status)
+                  setCampaignResultForm(campaignResultDefaults(status, campaignResultTarget.campanhaNome ?? campaignResultTarget.campanhaId))
+                }}
+              >
+                <option value="respondeu">Respondeu</option>
+                <option value="virou_orcamento">Pediu orcamento</option>
+                <option value="comprar_depois">Comprar depois</option>
+                <option value="nao_respondeu">Sem resposta</option>
+                <option value="perdido">Perdido</option>
+                <option value="nao_contatar">Nao contatar</option>
+              </select>
+            </label>
+            <label>
+              Resumo do contato
+              <textarea
+                value={campaignResultForm.resumo}
+                onChange={(event) => setCampaignResultForm((current) => ({ ...current, resumo: event.target.value }))}
+                placeholder="Ex.: respondeu, pediu 295/80 para cotar; prefere retorno a tarde."
+              />
+            </label>
+            <div className="inline-grid two">
+              <label>
+                Proxima acao
+                <input
+                  value={campaignResultForm.proximaAcao}
+                  onChange={(event) => setCampaignResultForm((current) => ({ ...current, proximaAcao: event.target.value }))}
+                  placeholder="Ex.: Enviar proposta"
+                />
+              </label>
+              <label>
+                Data
+                <input
+                  type="date"
+                  value={campaignResultForm.dataProximaAcao}
+                  onChange={(event) => setCampaignResultForm((current) => ({ ...current, dataProximaAcao: event.target.value }))}
+                />
+              </label>
+            </div>
+            <button
+              className="button primary"
+              type="button"
+              disabled={!campaignResultForm.resumo.trim() || busyCampaignId === campaignResultTarget.id}
+              onClick={submitCampaignResult}
+            >
+              {busyCampaignId === campaignResultTarget.id ? 'Salvando...' : 'Salvar resultado'}
+            </button>
+          </div>
+        </div>
       )}
       {rescheduleTarget && (
         <section className="floating-panel">
