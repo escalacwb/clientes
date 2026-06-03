@@ -11,7 +11,7 @@ export type ReferenceFilePreview = {
   label: string
   fileName: string
   required: boolean
-  status: 'ok' | 'missing' | 'unexpected'
+  status: 'ok' | 'missing' | 'unexpected' | 'invalid'
   totalRows: number
   clientes: number
   ordens: number
@@ -62,18 +62,23 @@ export async function previewReferenceImportFiles(files: FileList | File[]): Pro
     const file = recognized.get(spec.kind)
     if (!file) return emptyPreview(spec)
     const rows = readHtmlRows(await readLatin1(file))
+    if (!matchesExpectedContent(spec.kind, rows)) {
+      return invalidPreview(spec, file.name, rows)
+    }
     return previewRows(spec, file.name, rows)
   }))
   const requiredMissing = previews.filter((file) => file.required && file.status === 'missing')
+  const invalidFiles = previews.filter((file) => file.status === 'invalid')
   const avisos = [
     ...requiredMissing.map((file) => `Arquivo obrigatorio ausente: ${file.label}.`),
+    ...invalidFiles.map((file) => `${file.fileName} tem nome de ${file.label}, mas o cabecalho/conteudo nao bate com esse relatorio.`),
     ...unexpectedFiles.map((fileName) => `Arquivo ignorado por nome fora do padrao: ${fileName}.`),
     ...previews.flatMap((file) => file.avisos),
   ]
 
   return {
     arquivoNome: buildPackageName(previews),
-    ready: requiredMissing.length === 0 && previews.some((file) => file.itens > 0),
+    ready: requiredMissing.length === 0 && invalidFiles.length === 0 && previews.some((file) => file.itens > 0),
     totalRows: sum(previews, 'totalRows'),
     clientesDetectados: sum(previews, 'clientes'),
     ordensDetectadas: sum(previews, 'ordens'),
@@ -117,6 +122,21 @@ export async function previewCatalogPriceFiles(files: FileList | File[]): Promis
 function identifyReferenceFile(fileName: string) {
   const normalized = normalizeKey(fileName.replace(/\.[^.]+$/, ''))
   return expectedFiles.find((spec) => spec.aliases.some((alias) => normalized.includes(normalizeKey(alias))))
+}
+
+function matchesExpectedContent(kind: ReferenceFileKind, rows: string[][]) {
+  const normalizedRows = rows.map((row) => normalizeKey(row.join(' ')))
+  if (kind === 'listaclientessistema') return normalizedRows.some((row) => row.includes('itemcodigonomefantasiavendedor'))
+  if (kind === 'carrosatendidos') return normalizedRows.some((row) => row.includes('itempedidonotadatacarroplacachassiclientevalor'))
+  if (kind === 'vendasprodutos' || kind === 'vendasservicos') {
+    const hasSalesHeader = normalizedRows.some((row) => row.includes('emissaonotapedido') && row.includes('vendedor'))
+    const hasClientGroups = rows.some((row) => /^.+?\s+\(\d{1,8}\)\s+CPF\/CNPJ/i.test(text(row[0])))
+    return hasSalesHeader && hasClientGroups
+  }
+  if (kind === 'precoprodutos' || kind === 'precoservicos') {
+    return normalizedRows.some((row) => row.includes('itemcodigodescricao') && row.includes('preco'))
+  }
+  return false
 }
 
 function previewRows(
@@ -224,6 +244,27 @@ function makePreview(
     placas: values.placas ?? 0,
     kms: values.kms ?? 0,
     avisos,
+  }
+}
+
+function invalidPreview(
+  spec: { kind: ReferenceFileKind; label: string; required: boolean },
+  fileName: string,
+  rows: string[][],
+): ReferenceFilePreview {
+  return {
+    kind: spec.kind,
+    label: spec.label,
+    fileName,
+    required: spec.required,
+    status: 'invalid',
+    totalRows: rows.length,
+    clientes: 0,
+    ordens: 0,
+    itens: 0,
+    placas: 0,
+    kms: 0,
+    avisos: [`Formato invalido para ${spec.label}: confira se o relatorio exportado e o mesmo modelo dos arquivos de referencia.`],
   }
 }
 

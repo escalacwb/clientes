@@ -100,13 +100,15 @@ Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return json({ ok: true })
   if (request.method !== 'POST') return json({ error: 'Metodo nao permitido.' }, 405)
 
+  let activeImportacaoId = ''
+  let service: ReturnType<typeof createClient> | null = null
   try {
     const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '')
     if (!token) return json({ error: 'Sessao ausente.' }, 401)
 
     const supabaseUrl = requiredEnv('SUPABASE_URL')
     const serviceKey = requiredEnv('SUPABASE_SERVICE_ROLE_KEY')
-    const service = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
+    service = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
 
     await assertAdmin(token, service)
 
@@ -121,6 +123,7 @@ Deno.serve(async (request) => {
       if (!catalogRows.length) return json({ error: 'Nenhum produto ou servico com preco foi reconhecido.' }, 400)
 
       const importacao = await createCatalogImportacao(service, parsed, catalogRows)
+      activeImportacaoId = importacao.id
       const arquivos = await registerFiles(service, importacao.id, parsed)
       const catalogo = await upsertCatalogo(service, catalogRows, arquivos)
 
@@ -182,6 +185,7 @@ Deno.serve(async (request) => {
     ]
 
     const importacao = await createImportacao(service, parsed, movimentosComVeiculo)
+    activeImportacaoId = importacao.id
     const arquivos = await registerFiles(service, importacao.id, parsed)
     const appUsers = await fetchAppUsers(service)
     const clienteIndex = await upsertClientes(service, parsed.clientes, appUsers)
@@ -220,6 +224,14 @@ Deno.serve(async (request) => {
     })
   } catch (error) {
     const status = error instanceof HttpError ? error.status : 500
+    if (activeImportacaoId && service) {
+      await service
+        .from('importacoes')
+        .update({
+          status: 'erro',
+        })
+        .eq('id', activeImportacaoId)
+    }
     return json({ error: error instanceof Error ? error.message : 'Erro inesperado na importacao.' }, status)
   }
 })
@@ -258,9 +270,12 @@ async function parseFiles(files: File[]) {
   for (const file of files) {
     const kind = identifyFile(file.name)
     if (!kind) continue
-    parsed.files.set(kind, file)
     const buffer = await file.arrayBuffer()
     const rows = readHtmlRows(readLatin1(buffer))
+    if (!matchesExpectedContent(kind, rows)) {
+      throw new HttpError(`${file.name} tem nome de ${kind}, mas o cabecalho/conteudo nao bate com o modelo esperado.`, 400)
+    }
+    parsed.files.set(kind, file)
     parsed.fileStats.set(kind, { hash: await sha256(buffer), totalRows: rows.length })
     if (kind === 'listaclientessistema') parsed.clientes = parseClientes(rows)
     if (kind === 'carrosatendidos') parsed.carros = parseCarros(rows)
@@ -391,6 +406,7 @@ function parseMovimento(rows: string[][], tipo: 'produto' | 'servico'): Moviment
     }
 
     if (!cliente || !movimento || !/^\d+$/.test(first) || cells.length < 7) continue
+    if (!isMovementItemDataRow(cells)) continue
     const item: MovimentoRow = {
       tipo,
       codigo_cliente_erp: cliente.codigo_erp,
@@ -416,6 +432,30 @@ function parseMovimento(rows: string[][], tipo: 'produto' | 'servico'): Moviment
     orderItems.push(item)
   }
   return items
+}
+
+function matchesExpectedContent(kind: ReferenceKind, rows: string[][]) {
+  const normalizedRows = rows.map((row) => normalizeKey(row.join(' ')))
+  if (kind === 'listaclientessistema') return normalizedRows.some((row) => row.includes('itemcodigonomefantasiavendedor'))
+  if (kind === 'carrosatendidos') return normalizedRows.some((row) => row.includes('itempedidonotadatacarroplacachassiclientevalor'))
+  if (kind === 'vendasprodutos' || kind === 'vendasservicos') {
+    const hasMovementHeader = normalizedRows.some((row) => row.includes('emissaonotapedido') && row.includes('vendedor'))
+    const hasClientGroups = rows.some((row) => /^.+?\s+\(\d{1,8}\)\s+CPF\/CNPJ/i.test(text(row[0])))
+    return hasMovementHeader && hasClientGroups
+  }
+  if (kind === 'precoprodutos' || kind === 'precoservicos') {
+    return normalizedRows.some((row) => row.includes('itemcodigodescricao') && row.includes('preco'))
+  }
+  return false
+}
+
+function isMovementItemDataRow(cells: string[]) {
+  const quantity = number(cells[5])
+  const unit = number(cells[6])
+  const total = number(cells[7])
+  if (!quantity || quantity < 0 || quantity > 10000) return false
+  if (unit < 0 || total < 0) return false
+  return unit > 0 || total > 0
 }
 
 function parseListaPreco(rows: string[][], tipo: 'produto' | 'servico'): CatalogRow[] {

@@ -13780,6 +13780,12 @@ function inDateRange(value: string | undefined, startDate: string, endDate: stri
   return true
 }
 
+function referenceFileStatusLabel(status: string, fileName: string, required: boolean) {
+  if (status === 'ok') return fileName
+  if (status === 'invalid') return `Formato invalido: ${fileName}`
+  return required ? 'Obrigatorio ausente' : 'Opcional ausente'
+}
+
 const businessNameTerms = [
   'LTDA',
   'EIRELI',
@@ -14850,7 +14856,7 @@ function Importacoes({
               {catalogPricePreview.files.map((file) => (
                 <div className="table-row reference-file" key={file.kind}>
                   <span>{file.label}</span>
-                  <span>{file.status === 'ok' ? file.fileName : 'Opcional ausente'}</span>
+                  <span>{referenceFileStatusLabel(file.status, file.fileName, false)}</span>
                   <span>{file.totalRows}</span>
                   <span>{file.clientes}</span>
                   <span>{file.ordens}</span>
@@ -14929,7 +14935,7 @@ function Importacoes({
               {referencePreview.files.map((file) => (
                 <div className="table-row reference-file" key={file.kind}>
                   <span>{file.label}</span>
-                  <span>{file.status === 'ok' ? file.fileName : file.required ? 'Obrigatorio ausente' : 'Opcional ausente'}</span>
+                  <span>{referenceFileStatusLabel(file.status, file.fileName, file.required)}</span>
                   <span>{file.totalRows}</span>
                   <span>{file.clientes}</span>
                   <span>{file.ordens}</span>
