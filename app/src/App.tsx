@@ -15428,29 +15428,36 @@ function Campanhas({
           <strong>Campanhas salvas</strong>
           <small>{activeCampanhaId ? `Aberta agora: ${saveName || activeCampanhaId.slice(0, 8)}` : 'Selecione uma campanha para continuar de onde parou.'}</small>
         </div>
-        <div className="campaign-saved-list">
-          <button className={!activeCampanhaId ? 'button primary' : 'button'} type="button" onClick={() => {
-            setActiveCampanhaId('')
-            setSaveName('')
-            setCampaignObjective('')
-            setMensagemModelo(campanhaSegmentos[0].template)
-            setSegmentoId('selecionados')
-            setPublicoFiltros({})
-            setQuery('')
-            setPage(1)
-          }}>
-            Nova
-          </button>
-          {campanhasSalvas.slice(0, 8).map((campanha) => (
-            <button
-              className={campanha.id === activeCampanhaId ? 'button primary' : 'button'}
-              type="button"
-              key={campanha.id}
-              onClick={() => applySavedCampaign(campanha.id)}
-            >
-              {campanha.nome}
+        <div className="campaign-saved-actions">
+          <div className="campaign-saved-list">
+            <button className={!activeCampanhaId ? 'button primary' : 'button'} type="button" onClick={() => {
+              setActiveCampanhaId('')
+              setSaveName('')
+              setCampaignObjective('')
+              setMensagemModelo(campanhaSegmentos[0].template)
+              setSegmentoId('selecionados')
+              setPublicoFiltros({})
+              setQuery('')
+              setPage(1)
+            }}>
+              Nova
             </button>
-          ))}
+            {campanhasSalvas.slice(0, 8).map((campanha) => (
+              <button
+                className={campanha.id === activeCampanhaId ? 'button primary' : 'button'}
+                type="button"
+                key={campanha.id}
+                onClick={() => applySavedCampaign(campanha.id)}
+              >
+                {campanha.nome}
+              </button>
+            ))}
+          </div>
+          {activeCampanhaId && (
+            <button className="button danger" type="button" onClick={() => void deleteCurrentCampaign()} disabled={isSaving}>
+              Excluir campanha
+            </button>
+          )}
         </div>
       </section>
       <section className="campaign-builder-stage campaign-objective-stage">

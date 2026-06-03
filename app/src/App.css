@@ -5561,6 +5561,21 @@ h3 {
   gap: 8px;
 }
 
+.campaign-saved-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.campaign-saved-actions .campaign-saved-list {
+  min-width: 0;
+}
+
+.campaign-saved-actions > .button {
+  flex: 0 0 auto;
+}
+
 .campaign-report {
   border: 1px solid #e0e6df;
   border-radius: 8px;
