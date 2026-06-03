@@ -12094,10 +12094,10 @@ function PatioFeedback({
       </div>
       <div className="patio-internal-tabs">
         <button className={ageFilter === 'recentes' ? 'active' : ''} type="button" onClick={() => onAgeFilterChange('recentes')}>
-          Recentes <span>{ageFilter === 'recentes' ? total : ''}</span>
+          Recentes {ageFilter === 'recentes' && <span>{total}</span>}
         </button>
         <button className={ageFilter === 'antigos' ? 'active warn' : ''} type="button" onClick={() => onAgeFilterChange('antigos')}>
-          Antigos <span>{ageFilter === 'antigos' ? total : ''}</span>
+          Antigos {ageFilter === 'antigos' && <span>{total}</span>}
         </button>
       </div>
       <div className="patio-feedback-summary">
