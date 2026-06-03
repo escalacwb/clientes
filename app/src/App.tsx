@@ -9493,6 +9493,12 @@ function numberLabel(value: number) {
   return value.toLocaleString('pt-BR')
 }
 
+const PATIO_SUSPICIOUS_KM_MEDIA = 1000
+
+function isSuspiciousPatioKmMedia(media?: number) {
+  return Boolean(media && media > PATIO_SUSPICIOUS_KM_MEDIA)
+}
+
 function patioQuantidadeLabel(value?: number | null) {
   if (!value || value <= 0) return 'Nao informada'
   return numberLabel(value)
@@ -12161,7 +12167,7 @@ function PatioRevisao({
       </div>
       <div className="patio-action-guide">
         <strong>Por que aparece aqui?</strong>
-        <span>O sistema cruza ultima visita, KM medio por dia e tempo parado. Use o contato recomendado, confirme a KM atual e marque contato feito para medir retorno da revisao proativa.</span>
+        <span>O sistema cruza ultima visita, KM medio por dia e tempo parado. Medias acima de {numberLabel(PATIO_SUSPICIOUS_KM_MEDIA)} km/dia aparecem como validar KM. Use o contato recomendado, confirme a KM atual e marque contato feito para medir retorno da revisao proativa.</span>
       </div>
       {isLoading && <div className="empty-state">Carregando revisoes...</div>}
       {!isLoading && items.length === 0 && <div className="empty-state">Nenhum veiculo encontrado com esses criterios.</div>}
@@ -12169,8 +12175,9 @@ function PatioRevisao({
         {items.map((item) => {
           const motoristaUrl = waMeUrl(item.contatoMotorista, buildPatioRevisaoMessage(item, 'motorista'))
           const gestorUrl = waMeUrl(item.contatoRecomendado, buildPatioRevisaoMessage(item, 'gestor'))
+          const mediaSuspeita = isSuspiciousPatioKmMedia(item.mediaKmDiaria)
           return (
-            <article className="panel subtle" key={item.patioVeiculoId}>
+            <article className={`panel subtle patio-revisao-card${mediaSuspeita ? ' media-suspeita' : ''}`} key={item.patioVeiculoId}>
               <div className="panel-header">
                 <div>
                   <h3>{item.placa ?? 'Sem placa'} - {item.clienteNome}</h3>
@@ -12190,11 +12197,19 @@ function PatioRevisao({
                   <button className="button" type="button" onClick={() => onOpenClient(item.clienteId)}>Ficha</button>
                 </div>
               </div>
+              {mediaSuspeita && (
+                <div className="patio-warning">
+                  <strong>Validar KM antes do contato.</strong>
+                  <span>Media de {numberLabel(Math.round(item.mediaKmDiaria ?? 0))} km/dia parece alta. Ajuste a media ou confira o KM atual para evitar abordagem errada.</span>
+                </div>
+              )}
               <div className="status-list">
                 <div className="status-row"><span>Motorista/contato</span><strong>{item.contatoNome || item.nomeMotorista || 'Nao informado'}</strong></div>
                 <div className="status-row"><span>Ultima visita</span><strong>{dateLabel(item.ultimoAtendimentoEm)}</strong></div>
+                <div className="status-row"><span>Media diaria</span><strong>{item.mediaKmDiaria ? `${numberLabel(Math.round(item.mediaKmDiaria))} km/dia` : 'Sem media'}</strong></div>
                 <div className="status-row"><span>Estimativa atual</span><strong>{item.ultimoKm ? `${numberLabel(item.ultimoKm + item.kmEstimadoDesdeVisita)} km` : 'Sem KM base'}</strong></div>
                 <div className="status-row"><span>Motivo da acao</span><strong>{mode === 'km' ? `Passou de ${numberLabel(kmMin)} km estimados` : `Mais de ${diasMin} dias sem visita`}</strong></div>
+                <div className="status-row"><span>Confianca do calculo</span><strong>{mediaSuspeita ? 'Validar media' : 'Media normal'}</strong></div>
               </div>
               <label className="wide-field">
                 Observacao do contato

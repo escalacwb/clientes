@@ -4511,6 +4511,28 @@ h3 {
   flex: 0 0 auto;
 }
 
+.patio-revisao-card.media-suspeita {
+  border-color: #f2c46d;
+  background: #fffaf0;
+}
+
+.patio-warning {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  border: 1px solid #f2c46d;
+  border-radius: 8px;
+  background: #fff6df;
+  color: #5c4100;
+  margin: 10px 0;
+  padding: 10px;
+}
+
+.patio-warning span {
+  color: #6a551c;
+}
+
 .management-loss-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
