@@ -12308,6 +12308,11 @@ function PatioRevisao({
         </label>
       </div>
       {isLoading && <div className="empty-state">Carregando revisoes...</div>}
+      {!isLoading && items.length > 0 && (
+        <div className="patio-page-scope-note">
+          <strong>{items.length}</strong> veiculos nesta pagina de {numberLabel(total)} encontrados. As abas abaixo classificam somente os itens carregados agora.
+        </div>
+      )}
       {!isLoading && items.length === 0 && <div className="empty-state">Nenhum veiculo encontrado com esses criterios.</div>}
       {!isLoading && items.length > 0 && visibleItems.length === 0 && (
         <div className="empty-state">

@@ -4592,6 +4592,20 @@ h3 {
   font-weight: 600;
 }
 
+.patio-page-scope-note {
+  border: 1px solid #dce7e1;
+  border-radius: 8px;
+  background: #fbfdfa;
+  color: #5f706b;
+  font-size: 13px;
+  margin: 0 0 12px;
+  padding: 9px 10px;
+}
+
+.patio-page-scope-note strong {
+  color: #073c37;
+}
+
 .patio-revisao-card.media-suspeita {
   border-color: #f2c46d;
   background: #fffaf0;
