@@ -854,7 +854,7 @@ function App() {
           isSupabaseConfigured
             ? listOportunidadesPage({ page: 1, pageSize: 6, filter: 'ativas', tipo: 'todos' })
             : Promise.resolve({ oportunidades: [], total: 0 }),
-          listCampanhaInbox({ statuses: ['respondeu', 'virou_orcamento'], vendedorId, limit: 8 }),
+          listCampanhaInbox({ statuses: ['respondeu', 'virou_orcamento', 'enviado'], vendedorId, limit: 12 }),
           listTarefasSlaVendedor(),
         ])
 
@@ -3808,7 +3808,7 @@ function Cockpit({
     tarefas.filter((tarefa) => isCommercialFollowupTask(tarefa)),
     (tarefa) => tarefa.id,
   )
-    .sort((a, b) => b.prioridade - a.prioridade || a.dataVencimento.localeCompare(b.dataVencimento))
+    .sort((a, b) => taskCommercialPriority(b) - taskCommercialPriority(a) || a.dataVencimento.localeCompare(b.dataVencimento))
     .slice(0, 12)
   const openTaskClientIds = new Set([...tarefas, ...tarefasVencidas].filter((tarefa) => tarefa.status === 'aberta').map((tarefa) => tarefa.clienteId))
   const openBudgetClientIds = new Set(orcamentos.map((orcamento) => orcamento.clienteId))
@@ -3847,13 +3847,23 @@ function Cockpit({
     }))
     .sort((a, b) => b.atrasadas - a.atrasadas || b.tarefas - a.tarefas)
   const slaAlerts = workload.filter((item) => item.atrasadas >= slaAlertLimit || item.criticas >= slaAlertLimit)
+  const clienteContactById = new Map(clientes.map((cliente) => [cliente.id, cliente.whatsapp || cliente.telefone || '']))
+  const campaignWhatsappUrl = (envio: CampanhaInboxItem) => waMeUrl(envio.telefone, envio.mensagemFinal)
+  const taskWhatsappUrl = (tarefa: Tarefa) => {
+    const phone = clienteContactById.get(tarefa.clienteId)
+    if (!phone) return ''
+    const message = isCampaignCheckTask(tarefa)
+      ? `Ola, ${tarefa.clienteNome}. Tudo bem? Estou conferindo se voce viu minha mensagem anterior e se posso ajudar com alguma cotacao.`
+      : undefined
+    return waMeUrl(phone, message)
+  }
   const nextActionCandidates = [
     ...campanhas.map((envio) => ({
       id: `campanha-${envio.id}`,
       kind: 'campanha' as const,
-      priority: envio.status === 'respondeu' ? 160 : 145,
+      priority: campaignRoutinePriority(envio.status),
       title: envio.clienteNome,
-      label: envio.status === 'respondeu' ? 'Responder campanha' : 'Tratar campanha',
+      label: campaignRoutineLabel(envio.status),
       subtitle: `${envio.campanhaNome ?? 'Campanha'} - ${campaignStatusLabel(envio.status)}`,
       detail: envio.mensagemFinal,
       clienteId: envio.clienteId,
@@ -3911,7 +3921,7 @@ function Cockpit({
   const nextActions = uniqueBy(nextActionCandidates, (item) => item.clienteId).slice(0, 14)
   const primaryAction = nextActions[0]
   const actionReason = (item: typeof nextActions[number]) => {
-    if (item.kind === 'campanha') return item.envio.status === 'respondeu' ? 'Cliente respondeu campanha e precisa de retorno.' : 'Envio de campanha ainda precisa de tratamento.'
+    if (item.kind === 'campanha') return campaignRoutineReason(item.envio.status)
     if (item.kind === 'tarefa') return item.sla.tone === 'danger' ? 'Tarefa atrasada ou de alta prioridade.' : 'Follow-up planejado para agora.'
     if (item.kind === 'orcamento') return 'Proposta aberta passou da validade e precisa de retomada.'
     if (item.kind === 'lead') return 'Lista externa ainda nao qualificada para virar cliente ativo.'
@@ -4023,14 +4033,14 @@ function Cockpit({
             <button className="button" type="button" onClick={() => onOpenClient(primaryAction.clienteId)}>Abrir ficha</button>
             {primaryAction.kind === 'campanha' && (
               <>
-                {primaryAction.envio.telefone && (
+                {campaignWhatsappUrl(primaryAction.envio) && (
                   <a
                     className="button"
-                    href={`https://wa.me/${primaryAction.envio.telefone}?text=${encodeURIComponent(primaryAction.envio.mensagemFinal)}`}
+                    href={campaignWhatsappUrl(primaryAction.envio)}
                     target="_blank"
                     rel="noreferrer"
                   >
-                    WhatsApp
+                    Abrir conversa
                   </a>
                 )}
                 <button
@@ -4044,6 +4054,11 @@ function Cockpit({
             )}
             {primaryAction.kind === 'tarefa' && (
               <>
+                {taskWhatsappUrl(primaryAction.tarefa) && (
+                  <a className="button" href={taskWhatsappUrl(primaryAction.tarefa)} target="_blank" rel="noreferrer">
+                    Abrir conversa
+                  </a>
+                )}
                 <button className="button" type="button" onClick={() => openReschedule(primaryAction.tarefa)}>Reagendar</button>
                 <button className="button primary" type="button" disabled={busyTaskId === primaryAction.tarefa.id} onClick={() => complete(primaryAction.tarefa.id)}>
                   {busyTaskId === primaryAction.tarefa.id ? 'Concluindo...' : 'Concluir'}
@@ -4106,14 +4121,14 @@ function Cockpit({
                 <button className="button" type="button" onClick={() => onOpenClient(item.clienteId)}>Ficha</button>
                 {item.kind === 'campanha' && (
                   <>
-                    {item.envio.telefone && (
+                    {campaignWhatsappUrl(item.envio) && (
                       <a
                         className="button"
-                        href={`https://wa.me/${item.envio.telefone}?text=${encodeURIComponent(item.envio.mensagemFinal)}`}
+                        href={campaignWhatsappUrl(item.envio)}
                         target="_blank"
                         rel="noreferrer"
                       >
-                        WhatsApp
+                        Abrir conversa
                       </a>
                     )}
                     <button
@@ -4127,6 +4142,11 @@ function Cockpit({
                 )}
                 {item.kind === 'tarefa' && (
                   <>
+                    {taskWhatsappUrl(item.tarefa) && (
+                      <a className="button" href={taskWhatsappUrl(item.tarefa)} target="_blank" rel="noreferrer">
+                        Abrir conversa
+                      </a>
+                    )}
                     <button className="button" type="button" onClick={() => openReschedule(item.tarefa)}>Reagendar</button>
                     <button className="button primary" type="button" disabled={busyTaskId === item.tarefa.id} onClick={() => complete(item.tarefa.id)}>
                       {busyTaskId === item.tarefa.id ? 'Concluindo...' : 'Concluir'}
@@ -4251,6 +4271,11 @@ function Cockpit({
                 {tarefa.descricao && <p>{tarefa.descricao}</p>}
                 <div className="row-actions">
                   <button className="button" type="button" onClick={() => onOpenClient(tarefa.clienteId)}>Ficha</button>
+                  {taskWhatsappUrl(tarefa) && (
+                    <a className="button" href={taskWhatsappUrl(tarefa)} target="_blank" rel="noreferrer">
+                      Abrir conversa
+                    </a>
+                  )}
                   <button className="button" type="button" onClick={() => openReschedule(tarefa)}>Reagendar</button>
                   <button className="button primary" type="button" disabled={busyTaskId === tarefa.id} onClick={() => complete(tarefa.id)}>
                     {busyTaskId === tarefa.id ? 'Concluindo...' : 'Concluir'}
@@ -4281,6 +4306,11 @@ function Cockpit({
               <p>{envio.mensagemFinal}</p>
               <div className="row-actions">
                 <button className="button" type="button" onClick={() => onOpenClient(envio.clienteId)}>Ficha</button>
+                {campaignWhatsappUrl(envio) && (
+                  <a className="button" href={campaignWhatsappUrl(envio)} target="_blank" rel="noreferrer">
+                    Abrir conversa
+                  </a>
+                )}
                 <button
                   className="button primary"
                   type="button"
@@ -4316,6 +4346,11 @@ function Cockpit({
               {tarefa.descricao && <p>{tarefa.descricao}</p>}
               <div className="row-actions">
                 <button className="button" type="button" onClick={() => onOpenClient(tarefa.clienteId)}>Ficha</button>
+                {taskWhatsappUrl(tarefa) && (
+                  <a className="button" href={taskWhatsappUrl(tarefa)} target="_blank" rel="noreferrer">
+                    Abrir conversa
+                  </a>
+                )}
                 <button
                   className="button primary"
                   type="button"
@@ -9349,7 +9384,7 @@ function origemDetalheLabel(cliente: Cliente) {
 function campaignStatusLabel(status: CampanhaEnvioStatus) {
   const labels: Record<CampanhaEnvioStatus, string> = {
     pendente: 'Pendente',
-    enviado: 'Enviado',
+    enviado: 'Checar resposta',
     respondeu: 'Respondeu',
     nao_respondeu: 'Nao respondeu',
     virou_orcamento: 'Virou orcamento',
@@ -9358,6 +9393,43 @@ function campaignStatusLabel(status: CampanhaEnvioStatus) {
     nao_contatar: 'Nao contatar',
   }
   return labels[status] ?? status
+}
+
+function campaignRoutinePriority(status: CampanhaEnvioStatus) {
+  if (status === 'respondeu') return 170
+  if (status === 'virou_orcamento') return 165
+  if (status === 'enviado') return 142
+  if (status === 'pendente') return 118
+  if (status === 'nao_respondeu') return 82
+  return 55
+}
+
+function campaignRoutineLabel(status: CampanhaEnvioStatus) {
+  const labels: Record<CampanhaEnvioStatus, string> = {
+    pendente: 'Enviar campanha',
+    enviado: 'Checar resposta',
+    respondeu: 'Responder agora',
+    nao_respondeu: 'Retentar contato',
+    virou_orcamento: 'Montar proposta',
+    ganhou: 'Pos-venda',
+    perdido: 'Registrar perda',
+    nao_contatar: 'Nao contatar',
+  }
+  return labels[status]
+}
+
+function campaignRoutineReason(status: CampanhaEnvioStatus) {
+  const labels: Record<CampanhaEnvioStatus, string> = {
+    pendente: 'Mensagem ainda nao foi marcada como enviada.',
+    enviado: 'Mensagem ja foi enviada. Abra a conversa e confira se o cliente respondeu antes de marcar resultado.',
+    respondeu: 'Cliente respondeu campanha e precisa de retorno humano.',
+    nao_respondeu: 'Contato ficou sem resposta e pode precisar de nova tentativa.',
+    virou_orcamento: 'Cliente pediu cotacao ou demonstrou interesse em proposta.',
+    ganhou: 'Venda ganha pode precisar de pos-venda.',
+    perdido: 'Oportunidade perdida deve ter motivo registrado.',
+    nao_contatar: 'Cliente bloqueado para campanhas.',
+  }
+  return labels[status]
 }
 
 function contactTypeLabel(tipo?: string) {
@@ -15298,7 +15370,11 @@ function Campanhas({
   }
 
   async function openCampaignWhatsapp(cliente: Cliente, finalMessage: string, options?: { forceRegister?: boolean }) {
-    const waUrl = `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(finalMessage)}`
+    const waUrl = waMeUrl(cliente.whatsapp, finalMessage)
+    if (!waUrl) {
+      setCampaignError('Cliente sem WhatsApp valido para abrir conversa.')
+      return
+    }
     const whatsappWindow = window.open('about:blank', '_blank')
     if (whatsappWindow) whatsappWindow.opener = null
 
@@ -16419,6 +16495,12 @@ function isCommercialFollowupTask(tarefa: Tarefa) {
     'orcamento',
     'campanha',
   ].some((prefix) => origin.startsWith(prefix))
+}
+
+function isCampaignCheckTask(tarefa: Tarefa) {
+  const origin = (tarefa.origem ?? '').toLowerCase()
+  const text = `${tarefa.titulo} ${tarefa.descricao ?? ''}`.toLowerCase()
+  return origin.startsWith('campanha') || text.includes('campanha') || text.includes('whatsapp')
 }
 
 function taskCommercialPriority(tarefa: Tarefa) {
