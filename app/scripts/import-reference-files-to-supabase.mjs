@@ -32,12 +32,22 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: { persistSession: false },
 })
 
+const carrosFiles = [
+  REFERENCE_FILES.carrosAtendidos,
+  REFERENCE_FILES.carrosAtendidosService,
+  REFERENCE_FILES.carrosAtendidosTruck,
+].filter((file) => fs.existsSync(path.resolve(file)))
+
 const required = [
-  ['carrosatendidos', REFERENCE_FILES.carrosAtendidos],
   ['listaclientessistema', REFERENCE_FILES.clientesSistema],
   ['vendasprodutos', REFERENCE_FILES.vendasProdutos],
   ['vendasservicos', REFERENCE_FILES.vendasServicos],
 ]
+
+if (carrosFiles.length === 0) {
+  console.error(`Arquivo obrigatorio nao encontrado: ${REFERENCE_FILES.carrosAtendidos} ou relatorios service/truck`)
+  process.exit(1)
+}
 
 for (const [, file] of required) {
   if (!fs.existsSync(path.resolve(file))) {
@@ -48,7 +58,14 @@ for (const [, file] of required) {
 
 console.log('Lendo arquivos de referencia...')
 const clientes = take(parseClientesSistema(), limit)
-const carros = take(parseCarrosAtendidos(), limit)
+const carros = take(carrosFiles.flatMap((file) => {
+  const origemArquivo = inferCarrosFileOrigin(file)
+  return parseCarrosAtendidos(file).map((carro) => ({
+    ...carro,
+    origem: origemArquivo,
+    raw: { ...carro.raw, origem_arquivo: origemArquivo },
+  }))
+}), limit)
 const precosProdutos = take(parseListaPreco(REFERENCE_FILES.precoProdutos, 'produto'), limit)
 const precosServicos = take(parseListaPreco(REFERENCE_FILES.precoServicos, 'servico'), limit)
 const vendasProdutos = take(parseMovimento(REFERENCE_FILES.vendasProdutos, 'produto'), limit)
@@ -221,7 +238,7 @@ function buildClientesImportacao(clientes, movimentos, carros) {
 
 async function upsertImportacaoArquivos(importacaoId) {
   const specs = [
-    ['carrosatendidos', REFERENCE_FILES.carrosAtendidos, true, carros.length],
+    ...carrosFiles.map((file) => ['carrosatendidos', file, true, parseCarrosAtendidos(file).length]),
     ['listaclientessistema', REFERENCE_FILES.clientesSistema, true, clientes.length],
     ['vendasprodutos', REFERENCE_FILES.vendasProdutos, true, vendasProdutos.length],
     ['vendasservicos', REFERENCE_FILES.vendasServicos, true, vendasServicos.length],
@@ -251,6 +268,13 @@ async function upsertImportacaoArquivos(importacaoId) {
   if (error) throw error
 
   return new Map(data.map((item) => [item.tipo, item.id]))
+}
+
+function inferCarrosFileOrigin(file) {
+  const normalized = normalizeKey(path.basename(file))
+  if (normalized.includes('service')) return 'carrosatendidosservice'
+  if (normalized.includes('truck')) return 'carrosatendidostruck'
+  return 'carrosatendidos'
 }
 
 async function fetchAppUsers() {

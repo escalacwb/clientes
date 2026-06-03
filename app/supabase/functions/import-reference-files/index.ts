@@ -277,8 +277,8 @@ async function tentarFinalizarImportacaoDiaria(service: ReturnType<typeof create
 
 async function parseFiles(files: File[]) {
   const parsed = {
-    files: new Map<ReferenceKind, File>(),
-    fileStats: new Map<ReferenceKind, { hash: string; totalRows: number }>(),
+    files: new Map<ReferenceKind, File[]>(),
+    fileEntries: [] as Array<{ kind: ReferenceKind; file: File; hash: string; totalRows: number }>,
     clientes: [] as ClienteRow[],
     carros: [] as CarroRow[],
     vendasProdutos: [] as MovimentoRow[],
@@ -295,14 +295,22 @@ async function parseFiles(files: File[]) {
     if (!matchesExpectedContent(kind, rows)) {
       throw new HttpError(`${file.name} tem nome de ${kind}, mas o cabecalho/conteudo nao bate com o modelo esperado.`, 400)
     }
-    parsed.files.set(kind, file)
-    parsed.fileStats.set(kind, { hash: await sha256(buffer), totalRows: rows.length })
+    const hash = await sha256(buffer)
+    parsed.files.set(kind, [...(parsed.files.get(kind) ?? []), file])
+    parsed.fileEntries.push({ kind, file, hash, totalRows: rows.length })
     if (kind === 'listaclientessistema') parsed.clientes = parseClientes(rows)
-    if (kind === 'carrosatendidos') parsed.carros = parseCarros(rows)
+    if (kind === 'carrosatendidos') {
+      const origemArquivo = inferCarrosFileOrigin(file.name)
+      parsed.carros.push(...parseCarros(rows).map((carro) => ({
+        ...carro,
+        origem: origemArquivo,
+        raw: { ...carro.raw, origem_arquivo: origemArquivo },
+      })))
+    }
     if (kind === 'vendasprodutos') parsed.vendasProdutos = parseMovimento(rows, 'produto')
     if (kind === 'vendasservicos') parsed.vendasServicos = parseMovimento(rows, 'servico')
-    if (kind === 'precoprodutos') parsed.precosProdutos = parseListaPreco(rows, 'produto')
-    if (kind === 'precoservicos') parsed.precosServicos = parseListaPreco(rows, 'servico')
+    if (kind === 'precoprodutos') parsed.precosProdutos.push(...parseListaPreco(rows, 'produto'))
+    if (kind === 'precoservicos') parsed.precosServicos.push(...parseListaPreco(rows, 'servico'))
   }
 
   return parsed
@@ -328,6 +336,13 @@ function identifyFile(fileName: string): ReferenceKind | null {
     ['precoservicos', ['precoservicos', 'precosservicos', 'listaeprecoservicos', 'listaeprecoservicos', 'listaprecoservicos']],
   ]
   return aliases.find(([, names]) => names.some((name) => normalized.includes(normalizeKey(name))))?.[0] ?? null
+}
+
+function inferCarrosFileOrigin(fileName: string) {
+  const normalized = normalizeKey(fileName)
+  if (normalized.includes('service')) return 'carrosatendidosservice'
+  if (normalized.includes('truck')) return 'carrosatendidostruck'
+  return 'carrosatendidos'
 }
 
 function parseClientes(rows: string[][]): ClienteRow[] {
@@ -506,7 +521,7 @@ function buildClientesImportacao(clientes: ClienteRow[], movimentos: MovimentoRo
     email: '',
     email_comercial: '',
     tipo_cliente: '',
-    raw: { ...carro.raw, origem_arquivo: 'carrosatendidos' },
+    raw: { ...carro.raw, origem_arquivo: carro.raw.origem_arquivo || carro.origem || 'carrosatendidos' },
   }))
 
   movimentos.forEach((movimento) => add({
@@ -586,7 +601,7 @@ async function createImportacao(service: ReturnType<typeof createClient>, parsed
 }
 
 async function createCatalogImportacao(service: ReturnType<typeof createClient>, parsed: Awaited<ReturnType<typeof parseFiles>>, catalogRows: CatalogRow[]) {
-  const fileNames = [...parsed.files.values()].map((file) => file.name).join(' + ') || 'catalogo-precos'
+  const fileNames = parsed.fileEntries.map((entry) => entry.file.name).join(' + ') || 'catalogo-precos'
   const { data, error } = await service
     .from('importacoes')
     .insert({
@@ -607,13 +622,13 @@ async function createCatalogImportacao(service: ReturnType<typeof createClient>,
 }
 
 async function registerFiles(service: ReturnType<typeof createClient>, importacaoId: string, parsed: Awaited<ReturnType<typeof parseFiles>>) {
-  const payload = [...parsed.files.entries()].map(([tipo, file]) => ({
+  const payload = parsed.fileEntries.map(({ kind: tipo, file, hash, totalRows }) => ({
     importacao_id: importacaoId,
     tipo,
     arquivo_nome: file.name,
-    arquivo_hash: parsed.fileStats.get(tipo)?.hash ?? `${file.name}-${file.size}-${file.lastModified}`,
+    arquivo_hash: hash,
     obrigatorio: ['carrosatendidos', 'listaclientessistema', 'vendasprodutos', 'vendasservicos'].includes(tipo),
-    total_linhas: parsed.fileStats.get(tipo)?.totalRows ?? 0,
+    total_linhas: totalRows,
     processado_em: new Date().toISOString(),
   }))
   await upsert(service, 'importacao_arquivos', payload, 'tipo,arquivo_hash')

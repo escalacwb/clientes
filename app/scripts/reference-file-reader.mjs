@@ -3,6 +3,8 @@ import path from 'node:path'
 
 export const REFERENCE_FILES = {
   carrosAtendidos: '../arquivos referencia/carrosatendidos.xls',
+  carrosAtendidosService: '../arquivos referencia/carrosatendidosservice.xls',
+  carrosAtendidosTruck: '../arquivos referencia/carrosatendidostruck.xls',
   clientesSistema: '../arquivos referencia/listaclientessistema.xls',
   precoProdutos: '../arquivos referencia/precoprodutos.xls',
   precoServicos: '../arquivos referencia/precoservicos.xls',

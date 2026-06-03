@@ -46,7 +46,7 @@ const expectedFiles: Array<{ kind: ReferenceFileKind; label: string; required: b
 
 export async function previewReferenceImportFiles(files: FileList | File[]): Promise<ReferenceImportPreview> {
   const fileArray = Array.from(files)
-  const recognized = new Map<ReferenceFileKind, File>()
+  const recognized = new Map<ReferenceFileKind, File[]>()
   const unexpectedFiles: string[] = []
 
   fileArray.forEach((file) => {
@@ -55,17 +55,32 @@ export async function previewReferenceImportFiles(files: FileList | File[]): Pro
       unexpectedFiles.push(file.name)
       return
     }
-    recognized.set(spec.kind, file)
+    recognized.set(spec.kind, [...(recognized.get(spec.kind) ?? []), file])
   })
 
-  const previews = await Promise.all(expectedFiles.map(async (spec) => {
-    const file = recognized.get(spec.kind)
-    if (!file) return emptyPreview(spec)
-    const rows = readHtmlRows(await readLatin1(file))
-    if (!matchesExpectedContent(spec.kind, rows)) {
-      return invalidPreview(spec, file.name, rows)
+  const previews: ReferenceFilePreview[] = await Promise.all(expectedFiles.map(async (spec): Promise<ReferenceFilePreview> => {
+    const files = recognized.get(spec.kind) ?? []
+    if (files.length === 0) return emptyPreview(spec)
+
+    const filePreviews: ReferenceFilePreview[] = await Promise.all(files.map(async (file): Promise<ReferenceFilePreview> => {
+      const rows = readHtmlRows(await readLatin1(file))
+      if (!matchesExpectedContent(spec.kind, rows)) {
+        return invalidPreview(spec, file.name, rows)
+      }
+      return previewRows(spec, file.name, rows)
+    }))
+
+    if (filePreviews.length === 1) return filePreviews[0]
+    const invalid = filePreviews.filter((preview) => preview.status === 'invalid')
+    const ok = filePreviews.filter((preview) => preview.status === 'ok')
+    if (invalid.length > 0) {
+      return {
+        ...combinePreviews(spec, filePreviews),
+        status: 'invalid',
+        avisos: invalid.flatMap((preview) => preview.avisos),
+      }
     }
-    return previewRows(spec, file.name, rows)
+    return combinePreviews(spec, ok)
   }))
   const requiredMissing = previews.filter((file) => file.required && file.status === 'missing')
   const invalidFiles = previews.filter((file) => file.status === 'invalid')
@@ -148,6 +163,26 @@ function previewRows(
   if (spec.kind === 'carrosatendidos') return previewCarros(spec, fileName, rows)
   if (spec.kind === 'vendasprodutos' || spec.kind === 'vendasservicos') return previewMovimento(spec, fileName, rows)
   return previewPreco(spec, fileName, rows)
+}
+
+function combinePreviews(
+  spec: { kind: ReferenceFileKind; label: string; required: boolean },
+  previews: ReferenceFilePreview[],
+): ReferenceFilePreview {
+  return {
+    kind: spec.kind,
+    label: spec.label,
+    fileName: previews.map((preview) => preview.fileName).filter(Boolean).join(' + '),
+    required: spec.required,
+    status: previews.some((preview) => preview.status === 'invalid') ? 'invalid' : 'ok',
+    totalRows: sum(previews, 'totalRows'),
+    clientes: sum(previews, 'clientes'),
+    ordens: sum(previews, 'ordens'),
+    itens: sum(previews, 'itens'),
+    placas: sum(previews, 'placas'),
+    kms: sum(previews, 'kms'),
+    avisos: previews.flatMap((preview) => preview.avisos),
+  }
 }
 
 function previewClientes(
