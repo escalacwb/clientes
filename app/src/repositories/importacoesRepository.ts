@@ -44,6 +44,9 @@ export type ReferenceImportResult = {
     precosInalterados?: number
   }
   postProcess?: {
+    adiado?: boolean
+    erro?: string
+    code?: string
     clientes_atualizados?: number
     oportunidades_geradas?: number
     tarefas_followup?: FollowupAutomationResult

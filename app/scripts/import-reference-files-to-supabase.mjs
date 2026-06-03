@@ -113,7 +113,7 @@ try {
   await updateImportacao(importacao.id, {
     total_linhas: clientesImportacao.length + carros.length + movimentos.length + precosProdutos.length + precosServicos.length,
     clientes_encontrados: clientesImportacao.length,
-    clientes_criados: clienteIndex.size,
+    clientes_criados: clientesImportacao.length,
     conflitos: vendasResult.conflitos + servicosResult.conflitos,
     itens_criados: vendasResult.created + servicosResult.created,
     itens_ignorados: vendasResult.ignored + servicosResult.ignored,

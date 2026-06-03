@@ -53,7 +53,7 @@ begin
     raise exception 'Apenas administradores podem atualizar oportunidades.';
   end if;
 
-  delete from public.oportunidades_cache;
+  delete from public.oportunidades_cache where true;
 
   insert into public.oportunidades_cache (
     cliente_id,

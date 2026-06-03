@@ -14517,9 +14517,11 @@ function Importacoes({
       const catalogoResumo = result.catalogo
         ? ` Catalogo: ${result.catalogo.itens} itens, ${result.catalogo.precosNovos ?? 0} precos novos, ${result.catalogo.precosAlterados ?? 0} alterados, ${result.catalogo.precosInalterados ?? 0} inalterados.`
         : ''
-      const postProcessResumo = result.postProcess
-        ? ` Pos-processamento: ${result.postProcess.clientes_atualizados ?? 0} clientes recalculados, ${result.postProcess.oportunidades_geradas ?? 0} oportunidades e ${result.postProcess.tarefas_followup?.tarefas_followup_total ?? 0} follow-ups sincronizados.`
-        : ''
+      const postProcessResumo = result.postProcess?.adiado
+        ? ` Fechamento comercial adiado: os dados foram importados, mas o recalculo geral precisa ser reprocessado depois. Motivo: ${result.postProcess.erro ?? 'tempo limite'}.`
+        : result.postProcess
+          ? ` Pos-processamento: ${result.postProcess.clientes_atualizados ?? 0} clientes recalculados, ${result.postProcess.oportunidades_geradas ?? 0} oportunidades e ${result.postProcess.tarefas_followup?.tarefas_followup_total ?? 0} follow-ups sincronizados.`
+          : ''
       setReferenceImportResult(
         `Importacao concluida: ${result.clientes} clientes, ${result.veiculos} veiculos, ${result.ordens} ordens, ${result.vendas.created + result.servicos.created} itens.${catalogoResumo}${postProcessResumo}`,
       )

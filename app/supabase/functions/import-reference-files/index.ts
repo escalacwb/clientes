@@ -196,14 +196,14 @@ Deno.serve(async (request) => {
     const vendas = await upsertVendas(service, movimentosComVeiculo.filter((item) => item.tipo === 'produto'), clienteIndex, veiculoIndex, ordemIndex, importacao.id)
     const servicos = await upsertServicos(service, movimentosComVeiculo.filter((item) => item.tipo === 'servico'), clienteIndex, veiculoIndex, ordemIndex, importacao.id)
     const catalogo = await upsertCatalogo(service, [...parsed.precosProdutos, ...parsed.precosServicos], arquivos)
-    const postProcess = await finalizarImportacaoDiaria(service)
+    const postProcess = await tentarFinalizarImportacaoDiaria(service)
 
     await service
       .from('importacoes')
       .update({
         total_linhas: parsed.clientes.length + parsed.carros.length + movimentos.length + parsed.precosProdutos.length + parsed.precosServicos.length,
         clientes_encontrados: clientesImportacao.length,
-        clientes_criados: clienteIndex.size,
+        clientes_criados: clientesImportacao.length,
         conflitos: vendas.conflitos + servicos.conflitos,
         itens_criados: vendas.created + servicos.created,
         itens_ignorados: vendas.ignored + servicos.ignored,
@@ -225,7 +225,8 @@ Deno.serve(async (request) => {
       movimentosSemVeiculo: movimentosComVeiculo.filter((item) => !item.veiculo_ref).length,
     })
   } catch (error) {
-    const status = error instanceof HttpError ? error.status : 500
+    const status = error instanceof HttpError ? error.status : Number((error as { status?: number })?.status || 500)
+    const errorInfo = normalizeError(error)
     if (activeImportacaoId && service) {
       await service
         .from('importacoes')
@@ -234,7 +235,8 @@ Deno.serve(async (request) => {
         })
         .eq('id', activeImportacaoId)
     }
-    return json({ error: error instanceof Error ? error.message : 'Erro inesperado na importacao.' }, status)
+    console.error('import-reference-files error', JSON.stringify(errorInfo))
+    return json(errorInfo, status)
   }
 })
 
@@ -255,6 +257,22 @@ async function finalizarImportacaoDiaria(service: ReturnType<typeof createClient
   const { data, error } = await service.rpc('finalizar_importacao_diaria')
   if (error) throw error
   return data as { clientes_atualizados?: number; oportunidades_geradas?: number }
+}
+
+async function tentarFinalizarImportacaoDiaria(service: ReturnType<typeof createClient>) {
+  try {
+    return await finalizarImportacaoDiaria(service)
+  } catch (error) {
+    const errorInfo = normalizeError(error)
+    console.error('import-reference-files postprocess skipped', JSON.stringify(errorInfo))
+    return {
+      adiado: true,
+      erro: errorInfo.error,
+      code: errorInfo.code,
+      clientes_atualizados: 0,
+      oportunidades_geradas: 0,
+    }
+  }
 }
 
 async function parseFiles(files: File[]) {
@@ -1092,6 +1110,35 @@ class HttpError extends Error {
   constructor(message: string, status: number) {
     super(message)
     this.status = status
+  }
+}
+
+function normalizeError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      error: error.message || 'Erro inesperado na importacao.',
+      name: error.name,
+      details: (error as { details?: unknown }).details ?? null,
+      hint: (error as { hint?: unknown }).hint ?? null,
+      code: (error as { code?: unknown }).code ?? null,
+    }
+  }
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>
+    return {
+      error: String(record.message || record.error || 'Erro inesperado na importacao.'),
+      name: String(record.name || 'ObjectError'),
+      details: record.details ?? null,
+      hint: record.hint ?? null,
+      code: record.code ?? null,
+    }
+  }
+  return {
+    error: String(error || 'Erro inesperado na importacao.'),
+    name: 'UnknownError',
+    details: null,
+    hint: null,
+    code: null,
   }
 }
 
