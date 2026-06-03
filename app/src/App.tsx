@@ -481,6 +481,7 @@ function App() {
   const [patioFeedbackTotal, setPatioFeedbackTotal] = useState(0)
   const [patioFeedbackPage, setPatioFeedbackPage] = useState(1)
   const [patioFeedbackQuery, setPatioFeedbackQuery] = useState('')
+  const [patioFeedbackAgeFilter, setPatioFeedbackAgeFilter] = useState<'recentes' | 'antigos'>('recentes')
   const [patioFeedbackRefreshKey, setPatioFeedbackRefreshKey] = useState(0)
   const [isLoadingPatioFeedback, setIsLoadingPatioFeedback] = useState(false)
   const [patioEntradaQuery, setPatioEntradaQuery] = useState('')
@@ -1177,6 +1178,7 @@ function App() {
           pageSize: 50,
           vendedorId: session.role === 'vendedor' ? session.id : undefined,
           query: patioFeedbackQuery,
+          ageFilter: patioFeedbackAgeFilter,
         })
         if (!isMounted) return
         setPatioFeedbackItems(result.items)
@@ -1195,7 +1197,7 @@ function App() {
       isMounted = false
       window.clearTimeout(handle)
     }
-  }, [isCheckingSession, patioFeedbackPage, patioFeedbackQuery, patioFeedbackRefreshKey, session, view])
+  }, [isCheckingSession, patioFeedbackAgeFilter, patioFeedbackPage, patioFeedbackQuery, patioFeedbackRefreshKey, session, view])
 
   useEffect(() => {
     let isMounted = true
@@ -2191,9 +2193,14 @@ function App() {
             page={patioFeedbackPage}
             pageSize={50}
             query={patioFeedbackQuery}
+            ageFilter={patioFeedbackAgeFilter}
             isLoading={isLoadingPatioFeedback}
             onQueryChange={(nextQuery) => {
               setPatioFeedbackQuery(nextQuery)
+              setPatioFeedbackPage(1)
+            }}
+            onAgeFilterChange={(nextFilter) => {
+              setPatioFeedbackAgeFilter(nextFilter)
               setPatioFeedbackPage(1)
             }}
             onRefresh={() => setPatioFeedbackRefreshKey((current) => current + 1)}
@@ -12018,8 +12025,10 @@ function PatioFeedback({
   page,
   pageSize,
   query,
+  ageFilter,
   isLoading,
   onQueryChange,
+  onAgeFilterChange,
   onRefresh,
   onPageChange,
   onOpenClient,
@@ -12031,8 +12040,10 @@ function PatioFeedback({
   page: number
   pageSize: number
   query: string
+  ageFilter: 'recentes' | 'antigos'
   isLoading: boolean
   onQueryChange: (query: string) => void
+  onAgeFilterChange: (filter: 'recentes' | 'antigos') => void
   onRefresh: () => void
   onPageChange: (page: number) => void
   onOpenClient: (clienteId: string) => void
@@ -12041,11 +12052,7 @@ function PatioFeedback({
 }) {
   const [busyId, setBusyId] = useState<number | undefined>()
   const [notes, setNotes] = useState<Record<number, string>>({})
-  const [activeTab, setActiveTab] = useState<'recentes' | 'antigos'>('recentes')
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
-  const recentItems = items.filter((item) => daysSince(item.fimExecucao) <= 3)
-  const oldItems = items.filter((item) => daysSince(item.fimExecucao) > 3)
-  const visibleItems = activeTab === 'recentes' ? recentItems : oldItems
   const feedbackStats = {
     comContato: items.filter((item) => item.contatoRecomendado || item.contatoMotorista).length,
     semContato: items.filter((item) => !item.contatoRecomendado && !item.contatoMotorista).length,
@@ -12086,28 +12093,23 @@ function PatioFeedback({
         <span>1. Abrir WhatsApp com a mensagem pronta. 2. Registrar o retorno no campo de observacao. 3. Marcar como feito ou criar retorno comercial se o cliente pedir cotacao, reclamar ou demonstrar interesse.</span>
       </div>
       <div className="patio-internal-tabs">
-        <button className={activeTab === 'recentes' ? 'active' : ''} type="button" onClick={() => setActiveTab('recentes')}>
-          Recentes <span>{recentItems.length}</span>
+        <button className={ageFilter === 'recentes' ? 'active' : ''} type="button" onClick={() => onAgeFilterChange('recentes')}>
+          Recentes <span>{ageFilter === 'recentes' ? total : ''}</span>
         </button>
-        <button className={activeTab === 'antigos' ? 'active warn' : ''} type="button" onClick={() => setActiveTab('antigos')}>
-          Antigos <span>{oldItems.length}</span>
+        <button className={ageFilter === 'antigos' ? 'active warn' : ''} type="button" onClick={() => onAgeFilterChange('antigos')}>
+          Antigos <span>{ageFilter === 'antigos' ? total : ''}</span>
         </button>
       </div>
       <div className="patio-feedback-summary">
-        <span><strong>{visibleItems.length}</strong> nesta aba</span>
+        <span><strong>{items.length}</strong> nesta pagina</span>
         <span><strong>{feedbackStats.comContato}</strong> com WhatsApp</span>
         <span><strong>{feedbackStats.semContato}</strong> sem contato</span>
         <span><strong>{feedbackStats.atrasados}</strong> ha 3+ dias</span>
       </div>
       {isLoading && <div className="empty-state">Carregando feedbacks...</div>}
       {!isLoading && items.length === 0 && <div className="empty-state">Nenhum feedback pendente com os filtros atuais.</div>}
-      {!isLoading && items.length > 0 && visibleItems.length === 0 && (
-        <div className="empty-state">
-          {activeTab === 'recentes' ? 'Nenhum feedback recente nesta pagina.' : 'Nenhum feedback antigo nesta pagina.'}
-        </div>
-      )}
       <div className="table-list">
-        {visibleItems.map((item) => {
+        {items.map((item) => {
           const phone = item.contatoRecomendado || item.contatoMotorista
           const message = buildPatioFeedbackMessage(item)
           const whatsappUrl = waMeUrl(phone, message)

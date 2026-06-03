@@ -440,6 +440,7 @@ export async function listPatioFeedbackPendente(input: {
   pageSize: number
   vendedorId?: string
   query?: string
+  ageFilter?: 'recentes' | 'antigos'
 }): Promise<{ items: PatioFeedbackPendente[]; total: number }> {
   const supabase = await getSupabase()
   if (!supabase) return { items: [], total: 0 }
@@ -453,6 +454,9 @@ export async function listPatioFeedbackPendente(input: {
     .range(from, to)
 
   if (input.vendedorId) query = query.eq('vendedor_id', input.vendedorId)
+  const cutoff = new Date(Date.now() - 3 * 86400000).toISOString()
+  if (input.ageFilter === 'recentes') query = query.gte('fim_execucao', cutoff)
+  if (input.ageFilter === 'antigos') query = query.lt('fim_execucao', cutoff)
   if (input.query?.trim()) {
     const term = `%${input.query.trim()}%`
     query = query.or(`cliente_nome.ilike.${term},placa.ilike.${term},nome_motorista.ilike.${term}`)
