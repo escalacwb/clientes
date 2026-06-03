@@ -12338,6 +12338,7 @@ function Cliente360({
   const [lastAIAnalysis, setLastAIAnalysis] = useState<WhatsAppContactAnalysis | null>(null)
   const [isSavingContact, setIsSavingContact] = useState(false)
   const [contactFeedback, setContactFeedback] = useState('')
+  const [savedContactNextAction, setSavedContactNextAction] = useState<{ text: string; date: string } | null>(null)
   const [contactError, setContactError] = useState('')
   const [isEditingClient, setIsEditingClient] = useState(false)
   const [isSavingClient, setIsSavingClient] = useState(false)
@@ -12402,6 +12403,7 @@ function Cliente360({
   const latestMovements = buildClientServiceTimeline(clienteInteracoes, clienteOrcamentos, clienteTarefas, clienteCampanhas)
   const contactIsTerminal = isTerminalContactResult(contactResult)
   const contactMissingNextStep = !contactIsTerminal && (!nextActionDate || !contactNextActionText.trim())
+  const shouldCreateQuoteFromContact = contactResult === 'pediu orcamento'
   const nextOpenTasks = tarefasAbertas
     .slice()
     .sort((a, b) => a.dataVencimento.localeCompare(b.dataVencimento))
@@ -12547,6 +12549,7 @@ function Cliente360({
     })
     setIsSavingContact(true)
     setContactFeedback('')
+    setSavedContactNextAction(null)
     setContactError('')
     try {
       const created = await onAddInteraction({
@@ -12564,7 +12567,16 @@ function Cliente360({
       if (nextClientStatus && nextClientStatus !== cliente.status) {
         await onUpdateClient({ status: nextClientStatus })
       }
-      setContactFeedback(`Contato registrado em ${dateLabel(created.data)}.`)
+      const savedNextAction = created.dataProximaAcao
+        ? {
+            text: created.proximaAcao || contactNextActionText.trim() || nextActionLabelFromResult(resultado),
+            date: created.dataProximaAcao,
+          }
+        : null
+      setSavedContactNextAction(savedNextAction)
+      setContactFeedback(savedNextAction
+        ? `Contato registrado em ${dateLabel(created.data)}. Proxima acao criada para ${dateLabel(savedNextAction.date)}.`
+        : `Contato registrado em ${dateLabel(created.data)}.`)
       setContactNote('')
       setNextActionDate('')
       setContactNextActionText('')
@@ -13029,14 +13041,27 @@ function Cliente360({
             </div>
           )}
           <div className="client360-save-bar">
-            <button className="button primary" type="button" disabled={isSavingContact} onClick={() => void registerContact(false)}>
-              {isSavingContact ? 'Salvando...' : 'Salvar atendimento'}
+            <button className="button primary" type="button" disabled={isSavingContact} onClick={() => void registerContact(shouldCreateQuoteFromContact)}>
+              {isSavingContact ? 'Salvando...' : shouldCreateQuoteFromContact ? 'Salvar e criar proposta' : 'Salvar atendimento'}
             </button>
-            <button className="button" type="button" disabled={isSavingContact} onClick={() => void registerContact(true)}>
-              Salvar e criar orcamento
-            </button>
+            {shouldCreateQuoteFromContact ? (
+              <button className="button" type="button" disabled={isSavingContact} onClick={() => void registerContact(false)}>
+                Salvar sem proposta
+              </button>
+            ) : (
+              <button className="button" type="button" disabled={isSavingContact} onClick={() => void registerContact(true)}>
+                Salvar e criar proposta
+              </button>
+            )}
             <span>{contactIsTerminal ? 'Contato conclusivo' : nextActionDate ? `Proxima acao em ${dateLabel(nextActionDate)}` : 'Defina proxima acao para nao perder o follow-up'}</span>
           </div>
+          {savedContactNextAction && (
+            <div className="client360-next-action-confirmed">
+              <span className="next-action-label">Proxima acao criada</span>
+              <strong>{savedContactNextAction.text}</strong>
+              <small>{dateLabel(savedContactNextAction.date)}</small>
+            </div>
+          )}
           <div className="client360-recent-history">
             <strong>Historico de atendimento</strong>
             {recentContactHistory.map((interacao) => (

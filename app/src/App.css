@@ -4749,6 +4749,25 @@ h3 {
   align-items: end;
 }
 
+.client360-next-action-confirmed {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #b8ddc8;
+  border-radius: 8px;
+  background: #f0fbf4;
+  color: #123d37;
+  padding: 12px;
+}
+
+.client360-next-action-confirmed strong,
+.client360-next-action-confirmed small {
+  display: block;
+}
+
+.client360-next-action-confirmed small {
+  color: #52625d;
+}
+
 .client360-contact-tools {
   border: 1px solid #dbe6df;
   border-radius: 8px;
