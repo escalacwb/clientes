@@ -9494,9 +9494,30 @@ function numberLabel(value: number) {
 }
 
 const PATIO_SUSPICIOUS_KM_MEDIA = 1000
+const PATIO_SUSPICIOUS_ESTIMATED_KM = 200000
 
 function isSuspiciousPatioKmMedia(media?: number) {
   return Boolean(media && media > PATIO_SUSPICIOUS_KM_MEDIA)
+}
+
+function patioKmVerificationReasons(item: PatioRevisaoProativa, mode: 'km' | 'tempo' = 'km') {
+  const reasons: string[] = []
+  if (isSuspiciousPatioKmMedia(item.mediaKmDiaria)) {
+    reasons.push(`Media diaria muito alta: ${numberLabel(Math.round(item.mediaKmDiaria ?? 0))} km/dia`)
+  }
+  if (item.kmEstimadoDesdeVisita > PATIO_SUSPICIOUS_ESTIMATED_KM) {
+    reasons.push(`Estimativa desde a ultima visita muito alta: ${numberLabel(item.kmEstimadoDesdeVisita)} km`)
+  }
+  if (mode === 'km' && !item.mediaKmDiaria) {
+    reasons.push('Sem media diaria cadastrada para calcular a revisao por KM')
+  }
+  if (!item.ultimoKm) {
+    reasons.push('Ultimo KM do patio nao encontrado')
+  }
+  if (item.ultimoKm && item.ultimoKm > 2000000) {
+    reasons.push(`Ultimo KM muito alto: ${numberLabel(item.ultimoKm)} km`)
+  }
+  return reasons
 }
 
 function patioQuantidadeLabel(value?: number | null) {
@@ -12167,7 +12188,15 @@ function PatioRevisao({
 }) {
   const [busyId, setBusyId] = useState<number | undefined>()
   const [notes, setNotes] = useState<Record<number, string>>({})
+  const [activeTab, setActiveTab] = useState<'fila' | 'km'>('fila')
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const itemsWithReasons = items.map((item) => ({
+    item,
+    reasons: patioKmVerificationReasons(item, mode),
+  }))
+  const kmValidationItems = itemsWithReasons.filter((entry) => entry.reasons.length > 0)
+  const commercialItems = itemsWithReasons.filter((entry) => entry.reasons.length === 0)
+  const visibleItems = activeTab === 'km' ? kmValidationItems : commercialItems
 
   async function run(item: PatioRevisaoProativa, action: () => Promise<void>) {
     setBusyId(item.patioVeiculoId)
@@ -12217,13 +12246,28 @@ function PatioRevisao({
         <strong>Por que aparece aqui?</strong>
         <span>O sistema cruza ultima visita, KM medio por dia e tempo parado. Medias acima de {numberLabel(PATIO_SUSPICIOUS_KM_MEDIA)} km/dia aparecem como validar KM. Use o contato recomendado, confirme a KM atual e marque contato feito para medir retorno da revisao proativa.</span>
       </div>
+      <div className="patio-internal-tabs">
+        <button className={activeTab === 'fila' ? 'active' : ''} type="button" onClick={() => setActiveTab('fila')}>
+          Fila comercial <span>{commercialItems.length}</span>
+        </button>
+        <button className={activeTab === 'km' ? 'active warn' : ''} type="button" onClick={() => setActiveTab('km')}>
+          Verificar KM <span>{kmValidationItems.length}</span>
+        </button>
+      </div>
       {isLoading && <div className="empty-state">Carregando revisoes...</div>}
       {!isLoading && items.length === 0 && <div className="empty-state">Nenhum veiculo encontrado com esses criterios.</div>}
+      {!isLoading && items.length > 0 && visibleItems.length === 0 && (
+        <div className="empty-state">
+          {activeTab === 'fila'
+            ? 'Nenhum veiculo com dados confiaveis nesta pagina. Verifique a aba de KM.'
+            : 'Nenhuma sugestao de verificacao de KM nesta pagina.'}
+        </div>
+      )}
       <div className="table-list">
-        {items.map((item) => {
+        {visibleItems.map(({ item, reasons }) => {
           const motoristaUrl = waMeUrl(item.contatoMotorista, buildPatioRevisaoMessage(item, 'motorista'))
           const gestorUrl = waMeUrl(item.contatoRecomendado, buildPatioRevisaoMessage(item, 'gestor'))
-          const mediaSuspeita = isSuspiciousPatioKmMedia(item.mediaKmDiaria)
+          const mediaSuspeita = reasons.length > 0
           return (
             <article className={`panel subtle patio-revisao-card${mediaSuspeita ? ' media-suspeita' : ''}`} key={item.patioVeiculoId}>
               <div className="panel-header">
@@ -12232,15 +12276,20 @@ function PatioRevisao({
                   <p>{numberLabel(item.kmEstimadoDesdeVisita)} km rodados desde a ultima visita - {item.diasDesdeUltimaVisita} dias sem visita - ultimo KM {item.ultimoKm ? numberLabel(item.ultimoKm) : 'n/d'}</p>
                 </div>
                 <div className="row-actions">
-                  {motoristaUrl && (
+                  {activeTab === 'fila' && motoristaUrl && (
                     <a className="button primary" href={motoristaUrl} target="_blank" rel="noreferrer">
                       Falar com Motorista
                     </a>
                   )}
-                  {gestorUrl && gestorUrl !== motoristaUrl && (
+                  {activeTab === 'fila' && gestorUrl && gestorUrl !== motoristaUrl && (
                     <a className="button primary" href={gestorUrl} target="_blank" rel="noreferrer">
                       Falar com Gestor
                     </a>
+                  )}
+                  {activeTab === 'km' && (
+                    <button className="button primary" type="button" onClick={() => onAdjustMedia(item)}>
+                      Ajustar media
+                    </button>
                   )}
                   <button className="button" type="button" onClick={() => onOpenClient(item.clienteId)}>Ficha</button>
                 </div>
@@ -12248,7 +12297,7 @@ function PatioRevisao({
               {mediaSuspeita && (
                 <div className="patio-warning">
                   <strong>Validar KM antes do contato.</strong>
-                  <span>Media de {numberLabel(Math.round(item.mediaKmDiaria ?? 0))} km/dia parece alta. Ajuste a media ou confira o KM atual para evitar abordagem errada.</span>
+                  <span>{reasons.join(' | ')}. Ajuste a media ou confira o KM atual para evitar abordagem errada.</span>
                 </div>
               )}
               <div className="status-list">
@@ -12264,18 +12313,22 @@ function PatioRevisao({
                 <textarea value={notes[item.patioVeiculoId] ?? ''} onChange={(event) => setNotes((current) => ({ ...current, [item.patioVeiculoId]: event.target.value }))} placeholder="Ex.: pediu cotacao, agendou revisao, nao respondeu." />
               </label>
               <div className="row-actions">
-                <button className="button primary" type="button" disabled={busyId === item.patioVeiculoId} onClick={() => void run(item, () => onMarkDone(item, notes[item.patioVeiculoId] ?? ''))}>
-                  Marcar contato feito
-                </button>
+                {activeTab === 'fila' && (
+                  <button className="button primary" type="button" disabled={busyId === item.patioVeiculoId} onClick={() => void run(item, () => onMarkDone(item, notes[item.patioVeiculoId] ?? ''))}>
+                    Marcar contato feito
+                  </button>
+                )}
                 <button className="button" type="button" onClick={() => onAdjustMedia(item)}>
                   Ajustar Media
                 </button>
                 <button className="button" type="button" onClick={() => onEditVehicle(item)}>
                   Alt. Veiculo/Empresa
                 </button>
-                <button className="button" type="button" disabled={busyId === item.patioVeiculoId} onClick={() => void run(item, () => onCreateOpportunity(item))}>
-                  Criar oportunidade
-                </button>
+                {activeTab === 'fila' && (
+                  <button className="button" type="button" disabled={busyId === item.patioVeiculoId} onClick={() => void run(item, () => onCreateOpportunity(item))}>
+                    Criar oportunidade
+                  </button>
+                )}
               </div>
             </article>
           )

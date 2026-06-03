@@ -4519,6 +4519,51 @@ h3 {
   flex: 0 0 auto;
 }
 
+.patio-internal-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.patio-internal-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #cfd8d3;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #173d38;
+  cursor: pointer;
+  font-weight: 800;
+  min-height: 36px;
+  padding: 8px 12px;
+}
+
+.patio-internal-tabs button.active {
+  border-color: #073c37;
+  background: #073c37;
+  color: #ffffff;
+}
+
+.patio-internal-tabs button.active.warn {
+  border-color: #8a6100;
+  background: #8a6100;
+}
+
+.patio-internal-tabs span {
+  border-radius: 999px;
+  background: #e9f2ee;
+  color: #073c37;
+  font-size: 12px;
+  padding: 2px 7px;
+}
+
+.patio-internal-tabs button.active span {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
 .patio-revisao-card.media-suspeita {
   border-color: #f2c46d;
   background: #fffaf0;
