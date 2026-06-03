@@ -30,6 +30,7 @@ export type Cliente = {
   whatsapp?: string
   email?: string
   responsavel?: string
+  contatoConfirmadoEm?: string
   vendedorId?: string
   vendedorNome?: string
   vendedorHistoricoNome?: string

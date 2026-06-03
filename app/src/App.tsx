@@ -7458,7 +7458,7 @@ function FichaCliente({
   ].filter(Boolean)
   const whatsUrl = cliente.whatsapp
     ? `https://wa.me/${cliente.whatsapp}?text=${encodeURIComponent(
-        `Bom dia, ${cliente.responsavel ?? cliente.nome}. Aqui e da Capital Truck Center. Estou passando para ver se precisa cotar pneus ou algum servico.`,
+        buildServiceOpeningMessage(cliente),
       )}`
     : undefined
   const contactPresets = [
@@ -8547,7 +8547,7 @@ function buildQuoteMessage(
   const hasAlternatives = itens.some((item) => (item.apresentacao ?? 'normal') === 'alternativa')
   const hasSeparatedBlocks = quoteHasSeparatedBlocks(blocks)
   const lines = [
-    `Olá, ${cliente.responsavel ?? cliente.nome}. Tudo bem?`,
+    greetingLine(cliente, 'Olá'),
     '',
     '📄 *Proposta comercial - Capital Truck Center*',
     '',
@@ -12525,6 +12525,12 @@ function Cliente360({
     observacoes: cliente.observacoes ?? '',
   }))
   const [clientFeedback, setClientFeedback] = useState('')
+  const [contactConfirmOpen, setContactConfirmOpen] = useState(false)
+  const [contactConfirmDraft, setContactConfirmDraft] = useState(() => ({
+    responsavel: isLikelyPersonalContactName(cliente.responsavel) ? cliente.responsavel ?? '' : '',
+    whatsapp: cliente.whatsapp ?? '',
+  }))
+  const [isConfirmingContact, setIsConfirmingContact] = useState(false)
   const [busyActionId, setBusyActionId] = useState('')
 
   const clienteVendas = vendasItens.filter((venda) => venda.clienteId === cliente.id)
@@ -12607,7 +12613,7 @@ function Cliente360({
       : undefined
   const whatsappNumber = contatoOperacional?.whatsapp || cliente.whatsapp
   const whatsappUrl = whatsappNumber
-    ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(buildServiceOpeningMessage(cliente))}`
+    ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(buildServiceOpeningMessage(cliente, contatoOperacional?.nome))}`
     : undefined
   const opportunityDetails = opportunityScoreDetails(cliente, clienteOrcamentos)
   const clienteScore = opportunityScore(cliente, clienteOrcamentos)
@@ -12843,9 +12849,21 @@ function Cliente360({
     }
   }
 
-  async function openWhatsappAndRegister() {
-    if (!whatsappUrl) return
-    window.open(whatsappUrl, '_blank', 'noopener,noreferrer')
+  function openContactConfirmation() {
+    setContactConfirmDraft({
+      responsavel: isLikelyPersonalContactName(contatoOperacional?.nome)
+        ? contatoOperacional?.nome ?? ''
+        : isLikelyPersonalContactName(cliente.responsavel)
+          ? cliente.responsavel ?? ''
+          : '',
+      whatsapp: contatoOperacional?.whatsapp || cliente.whatsapp || '',
+    })
+    setContactError('')
+    setContactConfirmOpen(true)
+  }
+
+  async function openWhatsappWithContact(phone: string, message: string) {
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer')
     const created = await onAddInteraction({
       clienteId: cliente.id,
       vendedorId: cliente.vendedorId ?? currentUser.id,
@@ -12855,6 +12873,42 @@ function Cliente360({
       resultado: 'whatsapp aberto',
     })
     setContactFeedback(`WhatsApp aberto e registrado em ${dateLabel(created.data)}.`)
+  }
+
+  async function confirmContactAndOpenWhatsapp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const whatsapp = contactConfirmDraft.whatsapp.replace(/\D/g, '')
+    if (!whatsapp) {
+      setContactError('Informe um WhatsApp valido para abrir a conversa.')
+      return
+    }
+    setIsConfirmingContact(true)
+    setContactError('')
+    try {
+      const confirmedAt = new Date().toISOString()
+      const responsible = contactConfirmDraft.responsavel.trim() || undefined
+      await onUpdateClient({
+        responsavel: responsible,
+        whatsapp,
+        contatoConfirmadoEm: confirmedAt,
+      })
+      setContactConfirmOpen(false)
+      await openWhatsappWithContact(
+        whatsapp,
+        buildServiceOpeningMessage({ ...cliente, responsavel: responsible, whatsapp, contatoConfirmadoEm: confirmedAt }),
+      )
+    } finally {
+      setIsConfirmingContact(false)
+    }
+  }
+
+  async function openWhatsappAndRegister() {
+    if (!whatsappNumber) return
+    if (!cliente.contatoConfirmadoEm) {
+      openContactConfirmation()
+      return
+    }
+    await openWhatsappWithContact(whatsappNumber, buildServiceOpeningMessage(cliente, contatoOperacional?.nome))
   }
 
   async function runAction(id: string, action: () => Promise<void>) {
@@ -13672,6 +13726,48 @@ function Cliente360({
           </div>
         </section>
       )}
+      {contactConfirmOpen && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setContactConfirmOpen(false)}>
+          <form className="campaign-contact-modal" onSubmit={confirmContactAndOpenWhatsapp} onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <span>
+                <strong>Confirmar contato antes de chamar</strong>
+                <small>{cliente.nome}</small>
+              </span>
+              <button className="button" type="button" onClick={() => setContactConfirmOpen(false)}>
+                Fechar
+              </button>
+            </div>
+            <label>
+              Nome do contato
+              <input
+                value={contactConfirmDraft.responsavel}
+                onChange={(event) => setContactConfirmDraft((current) => ({ ...current, responsavel: event.target.value }))}
+                placeholder="Nome da pessoa que responde"
+                autoFocus
+              />
+            </label>
+            <label>
+              WhatsApp
+              <input
+                value={contactConfirmDraft.whatsapp}
+                onChange={(event) => setContactConfirmDraft((current) => ({ ...current, whatsapp: event.target.value }))}
+                inputMode="numeric"
+                placeholder="Somente numeros, com DDD"
+              />
+            </label>
+            <small>Confirme se esse e o contato atual. Nas proximas abordagens o CRM abre direto, sem perguntar novamente.</small>
+            <div className="modal-actions">
+              <button className="button" type="button" onClick={() => setContactConfirmOpen(false)}>
+                Cancelar
+              </button>
+              <button className="button primary" type="submit" disabled={isConfirmingContact}>
+                {isConfirmingContact ? 'Salvando...' : 'Confirmar e abrir WhatsApp'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </section>
   )
 }
@@ -13684,14 +13780,74 @@ function inDateRange(value: string | undefined, startDate: string, endDate: stri
   return true
 }
 
-function buildServiceOpeningMessage(cliente: Cliente) {
-  const firstName = (cliente.responsavel || cliente.nome).split(' ')[0]
-  return `Bom dia, ${firstName}. Aqui é da Capital Truck Center. Estou passando para ver se precisa cotar pneus ou algum serviço.`
+const businessNameTerms = [
+  'LTDA',
+  'EIRELI',
+  'EPP',
+  'S/A',
+  ' SA ',
+  'MEI',
+  'COMERCIO',
+  'TRANSPORT',
+  'LOGISTICA',
+  'DISTRIBUIDORA',
+  'INDUSTRIA',
+  'AUTO POSTO',
+  'POSTO',
+  'PREFEITURA',
+  'MUNICIPIO',
+  'SECRETARIA',
+  'ASSOCIACAO',
+  'COOPERATIVA',
+  'CONSTRUTORA',
+  'AGROPECUARIA',
+  'SUPERMERCADO',
+  'ADMINISTRADORA',
+  'LOCACAO',
+]
+
+function isLikelyPersonalContactName(value?: string) {
+  const name = value?.trim()
+  if (!name) return false
+  const normalized = ` ${removeAccents(name).toUpperCase()} `
+  if (/^\d+$/.test(name)) return false
+  if ((name.match(/\d/g) ?? []).length >= 2) return false
+  if (businessNameTerms.some((term) => normalized.includes(term))) return false
+  const words = name.split(/\s+/).filter(Boolean)
+  if (words.length > 5) return false
+  return words.some((word) => /^[A-Za-zÀ-ÿ]{2,}$/.test(word))
+}
+
+function contactFirstName(value?: string) {
+  if (!isLikelyPersonalContactName(value)) return undefined
+  return value?.trim().split(/\s+/)[0]
+}
+
+function clienteGreetingName(cliente: Cliente, preferredName?: string) {
+  return contactFirstName(preferredName) ?? contactFirstName(cliente.responsavel)
+}
+
+function greetingLine(cliente: Cliente, greeting: string, preferredName?: string) {
+  const firstName = clienteGreetingName(cliente, preferredName)
+  return firstName ? `${greeting}, ${firstName}.` : `${greeting}, tudo bem?`
+}
+
+function campaignFirstName(cliente: Cliente) {
+  return clienteGreetingName(cliente) ?? 'tudo bem'
+}
+
+function buildServiceOpeningMessage(cliente: Cliente, preferredName?: string) {
+  const firstName = clienteGreetingName(cliente, preferredName)
+  return firstName
+    ? `Bom dia, ${firstName}. Aqui é da Capital Truck Center. Estou passando para ver se precisa cotar pneus ou algum serviço.`
+    : 'Bom dia, tudo bem? Aqui é da Capital Truck Center. Estou passando para ver se precisa cotar pneus ou algum serviço.'
 }
 
 function buildExternalLeadOpeningMessage(cliente: Cliente) {
-  const firstName = (cliente.responsavel || cliente.nome).split(' ')[0]
-  return `Bom dia, ${firstName}. Aqui e da Capital Truck Center. Estou entrando em contato para entender sua frota e ver se podemos ajudar com pneus ou servicos.`
+  const firstName = clienteGreetingName(cliente)
+  return firstName
+    ? `Bom dia, ${firstName}. Aqui e da Capital Truck Center. Estou entrando em contato para entender sua frota e ver se podemos ajudar com pneus ou servicos.`
+    : 'Bom dia, tudo bem? Aqui e da Capital Truck Center. Estou entrando em contato para entender sua frota e ver se podemos ajudar com pneus ou servicos.'
 }
 
 function nextActionLabelFromResult(resultado: string) {
@@ -15305,6 +15461,8 @@ function Campanhas({
   const [isCreatingCampaignTasks, setIsCreatingCampaignTasks] = useState(false)
   const [contactEditTarget, setContactEditTarget] = useState<Cliente | null>(null)
   const [contactEditForm, setContactEditForm] = useState({ responsavel: '', whatsapp: '' })
+  const [contactEditMode, setContactEditMode] = useState<'edit' | 'confirm'>('edit')
+  const [pendingCampaignContact, setPendingCampaignContact] = useState<{ cliente: Cliente; options?: { forceRegister?: boolean } } | null>(null)
   const [isSavingContactEdit, setIsSavingContactEdit] = useState(false)
   const [campaignResultTarget, setCampaignResultTarget] = useState<{ cliente: Cliente; mensagemFinal: string } | null>(null)
   const [campaignResultStatus, setCampaignResultStatus] = useState<CampanhaEnvioStatus>('respondeu')
@@ -15511,16 +15669,29 @@ function Campanhas({
   }
 
   function messageFor(cliente: Cliente) {
-    const primeiroNome = (cliente.responsavel || cliente.nome).split(' ')[0]
+    const primeiroNome = campaignFirstName(cliente)
     return mensagemModelo
       .replace('{primeiro_nome}', primeiroNome)
       .replace('{nome_vendedor}', cliente.vendedorNome || 'Capital Truck Center')
   }
 
   function openCampaignContactEdit(cliente: Cliente) {
+    setContactEditMode('edit')
+    setPendingCampaignContact(null)
     setContactEditTarget(cliente)
     setContactEditForm({
       responsavel: cliente.responsavel ?? '',
+      whatsapp: cliente.whatsapp ?? '',
+    })
+    setCampaignError('')
+  }
+
+  function openCampaignContactConfirm(cliente: Cliente, options?: { forceRegister?: boolean }) {
+    setContactEditMode('confirm')
+    setPendingCampaignContact({ cliente, options })
+    setContactEditTarget(cliente)
+    setContactEditForm({
+      responsavel: isLikelyPersonalContactName(cliente.responsavel) ? cliente.responsavel ?? '' : '',
       whatsapp: cliente.whatsapp ?? '',
     })
     setCampaignError('')
@@ -15531,17 +15702,29 @@ function Campanhas({
     if (!contactEditTarget) return
 
     const whatsapp = contactEditForm.whatsapp.replace(/\D/g, '')
+    if (contactEditMode === 'confirm' && !whatsapp) {
+      setCampaignError('Informe um WhatsApp valido para abrir a conversa.')
+      return
+    }
+    const confirmedAt = contactEditMode === 'confirm' ? new Date().toISOString() : contactEditTarget.contatoConfirmadoEm
     setIsSavingContactEdit(true)
     setCampaignError('')
     try {
       await updateClienteComercial(contactEditTarget.id, {
         responsavel: contactEditForm.responsavel.trim() || undefined,
         whatsapp: whatsapp || undefined,
+        contatoConfirmadoEm: confirmedAt,
       })
+      const updatedCliente = {
+        ...contactEditTarget,
+        responsavel: contactEditForm.responsavel.trim() || undefined,
+        whatsapp: whatsapp || undefined,
+        contatoConfirmadoEm: confirmedAt,
+      }
       setClientes((current) =>
         current.map((cliente) =>
           cliente.id === contactEditTarget.id
-            ? { ...cliente, responsavel: contactEditForm.responsavel.trim() || undefined, whatsapp: whatsapp || undefined }
+            ? updatedCliente
             : cliente,
         ),
       )
@@ -15554,6 +15737,10 @@ function Campanhas({
         },
       }))
       setContactEditTarget(null)
+      if (contactEditMode === 'confirm' && pendingCampaignContact) {
+        setPendingCampaignContact(null)
+        await openCampaignWhatsapp(updatedCliente, messageFor(updatedCliente), pendingCampaignContact.options)
+      }
     } catch (exception) {
       setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel salvar o contato do cliente.')
     } finally {
@@ -15777,6 +15964,10 @@ function Campanhas({
   }
 
   async function openCampaignWhatsapp(cliente: Cliente, finalMessage: string, options?: { forceRegister?: boolean }) {
+    if (!cliente.contatoConfirmadoEm) {
+      openCampaignContactConfirm(cliente, options)
+      return
+    }
     const waUrl = waMeUrl(cliente.whatsapp, finalMessage)
     if (!waUrl) {
       setCampaignError('Cliente sem WhatsApp valido para abrir conversa.')
@@ -16680,14 +16871,20 @@ function Campanhas({
         </button>
       </div>
       {contactEditTarget && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setContactEditTarget(null)}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => {
+          setContactEditTarget(null)
+          setPendingCampaignContact(null)
+        }}>
           <form className="campaign-contact-modal" onSubmit={saveCampaignContactEdit} onMouseDown={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <span>
-                <strong>Editar contato rapido</strong>
+                <strong>{contactEditMode === 'confirm' ? 'Confirmar contato antes do envio' : 'Editar contato rapido'}</strong>
                 <small>{contactEditTarget.nome}</small>
               </span>
-              <button className="button" type="button" onClick={() => setContactEditTarget(null)}>
+              <button className="button" type="button" onClick={() => {
+                setContactEditTarget(null)
+                setPendingCampaignContact(null)
+              }}>
                 Fechar
               </button>
             </div>
@@ -16709,13 +16906,20 @@ function Campanhas({
                 placeholder="Somente numeros, com DDD"
               />
             </label>
-            <small>Esses dados serao salvos no cadastro do cliente e usados no envio desta campanha.</small>
+            <small>
+              {contactEditMode === 'confirm'
+                ? 'Confirme se esse e o contato atual. Depois disso o CRM nao perguntara novamente para este cliente.'
+                : 'Esses dados serao salvos no cadastro do cliente e usados no envio desta campanha.'}
+            </small>
             <div className="modal-actions">
-              <button className="button" type="button" onClick={() => setContactEditTarget(null)}>
+              <button className="button" type="button" onClick={() => {
+                setContactEditTarget(null)
+                setPendingCampaignContact(null)
+              }}>
                 Cancelar
               </button>
               <button className="button primary" type="submit" disabled={isSavingContactEdit}>
-                {isSavingContactEdit ? 'Salvando...' : 'Salvar contato'}
+                {isSavingContactEdit ? 'Salvando...' : contactEditMode === 'confirm' ? 'Confirmar e abrir WhatsApp' : 'Salvar contato'}
               </button>
             </div>
           </form>

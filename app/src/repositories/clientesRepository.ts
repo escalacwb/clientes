@@ -15,6 +15,7 @@ type ClienteRow = {
   whatsapp_principal: string | null
   email: string | null
   responsavel_nome: string | null
+  contato_confirmado_em: string | null
   vendedor_id: string | null
   vendedor_codigo_erp: string | null
   vendedor_nome_erp: string | null
@@ -255,6 +256,7 @@ export async function updateClienteComercial(
     telefone?: string
     whatsapp?: string
     responsavel?: string
+    contatoConfirmadoEm?: string
   status?: string
   observacoes?: string
   optOutMotivo?: string
@@ -270,6 +272,7 @@ export async function updateClienteComercial(
       telefone_principal: input.telefone,
       whatsapp_principal: input.whatsapp,
       responsavel_nome: input.responsavel,
+      contato_confirmado_em: input.contatoConfirmadoEm,
       status_comercial: input.status ? toDbStatus(input.status) : undefined,
       observacoes_comerciais: input.observacoes,
       whatsapp_opt_out_motivo: input.optOutMotivo,
@@ -352,6 +355,7 @@ function mapCliente(row: ClienteRow): Cliente {
     whatsapp: row.whatsapp_principal ?? undefined,
     email: row.email ?? undefined,
     responsavel: row.responsavel_nome ?? undefined,
+    contatoConfirmadoEm: row.contato_confirmado_em ?? undefined,
     vendedorId: row.vendedor_id ?? undefined,
     vendedorNome: row.users?.nome ?? undefined,
     vendedorHistoricoNome: row.vendedor_nome_erp ?? undefined,

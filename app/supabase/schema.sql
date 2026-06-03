@@ -41,6 +41,7 @@ create table public.clientes (
   email text,
   responsavel_nome text,
   responsavel_cargo text,
+  contato_confirmado_em timestamptz,
   vendedor_id uuid references public.users(id),
   status_comercial cliente_status not null default 'novo',
   origem text,

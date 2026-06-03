@@ -1087,8 +1087,25 @@ function calculateRoiPercent(receita: number, custo: number) {
 }
 
 function applyCampaignTemplate(template: string, cliente: Cliente) {
-  const primeiroNome = (cliente.responsavel || cliente.nome).split(' ')[0]
+  const primeiroNome = campaignFirstNameLocal(cliente)
   return template
     .replaceAll('{primeiro_nome}', primeiroNome)
     .replaceAll('{nome_vendedor}', cliente.vendedorNome || 'Capital Truck Center')
+}
+
+function campaignFirstNameLocal(cliente: Cliente) {
+  return contactFirstNameLocal(cliente.responsavel) ?? 'tudo bem'
+}
+
+function contactFirstNameLocal(value?: string) {
+  const name = value?.trim()
+  if (!name) return undefined
+  const normalized = ` ${removeAccentsLocal(name).toUpperCase()} `
+  const businessTerms = ['LTDA', 'EIRELI', 'EPP', 'S/A', ' SA ', 'COMERCIO', 'TRANSPORT', 'LOGISTICA', 'DISTRIBUIDORA', 'INDUSTRIA', 'PREFEITURA', 'LOCACAO']
+  if (/^\d+$/.test(name)) return undefined
+  if ((name.match(/\d/g) ?? []).length >= 2) return undefined
+  if (businessTerms.some((term) => normalized.includes(term))) return undefined
+  const words = name.split(/\s+/).filter(Boolean)
+  if (words.length > 5) return undefined
+  return words.find((word) => /^[A-Za-zÀ-ÿ]{2,}$/.test(word))
 }
