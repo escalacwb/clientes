@@ -9496,16 +9496,23 @@ function numberLabel(value: number) {
 const PATIO_SUSPICIOUS_KM_MEDIA = 1000
 const PATIO_SUSPICIOUS_ESTIMATED_KM = 200000
 
-function isSuspiciousPatioKmMedia(media?: number) {
-  return Boolean(media && media > PATIO_SUSPICIOUS_KM_MEDIA)
+function isSuspiciousPatioKmMedia(media?: number, limit = PATIO_SUSPICIOUS_KM_MEDIA) {
+  return Boolean(media && media > limit)
 }
 
-function patioKmVerificationReasons(item: PatioRevisaoProativa, mode: 'km' | 'tempo' = 'km') {
+function patioKmVerificationReasons(
+  item: PatioRevisaoProativa,
+  mode: 'km' | 'tempo' = 'km',
+  limits: { mediaKmDiaria: number; kmEstimado: number } = {
+    mediaKmDiaria: PATIO_SUSPICIOUS_KM_MEDIA,
+    kmEstimado: PATIO_SUSPICIOUS_ESTIMATED_KM,
+  },
+) {
   const reasons: string[] = []
-  if (isSuspiciousPatioKmMedia(item.mediaKmDiaria)) {
+  if (isSuspiciousPatioKmMedia(item.mediaKmDiaria, limits.mediaKmDiaria)) {
     reasons.push(`Media diaria muito alta: ${numberLabel(Math.round(item.mediaKmDiaria ?? 0))} km/dia`)
   }
-  if (item.kmEstimadoDesdeVisita > PATIO_SUSPICIOUS_ESTIMATED_KM) {
+  if (item.kmEstimadoDesdeVisita > limits.kmEstimado) {
     reasons.push(`Estimativa desde a ultima visita muito alta: ${numberLabel(item.kmEstimadoDesdeVisita)} km`)
   }
   if (mode === 'km' && !item.mediaKmDiaria) {
@@ -12189,10 +12196,15 @@ function PatioRevisao({
   const [busyId, setBusyId] = useState<number | undefined>()
   const [notes, setNotes] = useState<Record<number, string>>({})
   const [activeTab, setActiveTab] = useState<'fila' | 'km'>('fila')
+  const [mediaLimit, setMediaLimit] = useState(PATIO_SUSPICIOUS_KM_MEDIA)
+  const [estimatedKmLimit, setEstimatedKmLimit] = useState(PATIO_SUSPICIOUS_ESTIMATED_KM)
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const itemsWithReasons = items.map((item) => ({
     item,
-    reasons: patioKmVerificationReasons(item, mode),
+    reasons: patioKmVerificationReasons(item, mode, {
+      mediaKmDiaria: mediaLimit,
+      kmEstimado: estimatedKmLimit,
+    }),
   }))
   const kmValidationItems = itemsWithReasons.filter((entry) => entry.reasons.length > 0)
   const commercialItems = itemsWithReasons.filter((entry) => entry.reasons.length === 0)
@@ -12244,7 +12256,7 @@ function PatioRevisao({
       </div>
       <div className="patio-action-guide">
         <strong>Por que aparece aqui?</strong>
-        <span>O sistema cruza ultima visita, KM medio por dia e tempo parado. Medias acima de {numberLabel(PATIO_SUSPICIOUS_KM_MEDIA)} km/dia aparecem como validar KM. Use o contato recomendado, confirme a KM atual e marque contato feito para medir retorno da revisao proativa.</span>
+        <span>O sistema cruza ultima visita, KM medio por dia e tempo parado. Os limites abaixo separam fila comercial de dados para conferencia antes do contato.</span>
       </div>
       <div className="patio-internal-tabs">
         <button className={activeTab === 'fila' ? 'active' : ''} type="button" onClick={() => setActiveTab('fila')}>
@@ -12253,6 +12265,28 @@ function PatioRevisao({
         <button className={activeTab === 'km' ? 'active warn' : ''} type="button" onClick={() => setActiveTab('km')}>
           Verificar KM <span>{kmValidationItems.length}</span>
         </button>
+      </div>
+      <div className="patio-km-rules">
+        <label>
+          Media suspeita acima de
+          <input
+            type="number"
+            min="1"
+            value={mediaLimit}
+            onChange={(event) => setMediaLimit(Math.max(1, Number(event.target.value || PATIO_SUSPICIOUS_KM_MEDIA)))}
+          />
+          <small>km/dia</small>
+        </label>
+        <label>
+          KM estimado suspeito acima de
+          <input
+            type="number"
+            min="1"
+            value={estimatedKmLimit}
+            onChange={(event) => setEstimatedKmLimit(Math.max(1, Number(event.target.value || PATIO_SUSPICIOUS_ESTIMATED_KM)))}
+          />
+          <small>km desde a ultima visita</small>
+        </label>
       </div>
       {isLoading && <div className="empty-state">Carregando revisoes...</div>}
       {!isLoading && items.length === 0 && <div className="empty-state">Nenhum veiculo encontrado com esses criterios.</div>}
