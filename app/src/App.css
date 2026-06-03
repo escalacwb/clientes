@@ -4533,6 +4533,31 @@ h3 {
   color: #6a551c;
 }
 
+.patio-feedback-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.patio-feedback-summary span {
+  border: 1px solid #dce7e1;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #52625d;
+  font-size: 13px;
+  padding: 6px 10px;
+}
+
+.patio-feedback-summary strong {
+  color: #073c37;
+}
+
+.patio-feedback-card.sem-contato {
+  border-color: #f2c46d;
+  background: #fffaf0;
+}
+
 .management-loss-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

@@ -11987,6 +11987,11 @@ function PatioFeedback({
   const [busyId, setBusyId] = useState<number | undefined>()
   const [notes, setNotes] = useState<Record<number, string>>({})
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const feedbackStats = {
+    comContato: items.filter((item) => item.contatoRecomendado || item.contatoMotorista).length,
+    semContato: items.filter((item) => !item.contatoRecomendado && !item.contatoMotorista).length,
+    atrasados: items.filter((item) => daysSince(item.fimExecucao) >= 3).length,
+  }
 
   async function run(item: PatioFeedbackPendente, action: () => Promise<void>) {
     setBusyId(item.patioExecucaoId)
@@ -12021,6 +12026,12 @@ function PatioFeedback({
         <strong>Fluxo recomendado</strong>
         <span>1. Abrir WhatsApp com a mensagem pronta. 2. Registrar o retorno no campo de observacao. 3. Marcar como feito ou criar retorno comercial se o cliente pedir cotacao, reclamar ou demonstrar interesse.</span>
       </div>
+      <div className="patio-feedback-summary">
+        <span><strong>{items.length}</strong> nesta pagina</span>
+        <span><strong>{feedbackStats.comContato}</strong> com WhatsApp</span>
+        <span><strong>{feedbackStats.semContato}</strong> sem contato</span>
+        <span><strong>{feedbackStats.atrasados}</strong> ha 3+ dias</span>
+      </div>
       {isLoading && <div className="empty-state">Carregando feedbacks...</div>}
       {!isLoading && items.length === 0 && <div className="empty-state">Nenhum feedback pendente com os filtros atuais.</div>}
       <div className="table-list">
@@ -12028,8 +12039,10 @@ function PatioFeedback({
           const phone = item.contatoRecomendado || item.contatoMotorista
           const message = buildPatioFeedbackMessage(item)
           const whatsappUrl = waMeUrl(phone, message)
+          const pendingDays = daysSince(item.fimExecucao)
+          const semContato = !phone
           return (
-            <article className="panel subtle" key={item.patioExecucaoId}>
+            <article className={`panel subtle patio-feedback-card${semContato ? ' sem-contato' : ''}`} key={item.patioExecucaoId}>
               <div className="panel-header">
                 <div>
                   <h3>{item.clienteNome}</h3>
@@ -12044,8 +12057,16 @@ function PatioFeedback({
                   <button className="button" type="button" onClick={() => onOpenClient(item.clienteId)}>Ficha</button>
                 </div>
               </div>
+              {semContato && (
+                <div className="patio-warning">
+                  <strong>Contato ausente.</strong>
+                  <span>Abra a ficha para atualizar WhatsApp ou telefone antes de registrar o feedback.</span>
+                </div>
+              )}
               <div className="status-list">
                 <div className="status-row"><span>Contato</span><strong>{item.contatoNome || item.nomeMotorista || 'Nao informado'}</strong></div>
+                <div className="status-row"><span>Telefone usado</span><strong>{phone || 'Atualizar cadastro'}</strong></div>
+                <div className="status-row"><span>Pendencia</span><strong>{pendingDays > 0 ? `${pendingDays} dia(s) aguardando` : 'Finalizado hoje'}</strong></div>
                 <div className="status-row"><span>Servicos</span><strong>{item.servicos.slice(0, 3).join(', ') || 'Servico de patio'}</strong></div>
                 <div className="status-row"><span>Objetivo</span><strong>Confirmar satisfacao e capturar oportunidade ou problema</strong></div>
               </div>
