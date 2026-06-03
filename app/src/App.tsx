@@ -12392,6 +12392,8 @@ function Cliente360({
   ].sort((a, b) => a.data.localeCompare(b.data))
   const produtoPrincipal = topByValue(clienteVendas, (venda) => venda.produtoNome, (venda) => venda.valorTotal)
   const servicoRecorrente = topByCount(clienteServicos, (servico) => servico.servicoNome)
+  const historicalQuoteItems = quoteItemsFromClientHistory(clienteVendas, clienteServicos)
+  const historicalQuoteLabels = historicalQuoteItems?.map((item) => item.descricao).slice(0, 5) ?? []
   const frequenciaDias = averageDaysBetween(allEvents.map((item) => item.data))
   const ultimaMovimentacao = allEvents.at(-1)?.data
   const proximaRecompra = frequenciaDias && ultimaMovimentacao ? addDays(ultimaMovimentacao, Math.max(30, Math.round(frequenciaDias))) : undefined
@@ -13097,6 +13099,31 @@ function Cliente360({
             <div className="status-row"><span>Proxima recompra</span><strong>{dateLabel(proximaRecompra)}</strong></div>
             <div className="status-row"><span>Tarefas abertas</span><strong>{tarefasAbertas.length}</strong></div>
           </div>
+          <div className="client360-history-quote">
+            <div>
+              <strong>Proposta sugerida pelo historico</strong>
+              <small>
+                {historicalQuoteItems?.length
+                  ? `${historicalQuoteItems.length} itens reais para revisar no editor.`
+                  : 'Sem compras ou servicos suficientes para sugerir itens.'}
+              </small>
+            </div>
+            {historicalQuoteLabels.length > 0 && (
+              <div className="client360-history-quote-tags">
+                {historicalQuoteLabels.map((label) => (
+                  <span key={label}>{label}</span>
+                ))}
+              </div>
+            )}
+            <button
+              className="button primary"
+              type="button"
+              disabled={!historicalQuoteItems?.length}
+              onClick={() => historicalQuoteItems && onCreateQuote(historicalQuoteItems)}
+            >
+              Nova proposta com historico
+            </button>
+          </div>
           <div className="client-followup-queue">
             <strong>Fila deste cliente</strong>
             {nextOpenTasks.map((tarefa) => (
@@ -13574,6 +13601,86 @@ function quoteItemsFromAnalysis(analysis: WhatsAppContactAnalysis | null): Orcam
     apresentacao: 'normal',
     observacao: 'Detectado pela IA a partir da conversa do WhatsApp',
   }))
+}
+
+function quoteItemsFromClientHistory(vendas: VendaItem[], servicos: ServicoItem[]): OrcamentoItemInput[] | undefined {
+  type RankedSale = {
+    venda: VendaItem
+    count: number
+    total: number
+    lastDate: string
+  }
+  type RankedService = {
+    servico: ServicoItem
+    count: number
+    total: number
+    lastDate: string
+  }
+
+  const salesByProduct = Array.from(vendas.reduce((acc, venda) => {
+    const key = normalizeTextForMatch(`${venda.produtoCodigo ?? ''} ${venda.produtoNome}`)
+    if (!key || !venda.produtoNome) return acc
+    const current = acc.get(key)
+    if (!current) {
+      acc.set(key, {
+        venda,
+        count: 1,
+        total: venda.valorTotal || 0,
+        lastDate: venda.dataVenda,
+      })
+      return acc
+    }
+    current.count += 1
+    current.total += venda.valorTotal || 0
+    if (venda.dataVenda > current.lastDate) {
+      current.venda = venda
+      current.lastDate = venda.dataVenda
+    }
+    return acc
+  }, new Map<string, RankedSale>()).values())
+
+  const servicesByName = Array.from(servicos.reduce((acc, servico) => {
+    const key = normalizeTextForMatch(`${servico.servicoCodigo ?? ''} ${servico.servicoNome}`)
+    if (!key || !servico.servicoNome) return acc
+    const current = acc.get(key)
+    if (!current) {
+      acc.set(key, {
+        servico,
+        count: 1,
+        total: servico.valorTotal || 0,
+        lastDate: servico.dataServico,
+      })
+      return acc
+    }
+    current.count += 1
+    current.total += servico.valorTotal || 0
+    if (servico.dataServico > current.lastDate) {
+      current.servico = servico
+      current.lastDate = servico.dataServico
+    }
+    return acc
+  }, new Map<string, RankedService>()).values())
+
+  const productItems = salesByProduct
+    .sort((a, b) => b.count - a.count || b.total - a.total || b.lastDate.localeCompare(a.lastDate))
+    .slice(0, 3)
+    .map((ranked) => ({
+      ...quoteItemFromVenda(ranked.venda),
+      observacao: `Historico do cliente: ${ranked.count} compra(s), ultima em ${dateLabel(ranked.lastDate)}.`,
+      apresentacao: 'normal' as const,
+    }))
+
+  const serviceItems = servicesByName
+    .sort((a, b) => b.count - a.count || b.total - a.total || b.lastDate.localeCompare(a.lastDate))
+    .slice(0, 3)
+    .map((ranked) => ({
+      ...quoteItemFromServico(ranked.servico),
+      observacao: `Servico recorrente: ${ranked.count} registro(s), ultimo em ${dateLabel(ranked.lastDate)}.`,
+      apresentacao: 'complementar' as const,
+    }))
+
+  const items = [...productItems, ...serviceItems].filter((item) => item.descricao)
+  return items.length ? items : undefined
 }
 
 function quantityFromText(value: string) {
