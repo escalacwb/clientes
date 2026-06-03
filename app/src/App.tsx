@@ -4619,7 +4619,7 @@ function CampanhasInbox({
     proximaAcao: '',
     dataProximaAcao: '',
   })
-  const actionable = items.filter((item) => ['respondeu', 'virou_orcamento', 'enviado', 'nao_respondeu'].includes(item.status))
+  const actionable = items.filter((item) => ['respondeu', 'virou_orcamento', 'enviado', 'nao_respondeu', 'comprar_depois'].includes(item.status))
   const orderedItems = [...items].sort((a, b) => campaignInboxPriority(b) - campaignInboxPriority(a))
   const nextInboxItem = orderedItems.find((item) => campaignInboxPriority(item) > 0)
   const counts = items.reduce<Record<string, number>>((acc, item) => {
@@ -4637,12 +4637,13 @@ function CampanhasInbox({
   }
 
   function openCampaignResult(item: CampanhaInboxItem, status: CampanhaEnvioStatus) {
+    const defaults = campaignResultDefaults(status, item.campanhaNome ?? item.campanhaId)
     setResultTarget(item)
     setResultStatus(status)
     setResultForm({
-      resumo: item.respostaCliente || `Tratativa da campanha ${item.campanhaNome ?? item.campanhaId}: ${campaignStatusLabel(status)}.`,
-      proximaAcao: ['respondeu', 'enviado', 'nao_respondeu', 'virou_orcamento'].includes(status) ? campaignNextActionForStatus(status) : '',
-      dataProximaAcao: ['respondeu', 'enviado', 'nao_respondeu', 'virou_orcamento'].includes(status) ? addDays(new Date().toISOString().slice(0, 10), status === 'nao_respondeu' ? 2 : 1) : '',
+      resumo: item.respostaCliente || defaults.resumo,
+      proximaAcao: defaults.proximaAcao,
+      dataProximaAcao: defaults.dataProximaAcao,
     })
   }
 
@@ -4671,6 +4672,7 @@ function CampanhasInbox({
               <option value="virou_orcamento">Virou proposta</option>
               <option value="enviado">Enviados</option>
               <option value="nao_respondeu">Nao respondeu</option>
+              <option value="comprar_depois">Comprar depois</option>
               <option value="pendente">Pendentes</option>
               <option value="ganhou">Ganhos</option>
               <option value="perdido">Perdidos</option>
@@ -4694,6 +4696,7 @@ function CampanhasInbox({
         <Info label="Responderam" value={(counts.respondeu ?? 0).toString()} />
         <Info label="Propostas" value={(counts.virou_orcamento ?? 0).toString()} />
         <Info label="Sem resposta" value={(counts.nao_respondeu ?? 0).toString()} />
+        <Info label="Comprar depois" value={(counts.comprar_depois ?? 0).toString()} />
         <Info label="Ganhos" value={(counts.ganhou ?? 0).toString()} />
         <Info label="Perdidos" value={(counts.perdido ?? 0).toString()} />
       </div>
@@ -4759,6 +4762,7 @@ function CampanhasInbox({
                   <option value="respondeu">Respondeu</option>
                   <option value="virou_orcamento">Virou proposta</option>
                   <option value="nao_respondeu">Sem resposta</option>
+                  <option value="comprar_depois">Comprar depois</option>
                   <option value="ganhou">Ganhou</option>
                   <option value="perdido">Perdido</option>
                   <option value="nao_contatar">Nao contatar</option>
@@ -4779,18 +4783,15 @@ function CampanhasInbox({
             <button className="button" type="button" onClick={() => setResultTarget(null)}>Fechar</button>
           </div>
           <div className="quick-result-grid">
-            {(['respondeu', 'virou_orcamento', 'nao_respondeu', 'ganhou', 'perdido', 'nao_contatar'] as CampanhaEnvioStatus[]).map((status) => (
+            {(['respondeu', 'virou_orcamento', 'comprar_depois', 'nao_respondeu', 'ganhou', 'perdido', 'nao_contatar'] as CampanhaEnvioStatus[]).map((status) => (
               <button
                 className={resultStatus === status ? 'button primary' : 'button'}
                 key={status}
                 type="button"
                 onClick={() => {
+                  const defaults = campaignResultDefaults(status, resultTarget.campanhaNome ?? resultTarget.campanhaId)
                   setResultStatus(status)
-                  setResultForm((current) => ({
-                    ...current,
-                    proximaAcao: campaignNextActionForStatus(status),
-                    dataProximaAcao: campaignNextActionForStatus(status) ? addDays(new Date().toISOString().slice(0, 10), status === 'nao_respondeu' ? 2 : 1) : '',
-                  }))
+                  setResultForm(defaults)
                 }}
               >
                 {campaignStatusLabel(status)}
@@ -4832,6 +4833,7 @@ function campaignInboxPriority(item: CampanhaInboxItem) {
     virou_orcamento: 95,
     enviado: 70,
     nao_respondeu: 55,
+    comprar_depois: 50,
     pendente: 25,
   }
   return weights[item.status] ?? 0
@@ -9423,6 +9425,7 @@ function campaignStatusLabel(status: CampanhaEnvioStatus) {
     enviado: 'Checar resposta',
     respondeu: 'Respondeu',
     nao_respondeu: 'Nao respondeu',
+    comprar_depois: 'Comprar depois',
     virou_orcamento: 'Virou orcamento',
     ganhou: 'Ganhou',
     perdido: 'Perdido',
@@ -9436,6 +9439,7 @@ function campaignRoutinePriority(status: CampanhaEnvioStatus) {
   if (status === 'virou_orcamento') return 165
   if (status === 'enviado') return 142
   if (status === 'pendente') return 118
+  if (status === 'comprar_depois') return 88
   if (status === 'nao_respondeu') return 82
   return 55
 }
@@ -9446,6 +9450,7 @@ function campaignRoutineLabel(status: CampanhaEnvioStatus) {
     enviado: 'Checar resposta',
     respondeu: 'Responder agora',
     nao_respondeu: 'Retentar contato',
+    comprar_depois: 'Comprar depois',
     virou_orcamento: 'Montar proposta',
     ganhou: 'Pos-venda',
     perdido: 'Registrar perda',
@@ -9460,6 +9465,7 @@ function campaignRoutineReason(status: CampanhaEnvioStatus) {
     enviado: 'Mensagem ja foi enviada. Abra a conversa e confira se o cliente respondeu antes de marcar resultado.',
     respondeu: 'Cliente respondeu campanha e precisa de retorno humano.',
     nao_respondeu: 'Contato ficou sem resposta e pode precisar de nova tentativa.',
+    comprar_depois: 'Cliente demonstrou abertura, mas pediu retorno futuro.',
     virou_orcamento: 'Cliente pediu cotacao ou demonstrou interesse em proposta.',
     ganhou: 'Venda ganha pode precisar de pos-venda.',
     perdido: 'Oportunidade perdida deve ter motivo registrado.',
@@ -14983,6 +14989,13 @@ function Campanhas({
   const [contactEditTarget, setContactEditTarget] = useState<Cliente | null>(null)
   const [contactEditForm, setContactEditForm] = useState({ responsavel: '', whatsapp: '' })
   const [isSavingContactEdit, setIsSavingContactEdit] = useState(false)
+  const [campaignResultTarget, setCampaignResultTarget] = useState<{ cliente: Cliente; mensagemFinal: string } | null>(null)
+  const [campaignResultStatus, setCampaignResultStatus] = useState<CampanhaEnvioStatus>('respondeu')
+  const [campaignResultForm, setCampaignResultForm] = useState<CampaignInboxResultForm>({
+    resumo: '',
+    proximaAcao: '',
+    dataProximaAcao: '',
+  })
   const appliedInitialCampanhaIdRef = useRef('')
   const segmento = campanhaSegmentos.find((item) => item.id === segmentoId) ?? campanhaSegmentos[0]
   const activeCampaignResumo = campanhasResumo.find((resumo) => resumo.campanhaId === activeCampanhaId)
@@ -15007,7 +15020,7 @@ function Campanhas({
       acc[status] += 1
       return acc
     },
-    { pendente: 0, enviado: 0, respondeu: 0, nao_respondeu: 0, virou_orcamento: 0, ganhou: 0, perdido: 0, nao_contatar: 0 },
+    { pendente: 0, enviado: 0, respondeu: 0, nao_respondeu: 0, comprar_depois: 0, virou_orcamento: 0, ganhou: 0, perdido: 0, nao_contatar: 0 },
   )
   const filteredClientes = campanhaClientes.filter((cliente) => statusFilter === 'todos' || (statuses[cliente.id] ?? 'pendente') === statusFilter)
   const selectableCampaignIds = filteredClientes.filter((cliente) => !campaignContactReadiness(cliente, elegibilidade[cliente.id], numberFromInput(campaignWindowDays) || 7).blocked).map((cliente) => cliente.id)
@@ -15291,7 +15304,21 @@ function Campanhas({
     }
   }
 
-  async function markStatus(cliente: Cliente, status: CampanhaEnvioStatus, mensagemFinal: string, optOutMotivo?: string) {
+  function openCampaignResult(cliente: Cliente, status: CampanhaEnvioStatus, mensagemFinal: string) {
+    const defaults = campaignResultDefaults(status, saveName || segmento.campanhaNome)
+    setCampaignResultTarget({ cliente, mensagemFinal })
+    setCampaignResultStatus(status)
+    setCampaignResultForm(defaults)
+    setCampaignError('')
+  }
+
+  async function submitCampaignResult() {
+    if (!campaignResultTarget) return
+    await markStatus(campaignResultTarget.cliente, campaignResultStatus, campaignResultTarget.mensagemFinal, undefined, campaignResultForm)
+    setCampaignResultTarget(null)
+  }
+
+  async function markStatus(cliente: Cliente, status: CampanhaEnvioStatus, mensagemFinal: string, optOutMotivo?: string, result?: CampaignInboxResultForm) {
     setCampaignError('')
 
     try {
@@ -15309,8 +15336,10 @@ function Campanhas({
         vendedorId: cliente.vendedorId ?? currentUser.id,
         canal: 'Campanha',
         tipo: 'campanha',
-        resumo: campaignSummary(status, mensagemFinal),
+        resumo: result?.resumo?.trim() || campaignSummary(status, mensagemFinal),
         resultado: status,
+        proximaAcao: result?.proximaAcao?.trim() || undefined,
+        dataProximaAcao: result?.dataProximaAcao || undefined,
         campanhaId: envio.campanhaId,
       })
       if (status === 'virou_orcamento') {
@@ -15331,6 +15360,21 @@ function Campanhas({
           optOutPor: currentUser.id,
         }).catch((exception) => {
           setCampaignError(exception instanceof Error ? exception.message : 'Nao foi possivel marcar cliente como nao contatar.')
+        })
+      }
+      const nextStatus = clientStatusFromCampaignStatus(status)
+      if (nextStatus) {
+        updateClienteComercial(cliente.id, { status: nextStatus }).catch(() => undefined)
+      }
+      if (result?.proximaAcao?.trim() && result.dataProximaAcao) {
+        await onAddTask({
+          clienteId: cliente.id,
+          vendedorId: cliente.vendedorId ?? currentUser.id,
+          titulo: result.proximaAcao.trim(),
+          descricao: result.resumo.trim() || `Follow-up da campanha ${saveName || segmento.campanhaNome}. Resultado: ${campaignStatusLabel(status)}.`,
+          dataVencimento: result.dataProximaAcao,
+          prioridade: campaignTaskPriority(status),
+          origem: `campanha:${envio.campanhaId}:resultado:${status}`,
         })
       }
       setStatuses((current) => ({ ...current, [cliente.id]: status }))
@@ -16246,14 +16290,14 @@ function Campanhas({
                 <button className="button" type="button" onClick={() => openCampaignContactEdit(cliente)}>
                   Editar contato
                 </button>
-                <button className="button" type="button" onClick={() => markStatus(cliente, 'respondeu', finalMessage)}>
+                <button className="button" type="button" onClick={() => openCampaignResult(cliente, 'respondeu', finalMessage)}>
                   Respondeu
                 </button>
                 <button
                   className="button primary"
                   type="button"
                   onClick={() => {
-                    void markStatus(cliente, 'virou_orcamento', finalMessage)
+                    void markStatus(cliente, 'virou_orcamento', finalMessage, undefined, campaignResultDefaults('virou_orcamento', saveName || segmento.campanhaNome))
                     onOpenBudgetEditor(cliente, {
                       kind: 'campanha',
                       sourceId: activeCampanhaId || undefined,
@@ -16272,7 +16316,8 @@ function Campanhas({
                     if (nextAction === 'reenviar') void openCampaignWhatsapp(cliente, finalMessage, { forceRegister: true })
                     if (nextAction === 'enviado') void markStatus(cliente, 'enviado', finalMessage)
                     if (nextAction === 'pendente') void markStatus(cliente, 'pendente', finalMessage)
-                    if (nextAction === 'sem_resposta') void markStatus(cliente, 'nao_respondeu', finalMessage)
+                    if (nextAction === 'comprar_depois') openCampaignResult(cliente, 'comprar_depois', finalMessage)
+                    if (nextAction === 'sem_resposta') openCampaignResult(cliente, 'nao_respondeu', finalMessage)
                     if (nextAction === 'ganhou') void markStatus(cliente, 'ganhou', finalMessage)
                     if (nextAction === 'perdido') void markStatus(cliente, 'perdido', finalMessage)
                     if (nextAction === 'nao_contatar') void markCampaignOptOut(cliente, finalMessage)
@@ -16282,6 +16327,7 @@ function Campanhas({
                   <option value="reenviar" disabled={!canResend}>Reenviar WhatsApp</option>
                   <option value="enviado" disabled={!canResend}>Marcar enviado</option>
                   <option value="pendente">Voltar para pendente</option>
+                  <option value="comprar_depois">Comprar depois</option>
                   <option value="sem_resposta">Marcar sem resposta</option>
                   <option value="ganhou">Marcar ganho</option>
                   <option value="perdido">Marcar perdido</option>
@@ -16345,6 +16391,61 @@ function Campanhas({
           </form>
         </div>
       )}
+      {campaignResultTarget && (
+        <section className="floating-panel task-result-panel">
+          <div className="panel-header">
+            <div>
+              <h2>Resultado do contato</h2>
+              <p>{campaignResultTarget.cliente.nome} - {saveName || segmento.campanhaNome}</p>
+            </div>
+            <button className="button" type="button" onClick={() => setCampaignResultTarget(null)}>Fechar</button>
+          </div>
+          <div className="quick-result-grid">
+            {(['respondeu', 'virou_orcamento', 'comprar_depois', 'nao_respondeu', 'ganhou', 'perdido', 'nao_contatar'] as CampanhaEnvioStatus[]).map((status) => (
+              <button
+                className={campaignResultStatus === status ? 'button primary' : 'button'}
+                key={status}
+                type="button"
+                onClick={() => {
+                  setCampaignResultStatus(status)
+                  setCampaignResultForm(campaignResultDefaults(status, saveName || segmento.campanhaNome))
+                }}
+              >
+                {campaignStatusLabel(status)}
+              </button>
+            ))}
+          </div>
+          <div className="task-form compact-form">
+            <label className="span-2">
+              Resumo do que aconteceu
+              <textarea
+                value={campaignResultForm.resumo}
+                onChange={(event) => setCampaignResultForm({ ...campaignResultForm, resumo: event.target.value })}
+                placeholder="Ex.: pediu 295/80 para cotar hoje, prefere pagamento 30/60."
+              />
+            </label>
+            <label>
+              Proxima data
+              <input
+                type="date"
+                value={campaignResultForm.dataProximaAcao}
+                onChange={(event) => setCampaignResultForm({ ...campaignResultForm, dataProximaAcao: event.target.value })}
+              />
+            </label>
+            <label>
+              Proxima acao
+              <input
+                value={campaignResultForm.proximaAcao}
+                onChange={(event) => setCampaignResultForm({ ...campaignResultForm, proximaAcao: event.target.value })}
+                placeholder="Ex.: Retomar cotacao"
+              />
+            </label>
+            <button className="button primary" type="button" disabled={!campaignResultForm.resumo.trim()} onClick={submitCampaignResult}>
+              Salvar resultado
+            </button>
+          </div>
+        </section>
+      )}
     </section>
   )
 }
@@ -16355,6 +16456,7 @@ function campaignSummary(status: CampanhaEnvioStatus, mensagem: string) {
     enviado: 'Mensagem de campanha marcada como enviada.',
     respondeu: 'Cliente respondeu a campanha.',
     nao_respondeu: 'Cliente nao respondeu a campanha.',
+    comprar_depois: 'Cliente pediu retorno futuro.',
     virou_orcamento: 'Campanha virou oportunidade de orcamento.',
     ganhou: 'Campanha marcada como venda ganha.',
     perdido: 'Campanha marcada como oportunidade perdida.',
@@ -16403,6 +16505,7 @@ function campaignTaskTitle(status: CampanhaEnvioStatus) {
     enviado: 'Follow-up de campanha enviada',
     respondeu: 'Responder cliente da campanha',
     nao_respondeu: 'Retentar contato da campanha',
+    comprar_depois: 'Retomar cliente que pediu para comprar depois',
     virou_orcamento: 'Formalizar orcamento da campanha',
     ganhou: 'Confirmar pos-venda da campanha',
     perdido: 'Registrar motivo de perda da campanha',
@@ -16414,23 +16517,67 @@ function campaignTaskTitle(status: CampanhaEnvioStatus) {
 function campaignTaskPriority(status: CampanhaEnvioStatus) {
   if (status === 'respondeu' || status === 'virou_orcamento') return 95
   if (status === 'pendente' || status === 'enviado') return 80
+  if (status === 'comprar_depois') return 75
   if (status === 'nao_respondeu') return 70
   return 50
 }
 
-function campaignNextActionForStatus(status: CampanhaEnvioStatus) {
-  const actions: Partial<Record<CampanhaEnvioStatus, string>> = {
-    enviado: 'Conferir resposta da campanha',
-    respondeu: 'Responder e qualificar necessidade',
-    nao_respondeu: 'Retentar contato da campanha',
-    virou_orcamento: 'Montar proposta comercial',
+function campaignResultDefaults(status: CampanhaEnvioStatus, campanhaNome: string): CampaignInboxResultForm {
+  const today = new Date().toISOString().slice(0, 10)
+  const defaults: Record<CampanhaEnvioStatus, CampaignInboxResultForm> = {
+    pendente: {
+      resumo: `Campanha ${campanhaNome}: contato voltou para pendente.`,
+      proximaAcao: '',
+      dataProximaAcao: '',
+    },
+    enviado: {
+      resumo: `Campanha ${campanhaNome}: mensagem enviada, aguardando checagem de resposta.`,
+      proximaAcao: 'Checar resposta no WhatsApp',
+      dataProximaAcao: addDays(today, 1),
+    },
+    respondeu: {
+      resumo: `Campanha ${campanhaNome}: cliente respondeu. Registrar necessidade e conduzir atendimento.`,
+      proximaAcao: 'Responder e qualificar necessidade',
+      dataProximaAcao: today,
+    },
+    virou_orcamento: {
+      resumo: `Campanha ${campanhaNome}: cliente pediu cotacao ou demonstrou interesse em proposta.`,
+      proximaAcao: 'Montar proposta comercial',
+      dataProximaAcao: today,
+    },
+    comprar_depois: {
+      resumo: `Campanha ${campanhaNome}: cliente pediu retorno futuro.`,
+      proximaAcao: 'Retomar no prazo combinado',
+      dataProximaAcao: addDays(today, 15),
+    },
+    nao_respondeu: {
+      resumo: `Campanha ${campanhaNome}: conversa checada, sem resposta do cliente.`,
+      proximaAcao: 'Fazer nova tentativa',
+      dataProximaAcao: addDays(today, 2),
+    },
+    ganhou: {
+      resumo: `Campanha ${campanhaNome}: venda ganha.`,
+      proximaAcao: '',
+      dataProximaAcao: '',
+    },
+    perdido: {
+      resumo: `Campanha ${campanhaNome}: oportunidade perdida. Registrar motivo se conhecido.`,
+      proximaAcao: '',
+      dataProximaAcao: '',
+    },
+    nao_contatar: {
+      resumo: `Campanha ${campanhaNome}: cliente marcado como nao contatar.`,
+      proximaAcao: '',
+      dataProximaAcao: '',
+    },
   }
-  return actions[status] ?? ''
+  return defaults[status]
 }
 
 function clientStatusFromCampaignStatus(status: CampanhaEnvioStatus): ClienteStatus | undefined {
   const statuses: Partial<Record<CampanhaEnvioStatus, ClienteStatus>> = {
     respondeu: 'Em acompanhamento',
+    comprar_depois: 'Em acompanhamento',
     virou_orcamento: 'Orcamento aberto',
     ganhou: 'Ativo',
     perdido: 'Reativar',

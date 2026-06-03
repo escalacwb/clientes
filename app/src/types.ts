@@ -282,6 +282,7 @@ export type CampanhaEnvioStatus =
   | 'enviado'
   | 'respondeu'
   | 'nao_respondeu'
+  | 'comprar_depois'
   | 'virou_orcamento'
   | 'ganhou'
   | 'perdido'
