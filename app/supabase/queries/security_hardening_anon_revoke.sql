@@ -70,7 +70,7 @@ revoke execute on function public.retirar_box_patio_crm(bigint) from anon;
 revoke execute on function public.finalizar_box_patio_crm(bigint, jsonb, text) from anon;
 revoke execute on function public.reverter_visita_patio_crm(bigint) from anon;
 revoke execute on function public.listar_patio_revisao_proativa(numeric, integer, text, uuid, integer, integer) from anon;
-revoke execute on function public.listar_patio_revisao_resultados(text, integer) from anon;
+revoke execute on function public.listar_patio_revisao_resultados(text, integer, integer) from anon;
 
 grant execute on function public.buscar_patio_veiculos(text, integer) to authenticated, service_role;
 grant execute on function public.corrigir_km_atendimento_patio_crm(bigint, integer) to authenticated, service_role;
@@ -81,7 +81,7 @@ grant execute on function public.retirar_box_patio_crm(bigint) to authenticated,
 grant execute on function public.finalizar_box_patio_crm(bigint, jsonb, text) to authenticated, service_role;
 grant execute on function public.reverter_visita_patio_crm(bigint) to authenticated, service_role;
 grant execute on function public.listar_patio_revisao_proativa(numeric, integer, text, uuid, integer, integer) to authenticated, service_role;
-grant execute on function public.listar_patio_revisao_resultados(text, integer) to authenticated, service_role;
+grant execute on function public.listar_patio_revisao_resultados(text, integer, integer) to authenticated, service_role;
 
 -- Views/tabelas operacionais com dados de clientes, placas, funcionarios e boxes.
 revoke select on public.vw_cliente_contatos_recomendados from anon;

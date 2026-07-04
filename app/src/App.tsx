@@ -124,6 +124,7 @@ import {
   listMotivosPerda,
   listRankingMedidas,
   listRankingServicos,
+  listServiceContatosEfetividade,
   listTarefasSlaVendedor,
   listVendedoresResumo,
   type DashboardResumo,
@@ -133,6 +134,7 @@ import {
   type FunilGerencialResumo,
   type MotivoPerdaResumo,
   type RankingResumo,
+  type ServiceContatoEfetividadeResumo,
   type TarefaSlaVendedorResumo,
   type VendedorResumo,
   upsertMetaVendedor,
@@ -302,6 +304,13 @@ const navSectionsByMode: Record<AppMode, Array<{ title: string; items: Array<{ i
         { id: 'campanhas', label: 'Campanhas', icon: Send },
       ],
     },
+    {
+      title: 'Pos-venda',
+      items: [
+        { id: 'patio-feedback', label: 'Feedback', icon: MessageCircle },
+        { id: 'patio-revisao', label: 'Revisao proativa', icon: RefreshCw },
+      ],
+    },
   ],
   gestao: [
     {
@@ -334,9 +343,9 @@ const hiddenViewRedirects: Record<string, string> = {
 }
 
 const adminOnlyViews = new Set(['importacoes', 'conflitos', 'mesclagem', 'relatorios', 'relatorio-patio', 'patio-km-medio', 'patio-resultados', 'vendedores', 'usuarios', 'auditoria'])
-const sellerPrimaryViews = new Set(['cockpit', 'tarefas', 'clientes', 'campanhas', 'orcamentos'])
-const mobilePrimaryViews = new Set(['cockpit', 'tarefas', 'clientes', 'campanhas', 'orcamentos'])
-const mobileAllowedViews = new Set(['cockpit', 'tarefas', 'clientes', 'campanhas', 'orcamentos', 'cliente360', 'orcamento-editor', 'orcamento-detalhe'])
+const sellerPrimaryViews = new Set(['cockpit', 'tarefas', 'clientes', 'campanhas', 'orcamentos', 'patio-feedback', 'patio-revisao'])
+const mobilePrimaryViews = new Set(['cockpit', 'tarefas', 'clientes', 'campanhas', 'orcamentos', 'patio-feedback', 'patio-revisao'])
+const mobileAllowedViews = new Set(['cockpit', 'tarefas', 'clientes', 'campanhas', 'orcamentos', 'patio-feedback', 'patio-revisao', 'cliente360', 'orcamento-editor', 'orcamento-detalhe'])
 
 function normalizeView(view: string) {
   return hiddenViewRedirects[view] ?? view
@@ -675,6 +684,7 @@ function App() {
   const [patioConcluidosItens, setPatioConcluidosItens] = useState<PatioAtendimentoItemResumo[]>([])
   const [isLoadingPatioConcluidos, setIsLoadingPatioConcluidos] = useState(false)
   const [patioRevisaoItems, setPatioRevisaoItems] = useState<PatioRevisaoProativa[]>([])
+  const [patioRevisaoResultados, setPatioRevisaoResultados] = useState<PatioRevisaoResultado[]>([])
   const [patioRevisaoTotal, setPatioRevisaoTotal] = useState(0)
   const [patioRevisaoPage, setPatioRevisaoPage] = useState(1)
   const [patioRevisaoQuery, setPatioRevisaoQuery] = useState('')
@@ -703,6 +713,7 @@ function App() {
   const [atividadesDia, setAtividadesDia] = useState<AtividadeDiaResumo[]>([])
   const [forecastVendedor, setForecastVendedor] = useState<ForecastVendedorResumo[]>([])
   const [metasVendedores, setMetasVendedores] = useState<MetaVendedor[]>([])
+  const [serviceContatosEfetividade, setServiceContatosEfetividade] = useState<ServiceContatoEfetividadeResumo[]>([])
   const [rodobensLeads, setRodobensLeads] = useState<Cliente[]>([])
   const [rodobensTotal, setRodobensTotal] = useState(0)
   const [rodobensFunil, setRodobensFunil] = useState<RodobensFunilResumo[]>([])
@@ -840,6 +851,8 @@ function App() {
           needsRelatorioGerencial ? listAtividadesDia() : Promise.resolve(atividadesDia),
           needsRelatorioGerencial ? listForecastVendedor() : Promise.resolve(forecastVendedor),
           needsRelatorioGerencial ? listMetasVendedores() : Promise.resolve(metasVendedores),
+          needsRelatorioGerencial ? listServiceContatosEfetividade() : Promise.resolve(serviceContatosEfetividade),
+          needsRelatorioGerencial ? listPatioRevisaoResultados({ janelaDias: 30, limit: 200 }) : Promise.resolve(patioRevisaoResultados),
         ])
         const rejected = results.find((result) => result.status === 'rejected')
         const valueAt = <T,>(index: number, fallback: T): T => {
@@ -869,6 +882,8 @@ function App() {
         const loadedAtividadesDia = valueAt(19, atividadesDia)
         const loadedForecastVendedor = valueAt(20, forecastVendedor)
         const loadedMetasVendedores = valueAt(21, metasVendedores)
+        const loadedServiceContatosEfetividade = valueAt(22, serviceContatosEfetividade)
+        const loadedPatioRevisaoResultados = valueAt(23, patioRevisaoResultados)
 
         if (!isMounted) return
         setInteracoes(loadedInteracoes)
@@ -896,6 +911,8 @@ function App() {
         setAtividadesDia(loadedAtividadesDia)
         setForecastVendedor(loadedForecastVendedor)
         setMetasVendedores(loadedMetasVendedores)
+        setServiceContatosEfetividade(loadedServiceContatosEfetividade)
+        setPatioRevisaoResultados(loadedPatioRevisaoResultados)
         if (rejected) {
           setModuleError('dashboard', rejected.reason instanceof Error ? rejected.reason.message : 'Alguns indicadores nao carregaram agora.')
         }
@@ -2442,6 +2459,8 @@ function App() {
               const created = await createInteracao({
                 clienteId: item.clienteId,
                 vendedorId: item.vendedorId ?? session.id,
+                patioVeiculoId: item.patioVeiculoId,
+                placa: item.placa,
                 canal: 'WhatsApp',
                 tipo: 'revisao_proativa',
                 resumo: observacao || `Contato de revisao proativa registrado para placa ${item.placa ?? 'sem placa'}.`,
@@ -3127,13 +3146,18 @@ function App() {
                 nao_contatar: 'Nao contatar',
               }
               const nextStatus = statusByResult[result.resultado]
+              const resumoContato = result.motivoQueda
+                ? `${result.resumo}\nMotivo da queda: ${serviceDropReasonLabel(result.motivoQueda)}`
+                : result.resumo
               await createInteracao({
                 clienteId: tarefa.clienteId,
                 vendedorId,
+                tarefaId: tarefa.id,
                 canal: result.canal,
                 tipo: 'Resultado de tarefa',
-                resumo: result.resumo || tarefa.titulo,
+                resumo: resumoContato || tarefa.titulo,
                 resultado: taskCompletionResultLabel(result.resultado),
+                motivoQueda: result.motivoQueda || undefined,
                 proximaAcao: result.proximaAcao || undefined,
                 dataProximaAcao: result.dataProximaAcao || undefined,
               })
@@ -3595,6 +3619,8 @@ function App() {
             atividadesDia={atividadesDia}
             forecastVendedor={forecastVendedor}
             metasVendedores={metasVendedores}
+            serviceContatosEfetividade={serviceContatosEfetividade}
+            patioRevisaoResultados={patioRevisaoResultados}
             interacoes={interacoes}
             orcamentos={orcamentos}
             importacoes={importacoes}
@@ -6731,6 +6757,7 @@ function Tarefas({
     resumo: '',
     proximaAcao: '',
     dataProximaAcao: '',
+    motivoQueda: '',
   })
   const [createdSuggestions, setCreatedSuggestions] = useState<string[]>([])
   const [reschedulingId, setReschedulingId] = useState('')
@@ -6748,6 +6775,9 @@ function Tarefas({
   const [error, setError] = useState('')
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const abertas = tarefas.filter((tarefa) => tarefa.status === 'aberta')
+  const serviceRiskTasks = abertas
+    .filter((tarefa) => isServiceRecoveryTask(tarefa))
+    .sort((a, b) => b.prioridade - a.prioridade || a.dataVencimento.localeCompare(b.dataVencimento))
   const commercialTasks = abertas
     .filter((tarefa) => isCommercialFollowupTask(tarefa))
     .sort((a, b) => taskCommercialPriority(b) - taskCommercialPriority(a))
@@ -6769,6 +6799,16 @@ function Tarefas({
     .sort((a, b) => b.vencidas - a.vencidas || b.prioridadeMedia - a.prioridadeMedia)
   const overloaded = workload[0]
   const agendaBuckets = [
+    {
+      id: 'service',
+      label: 'Service em risco',
+      hint: 'queda de visitas',
+      tarefas: serviceRiskTasks,
+      onClick: () => {
+        onFilterChange('abertas')
+        onOriginFilterChange('service')
+      },
+    },
     {
       id: 'comercial',
       label: 'Follow-up comercial',
@@ -6880,19 +6920,21 @@ function Tarefas({
 
   function openCompletion(tarefa: Tarefa, resultado: TaskCompletionResult = 'respondeu') {
     setCompletionTarget(tarefa)
-    setCompletionForm({
-      canal: 'WhatsApp',
-      resultado,
-      resumo: tarefa.descricao ?? tarefa.titulo,
-      proximaAcao: ['respondeu', 'comprar_depois', 'nao_respondeu'].includes(resultado) ? 'Retomar contato' : '',
-      dataProximaAcao: ['respondeu', 'comprar_depois', 'nao_respondeu'].includes(resultado) ? addDays(new Date().toISOString().slice(0, 10), resultado === 'nao_respondeu' ? 2 : 1) : '',
-    })
+    setCompletionForm(taskCompletionDefaults(tarefa, resultado))
   }
 
   async function submitCompletion() {
     if (!completionTarget) return
     if (!completionForm.resumo.trim()) {
       setError('Informe um resumo do contato para salvar no historico.')
+      return
+    }
+    if (isServiceRecoveryTask(completionTarget) && !completionForm.motivoQueda) {
+      setError('Informe o motivo da queda de service para salvar esse contato.')
+      return
+    }
+    if (isServiceRecoveryTask(completionTarget) && taskCompletionNeedsFollowup(completionForm.resultado) && !completionForm.dataProximaAcao) {
+      setError('Defina a proxima data para tarefas de service que ainda precisam de acompanhamento.')
       return
     }
     setIsSavingCompletion(true)
@@ -6929,6 +6971,7 @@ function Tarefas({
               <option value="importacao">Importacao</option>
               <option value="campanha">Campanha</option>
               <option value="oportunidade">Oportunidade</option>
+              <option value="service">Service em risco</option>
               <option value="rodobens">Clientes sem cadastro</option>
             </select>
           </label>
@@ -7048,11 +7091,13 @@ function Tarefas({
         <div className="task-commercial-grid">
           {commercialTasks.slice(0, 6).map((tarefa) => {
             const sla = taskSla(tarefa)
+            const isServiceTask = isServiceRecoveryTask(tarefa)
             return (
               <article className={sla.tone === 'danger' ? 'routine-card danger' : 'routine-card'} key={tarefa.id}>
                 <span>
                   <strong>{tarefa.clienteNome}</strong>
                   <small>{tarefa.titulo} - {taskOriginLabel(tarefa.origem)} - {dateLabel(tarefa.dataVencimento)}</small>
+                  {isServiceTask && <small>{serviceTaskSummary(tarefa)}</small>}
                 </span>
                 <b>{tarefa.prioridade}</b>
                 <div className="routine-actions">
@@ -7070,8 +7115,8 @@ function Tarefas({
                   >
                     Nova proposta
                   </button>
-                  <button className="button primary" type="button" onClick={() => onComplete(tarefa.id)}>Concluir</button>
-                  <button className="button" type="button" onClick={() => openCompletion(tarefa)}>
+                  {!isServiceTask && <button className="button primary" type="button" onClick={() => onComplete(tarefa.id)}>Concluir</button>}
+                  <button className={isServiceTask ? 'button primary' : 'button'} type="button" onClick={() => openCompletion(tarefa)}>
                     Registrar resultado
                   </button>
                 </div>
@@ -7085,10 +7130,15 @@ function Tarefas({
         <section className="task-execution-panel">
           {activeExecutionTask ? (
             <>
+              {(() => {
+                const isServiceTask = isServiceRecoveryTask(activeExecutionTask)
+                return (
+                  <>
               <div className="task-execution-main">
                 <span className={`sla-pill ${taskSla(activeExecutionTask).tone}`}>{taskSla(activeExecutionTask).label}</span>
                 <h2>{activeExecutionTask.titulo}</h2>
                 <p>{activeExecutionTask.descricao ?? activeExecutionTask.origem}</p>
+                {isServiceTask && <p>{serviceTaskSummary(activeExecutionTask)}</p>}
                 <div className="info-grid">
                   <Info label="Cliente" value={activeExecutionTask.clienteNome} />
                   <Info label="Vendedor" value={activeExecutionTask.vendedorNome ?? 'Sem vendedor'} />
@@ -7147,16 +7197,21 @@ function Tarefas({
                 >
                   Proxima
                 </button>
-                <button className="button primary" type="button" onClick={() => {
-                  onComplete(activeExecutionTask.id)
-                  setExecutionIndex((current) => Math.min(current, Math.max(executionQueue.length - 2, 0)))
-                }}>
-                  Concluir e avancar
-                </button>
-                <button className="button" type="button" onClick={() => openCompletion(activeExecutionTask)}>
+                {!isServiceTask && (
+                  <button className="button primary" type="button" onClick={() => {
+                    onComplete(activeExecutionTask.id)
+                    setExecutionIndex((current) => Math.min(current, Math.max(executionQueue.length - 2, 0)))
+                  }}>
+                    Concluir e avancar
+                  </button>
+                )}
+                <button className={isServiceTask ? 'button primary' : 'button'} type="button" onClick={() => openCompletion(activeExecutionTask)}>
                   Registrar resultado
                 </button>
               </div>
+                  </>
+                )
+              })()}
             </>
           ) : (
             <div className="empty-state compact">Nenhuma tarefa aberta nesta fila.</div>
@@ -7270,11 +7325,14 @@ function Tarefas({
           <span>Acoes</span>
         </div>
         {isLoading && <div className="empty-state compact">Carregando tarefas...</div>}
-        {!isLoading && filtered.map((tarefa) => (
+        {!isLoading && filtered.map((tarefa) => {
+          const isServiceTask = isServiceRecoveryTask(tarefa)
+          return (
           <div className={tarefa.status === 'concluida' ? 'table-row task done' : 'table-row task'} key={tarefa.id}>
             <span>
               <strong>{tarefa.titulo}</strong>
               <small>{tarefa.descricao ?? tarefa.origem}</small>
+              {isServiceTask && <small>{serviceTaskSummary(tarefa)}</small>}
               {tarefa.reagendamentoMotivo && <small>Reagendada: {tarefa.reagendamentoMotivo}</small>}
             </span>
             <span>{tarefa.clienteNome}</span>
@@ -7302,10 +7360,12 @@ function Tarefas({
                   >
                     Nova proposta
                   </button>
-                  <button className="button primary" onClick={() => onComplete(tarefa.id)} type="button">
-                    Concluir
-                  </button>
-                  <button className="button" onClick={() => openCompletion(tarefa)} type="button">
+                  {!isServiceTask && (
+                    <button className="button primary" onClick={() => onComplete(tarefa.id)} type="button">
+                      Concluir
+                    </button>
+                  )}
+                  <button className={isServiceTask ? 'button primary' : 'button'} onClick={() => openCompletion(tarefa)} type="button">
                     Resultado
                   </button>
                   {reschedulingId === tarefa.id ? (
@@ -7349,7 +7409,7 @@ function Tarefas({
               )}
             </span>
           </div>
-        ))}
+        )})}
         {!isLoading && filtered.length === 0 && <div className="empty-state">Nenhuma tarefa nesta visao.</div>}
       </div>
       <div className="pagination-bar">
@@ -7372,13 +7432,19 @@ function Tarefas({
             </div>
             <button className="button" type="button" onClick={() => setCompletionTarget(null)}>Fechar</button>
           </div>
+          {isServiceRecoveryTask(completionTarget) && (
+            <div className="readiness warn">
+              <strong>Contato de recuperacao Service</strong>
+              <span>{serviceTaskSummary(completionTarget)}</span>
+            </div>
+          )}
           <div className="quick-result-grid">
             {(['respondeu', 'pediu_orcamento', 'nao_respondeu', 'comprar_depois', 'sem_interesse', 'nao_contatar'] as TaskCompletionResult[]).map((result) => (
               <button
                 className={completionForm.resultado === result ? 'button primary' : 'button'}
                 type="button"
                 key={result}
-                onClick={() => setCompletionForm((current) => ({ ...current, resultado: result }))}
+                onClick={() => setCompletionForm((current) => ({ ...taskCompletionDefaults(completionTarget, result), resumo: current.resumo, motivoQueda: current.motivoQueda }))}
               >
                 {taskCompletionResultLabel(result)}
               </button>
@@ -7394,6 +7460,17 @@ function Tarefas({
                 <option value="Email">Email</option>
               </select>
             </label>
+            {isServiceRecoveryTask(completionTarget) && (
+              <label>
+                Motivo da queda
+                <select value={completionForm.motivoQueda} onChange={(event) => setCompletionForm({ ...completionForm, motivoQueda: event.target.value })}>
+                  <option value="">Selecionar</option>
+                  {serviceDropReasons.map((reason) => (
+                    <option value={reason.id} key={reason.id}>{reason.label}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label>
               Proxima data
               <input type="date" value={completionForm.dataProximaAcao} onChange={(event) => setCompletionForm({ ...completionForm, dataProximaAcao: event.target.value })} />
@@ -7424,6 +7501,96 @@ type TaskCompletionForm = {
   resumo: string
   proximaAcao: string
   dataProximaAcao: string
+  motivoQueda: string
+}
+
+const serviceDropReasons = [
+  { id: 'frota_parada', label: 'Frota parada' },
+  { id: 'mudou_rota', label: 'Mudou rota' },
+  { id: 'concorrente', label: 'Concorrente' },
+  { id: 'preco', label: 'Preco' },
+  { id: 'problema_atendimento', label: 'Problema de atendimento' },
+  { id: 'sem_demanda', label: 'Sem demanda agora' },
+  { id: 'contato_errado', label: 'Contato errado' },
+  { id: 'pediu_orcamento', label: 'Pediu orcamento' },
+  { id: 'outro', label: 'Outro motivo' },
+]
+
+function serviceDropReasonLabel(id?: string) {
+  return serviceDropReasons.find((reason) => reason.id === id)?.label ?? id ?? ''
+}
+
+function serviceReturnStatusLabel(status: ServiceContatoEfetividadeResumo['statusRetorno']) {
+  const labels: Record<ServiceContatoEfetividadeResumo['statusRetorno'], string> = {
+    sem_contato_registrado: 'Sem contato',
+    voltou_30d: 'Voltou 30d',
+    voltou_60d: 'Voltou 60d',
+    sem_retorno_60d: 'Sem retorno',
+  }
+  return labels[status]
+}
+
+function isServiceRecoveryTask(tarefa?: Pick<Tarefa, 'origem' | 'contexto' | 'titulo'>) {
+  if (!tarefa) return false
+  const origin = (tarefa.origem ?? '').toLowerCase()
+  return (
+    origin === 'oportunidade:service_risco_visitas' ||
+    origin === 'oportunidade:service_mix_caiu' ||
+    origin === 'gestao:recuperacao_service' ||
+    tarefa.contexto?.tipo === 'service_risco'
+  )
+}
+
+function serviceTaskSummary(tarefa: Tarefa) {
+  const ctx = tarefa.contexto
+  const motivo = typeof ctx?.motivo === 'string' ? ctx.motivo : tarefa.descricao
+  const janela = Number(ctx?.janelaDias ?? 0)
+  const visitasRecentes = Number(ctx?.visitasRecentes ?? Number.NaN)
+  const visitasMediana = Number(ctx?.visitasMediana ?? Number.NaN)
+  const diasSemVisita = Number(ctx?.diasSemVisita ?? Number.NaN)
+  const placasRecentes = Number(ctx?.placasRecentes ?? Number.NaN)
+  const facts = [
+    janela ? `janela ${janela}d` : undefined,
+    Number.isFinite(visitasMediana) ? `normal ${visitasMediana} visitas` : undefined,
+    Number.isFinite(visitasRecentes) ? `atual ${visitasRecentes}` : undefined,
+    Number.isFinite(diasSemVisita) ? `${diasSemVisita}d sem visita` : undefined,
+    Number.isFinite(placasRecentes) ? `${placasRecentes} placas` : undefined,
+  ].filter(Boolean)
+  return facts.length > 0 ? facts.join(' - ') : motivo ?? 'Queda de service detectada.'
+}
+
+function taskCompletionNeedsFollowup(result: TaskCompletionResult) {
+  return ['respondeu', 'pediu_orcamento', 'nao_respondeu', 'comprar_depois'].includes(result)
+}
+
+function taskCompletionDefaults(tarefa: Tarefa, resultado: TaskCompletionResult): TaskCompletionForm {
+  const isServiceTask = isServiceRecoveryTask(tarefa)
+  const today = new Date().toISOString().slice(0, 10)
+  const defaultNextAction: Record<TaskCompletionResult, string> = {
+    respondeu: isServiceTask ? 'Acompanhar retorno de Service' : 'Retomar contato',
+    pediu_orcamento: 'Montar proposta e acompanhar retorno',
+    nao_respondeu: 'Fazer nova tentativa',
+    comprar_depois: 'Retomar no prazo combinado',
+    sem_interesse: '',
+    nao_contatar: '',
+  }
+  const defaultNextDate: Record<TaskCompletionResult, string> = {
+    respondeu: addDays(today, isServiceTask ? 7 : 1),
+    pediu_orcamento: addDays(today, 1),
+    nao_respondeu: addDays(today, 2),
+    comprar_depois: addDays(today, 15),
+    sem_interesse: '',
+    nao_contatar: '',
+  }
+
+  return {
+    canal: 'WhatsApp',
+    resultado,
+    resumo: tarefa.descricao ?? tarefa.titulo,
+    proximaAcao: defaultNextAction[resultado],
+    dataProximaAcao: defaultNextDate[resultado],
+    motivoQueda: '',
+  }
 }
 
 function taskCompletionResultLabel(result: TaskCompletionResult) {
@@ -11057,9 +11224,10 @@ function PatioKmMedio({
 function PatioResultados({
   onLoad,
 }: {
-  onLoad: (input?: { status?: 'todos' | 'retornou_15d' | 'sem_retorno_15d' | 'aguardando'; limit?: number }) => Promise<PatioRevisaoResultado[]>
+  onLoad: (input?: { status?: 'todos' | 'retornou' | 'sem_retorno' | 'aguardando'; limit?: number; janelaDias?: number }) => Promise<PatioRevisaoResultado[]>
 }) {
-  const [status, setStatus] = useState<'todos' | 'retornou_15d' | 'sem_retorno_15d' | 'aguardando'>('todos')
+  const [status, setStatus] = useState<'todos' | 'retornou' | 'sem_retorno' | 'aguardando'>('todos')
+  const [janelaDias, setJanelaDias] = useState(30)
   const [items, setItems] = useState<PatioRevisaoResultado[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -11068,7 +11236,7 @@ function PatioResultados({
     setIsLoading(true)
     setError('')
     try {
-      setItems(await onLoad({ status, limit: 500 }))
+      setItems(await onLoad({ status, limit: 500, janelaDias }))
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar resultados.')
     } finally {
@@ -11078,10 +11246,10 @@ function PatioResultados({
 
   useEffect(() => {
     void load()
-  }, [status])
+  }, [janelaDias, status])
 
-  const retornou = items.filter((item) => item.resultado === 'retornou_15d').length
-  const semRetorno = items.filter((item) => item.resultado === 'sem_retorno_15d').length
+  const retornou = items.filter((item) => item.resultado === 'retornou_janela' || item.resultado === 'retornou_15d').length
+  const semRetorno = items.filter((item) => item.resultado === 'sem_retorno_janela' || item.resultado === 'sem_retorno_15d').length
   const aguardando = items.filter((item) => item.resultado === 'aguardando').length
   const taxa = retornou + semRetorno ? Math.round((retornou / (retornou + semRetorno)) * 100) : 0
 
@@ -11090,7 +11258,7 @@ function PatioResultados({
       <div className="panel-header">
         <div>
           <h2>Resultados Patio</h2>
-          <p>Controle se revisoes proativas geraram retorno da placa em ate 15 dias.</p>
+          <p>Controle se contatos de revisao proativa registrados no CRM geraram retorno da placa dentro da janela escolhida.</p>
         </div>
         <button className="button primary" type="button" onClick={() => void load()} disabled={isLoading}>
           {isLoading ? 'Carregando...' : 'Atualizar'}
@@ -11102,15 +11270,23 @@ function PatioResultados({
           Status
           <select value={status} onChange={(event) => setStatus(event.target.value as typeof status)}>
             <option value="todos">Todos</option>
-            <option value="retornou_15d">Retornou em 15 dias</option>
+            <option value="retornou">Retornou na janela</option>
             <option value="aguardando">Aguardando janela</option>
-            <option value="sem_retorno_15d">Sem retorno em 15 dias</option>
+            <option value="sem_retorno">Sem retorno na janela</option>
+          </select>
+        </label>
+        <label>
+          Janela
+          <select value={janelaDias} onChange={(event) => setJanelaDias(Number(event.target.value))}>
+            <option value={15}>15 dias</option>
+            <option value={30}>30 dias</option>
+            <option value={60}>60 dias</option>
           </select>
         </label>
       </div>
       <div className="metric-grid">
         <Metric icon={Trophy} label="Taxa de retorno" value={`${taxa}%`} tone="green" />
-        <Metric icon={CheckCircle2} label="Retornaram" value={numberLabel(retornou)} tone="green" />
+        <Metric icon={CheckCircle2} label={`Retornaram ${janelaDias}d`} value={numberLabel(retornou)} tone="green" />
         <Metric icon={CalendarClock} label="Aguardando" value={numberLabel(aguardando)} tone="amber" />
         <Metric icon={AlertTriangle} label="Sem retorno" value={numberLabel(semRetorno)} tone="red" />
       </div>
@@ -11120,9 +11296,9 @@ function PatioResultados({
             <div className="panel-header">
               <div>
                 <h3>{item.placa ?? 'Sem placa'} - {item.clienteNome ?? 'Cliente sem vinculo'}</h3>
-                <p>Acionado em {dateLabel(item.dataRevisaoProativa)} - {resultadoRevisaoLabel(item.resultado)} - {item.diasDesdeAcao} dias</p>
+                <p>Acionado em {dateLabel(item.dataRevisaoProativa)} - {resultadoRevisaoLabel(item.resultado, item.janelaDias || janelaDias)} - {item.diasDesdeAcao} dias</p>
               </div>
-              <strong>{item.retornoEm ? `Retorno ${dateLabel(item.retornoEm)}` : resultadoRevisaoLabel(item.resultado)}</strong>
+              <strong>{item.retornoEm ? `Retorno ${dateLabel(item.retornoEm)}` : resultadoRevisaoLabel(item.resultado, item.janelaDias || janelaDias)}</strong>
             </div>
             <div className="status-list">
               <div className="status-row"><span>Veiculo</span><strong>{item.veiculoDescricao || 'Nao informado'}</strong></div>
@@ -11137,13 +11313,10 @@ function PatioResultados({
   )
 }
 
-function resultadoRevisaoLabel(value: PatioRevisaoResultado['resultado']) {
-  const labels: Record<PatioRevisaoResultado['resultado'], string> = {
-    retornou_15d: 'Retornou em 15 dias',
-    sem_retorno_15d: 'Sem retorno em 15 dias',
-    aguardando: 'Aguardando janela',
-  }
-  return labels[value] ?? value
+function resultadoRevisaoLabel(value: PatioRevisaoResultado['resultado'], janelaDias = 30) {
+  if (value === 'retornou_janela' || value === 'retornou_15d') return `Retornou em ${janelaDias} dias`
+  if (value === 'sem_retorno_janela' || value === 'sem_retorno_15d') return `Sem retorno em ${janelaDias} dias`
+  return 'Aguardando janela'
 }
 
 function rankPatioReport(items: PatioRelatorioServico[], labeler: (item: PatioRelatorioServico) => string) {
@@ -12781,12 +12954,15 @@ function Cliente360({
     ...tarefasAbertas
       .slice()
       .sort((a, b) => a.dataVencimento.localeCompare(b.dataVencimento))
-      .map((tarefa) => ({
-        tone: daysSince(tarefa.dataVencimento) > 0 ? 'danger' : 'warn',
-        label: daysSince(tarefa.dataVencimento) > 0 ? 'Tarefa atrasada' : 'Tarefa aberta',
-        detail: `${tarefa.titulo} - vence em ${dateLabel(tarefa.dataVencimento)}`,
-        action: tarefa.descricao || 'Concluir, reagendar ou registrar o atendimento.',
-      })),
+      .map((tarefa) => {
+        const isServiceTask = isServiceRecoveryTask(tarefa)
+        return {
+          tone: daysSince(tarefa.dataVencimento) > 0 || isServiceTask ? 'danger' : 'warn',
+          label: isServiceTask ? 'Service em risco' : daysSince(tarefa.dataVencimento) > 0 ? 'Tarefa atrasada' : 'Tarefa aberta',
+          detail: isServiceTask ? serviceTaskSummary(tarefa) : `${tarefa.titulo} - vence em ${dateLabel(tarefa.dataVencimento)}`,
+          action: isServiceTask ? 'Fazer contato, registrar motivo da queda e agendar proxima acao.' : tarefa.descricao || 'Concluir, reagendar ou registrar o atendimento.',
+        }
+      }),
     ...orcamentosAbertos
       .slice()
       .sort((a, b) => a.validade.localeCompare(b.validade))
@@ -17466,6 +17642,7 @@ function taskSla(tarefa: Tarefa): { label: string; tone: 'ok' | 'warn' | 'danger
 function taskSlaExpected(origin: string) {
   if (origin.startsWith('campanha')) return 1
   if (origin.startsWith('orcamento')) return 2
+  if (origin.startsWith('oportunidade:service') || origin === 'gestao:recuperacao_service') return 1
   if (origin.startsWith('atendimento')) return 1
   if (origin.startsWith('cliente360')) return 2
   if (origin.startsWith('cockpit')) return 1
@@ -17477,6 +17654,7 @@ function taskSlaExpected(origin: string) {
 function taskOriginSlaLabel(origin: string) {
   if (origin.startsWith('campanha')) return 'Campanha'
   if (origin.startsWith('orcamento')) return 'Orcamento'
+  if (origin.startsWith('oportunidade:service') || origin === 'gestao:recuperacao_service') return 'Service em risco'
   if (origin.startsWith('atendimento')) return 'Atendimento'
   if (origin.startsWith('cliente360')) return 'Ficha completa'
   if (origin.startsWith('cockpit')) return 'Sem proxima acao'
@@ -17500,6 +17678,8 @@ function isCommercialFollowupTask(tarefa: Tarefa) {
     'cockpit',
     'orcamento',
     'campanha',
+    'oportunidade:service',
+    'gestao:recuperacao_service',
   ].some((prefix) => origin.startsWith(prefix))
 }
 
@@ -17513,7 +17693,9 @@ function taskCommercialPriority(tarefa: Tarefa) {
   const sla = taskSla(tarefa)
   const slaBoost = sla.tone === 'danger' ? 40 : sla.tone === 'warn' ? 20 : 0
   const origin = (tarefa.origem ?? '').toLowerCase()
-  const originBoost = origin.startsWith('campanha') ? 20 : origin.startsWith('orcamento') ? 16 : origin.startsWith('atendimento') ? 12 : 0
+  const originBoost = origin.startsWith('oportunidade:service') || origin === 'gestao:recuperacao_service'
+    ? 28
+    : origin.startsWith('campanha') ? 20 : origin.startsWith('orcamento') ? 16 : origin.startsWith('atendimento') ? 12 : 0
   return tarefa.prioridade + slaBoost + originBoost
 }
 
@@ -18958,6 +19140,8 @@ function Relatorios({
   atividadesDia,
   forecastVendedor,
   metasVendedores,
+  serviceContatosEfetividade,
+  patioRevisaoResultados,
   interacoes,
   orcamentos,
   importacoes,
@@ -18984,6 +19168,8 @@ function Relatorios({
   atividadesDia: AtividadeDiaResumo[]
   forecastVendedor: ForecastVendedorResumo[]
   metasVendedores: MetaVendedor[]
+  serviceContatosEfetividade: ServiceContatoEfetividadeResumo[]
+  patioRevisaoResultados: PatioRevisaoResultado[]
   interacoes: Interacao[]
   orcamentos: Orcamento[]
   importacoes: Importacao[]
@@ -19072,6 +19258,19 @@ function Relatorios({
     .reduce((total, row) => total + Math.abs(row.difValor), 0)
   const serviceLostClients = serviceRecoveryRows.filter((row) => row.valorAnterior > 0 && row.valorAtual === 0).length
   const topServiceRecovery = serviceRecoveryRows[0]
+  const serviceEffectivenessRows = serviceContatosEfetividade
+  const serviceEffectivenessContacted = serviceEffectivenessRows.filter((row) => Boolean(row.dataInteracao)).length
+  const serviceEffectivenessReturned30 = serviceEffectivenessRows.filter((row) => row.statusRetorno === 'voltou_30d').length
+  const serviceEffectivenessReturned60 = serviceEffectivenessRows.filter((row) => ['voltou_30d', 'voltou_60d'].includes(row.statusRetorno)).length
+  const serviceEffectivenessRecovered = serviceEffectivenessRows.filter((row) => row.recuperouPadrao).length
+  const serviceEffectivenessNoReturn = serviceEffectivenessRows.filter((row) => row.statusRetorno === 'sem_retorno_60d').length
+  const serviceEffectivenessValue = serviceEffectivenessRows.reduce((total, row) => total + row.valorService60d, 0)
+  const patioRevisaoRetornaram = patioRevisaoResultados.filter((row) => row.resultado === 'retornou_janela' || row.resultado === 'retornou_15d').length
+  const patioRevisaoSemRetorno = patioRevisaoResultados.filter((row) => row.resultado === 'sem_retorno_janela' || row.resultado === 'sem_retorno_15d').length
+  const patioRevisaoAguardando = patioRevisaoResultados.filter((row) => row.resultado === 'aguardando').length
+  const patioRevisaoTaxa = patioRevisaoRetornaram + patioRevisaoSemRetorno
+    ? Math.round((patioRevisaoRetornaram / (patioRevisaoRetornaram + patioRevisaoSemRetorno)) * 100)
+    : 0
   const metasBySeller = new Map(metasVendedores.map((meta) => [meta.vendedorId, meta]))
   const openQuoteStatuses: Orcamento['status'][] = ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando']
   const openForecastQuotes = orcamentos.filter((orcamento) => openQuoteStatuses.includes(orcamento.status))
@@ -19583,6 +19782,17 @@ function Relatorios({
         dataVencimento: new Date().toISOString().slice(0, 10),
         prioridade: row.prioridade,
         origem: 'gestao:recuperacao_service',
+        contexto: {
+          tipo: 'service_risco',
+          oportunidadeTipo: 'gestao_recuperacao_service',
+          motivo: `${row.status}: queda de ${money(Math.abs(row.difValor))} em ${row.principalQueda}.`,
+          proximaAcao: `Abordar motivo da queda e oferecer retorno para ${row.principalQueda}.`,
+          visitasRecentes: row.pedidosAtual,
+          visitasMediana: row.pedidosAnterior,
+          placasRecentes: row.placasAtual,
+          placasMediana: row.placasAnterior,
+          ultimaVisita: row.ultimaData,
+        },
       })
       setManagementTaskCreatedIds((current) => [...current, `service-${row.clienteId}`])
       setManagementAlertFeedback('Tarefa criada para recuperacao Service.')
@@ -19829,6 +20039,106 @@ function Relatorios({
             </div>
           </div>
         </details>
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Efetividade dos contatos de Service</h2>
+            <p>Resultado das tarefas de recuperacao contra visitas reais de service apos o contato.</p>
+          </div>
+          <Phone size={18} />
+        </div>
+        <div className="service-recovery-summary">
+          <Info label="Tarefas analisadas" value={serviceEffectivenessRows.length.toString()} />
+          <Info label="Com contato" value={serviceEffectivenessContacted.toString()} />
+          <Info label="Voltou em 30d" value={serviceEffectivenessReturned30.toString()} />
+          <Info label="Voltou em 60d" value={serviceEffectivenessReturned60.toString()} />
+          <Info label="Recuperou padrao" value={serviceEffectivenessRecovered.toString()} />
+          <Info label="Valor 60d" value={money(serviceEffectivenessValue)} />
+        </div>
+        <div className="table">
+          <div className="table-head service-effectiveness-row">
+            <span>Cliente</span>
+            <span>Resultado</span>
+            <span>Retorno</span>
+            <span>Visitas</span>
+            <span>Valor 60d</span>
+            <span>Acao</span>
+          </div>
+          {serviceEffectivenessRows.slice(0, 8).map((row) => (
+            <div className="table-row service-effectiveness-row" key={row.tarefaId}>
+              <span>
+                <strong>{row.clienteNome}</strong>
+                <small>{row.vendedorNome} - {row.motivoQueda ? serviceDropReasonLabel(row.motivoQueda) : 'Motivo nao informado'}</small>
+              </span>
+              <span>{row.resultado ?? (row.tarefaStatus === 'aberta' ? 'Tarefa aberta' : 'Sem resultado')}</span>
+              <span className={row.statusRetorno === 'sem_retorno_60d' ? 'status-pill danger' : row.statusRetorno === 'sem_contato_registrado' ? 'status-pill warn' : 'status-pill ok'}>
+                {serviceReturnStatusLabel(row.statusRetorno)}
+              </span>
+              <span>
+                <strong>{row.visitas30d}/{row.visitas60d}</strong>
+                <small>30d / 60d{row.recuperouPadrao ? ' - padrao recuperado' : ''}</small>
+              </span>
+              <span>{money(row.valorService60d)}</span>
+              <span>
+                <button className="button" type="button" onClick={() => onOpenClient(row.clienteId)}>Ficha</button>
+              </span>
+            </div>
+          ))}
+          {serviceEffectivenessRows.length === 0 && <div className="empty-state">Sem contatos de recuperacao Service medidos ainda.</div>}
+        </div>
+        {serviceEffectivenessNoReturn > 0 && (
+          <div className="readiness warn">
+            <strong>{serviceEffectivenessNoReturn} clientes sem retorno em 60 dias</strong>
+            <span>Revise motivo da queda, proposta aberta e necessidade de segunda abordagem.</span>
+          </div>
+        )}
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-header">
+          <div>
+            <h2>Efetividade da revisao proativa</h2>
+            <p>Contatos de revisao proativa registrados no CRM e retorno ao patio em ate 30 dias.</p>
+          </div>
+          <Truck size={18} />
+        </div>
+        <div className="service-recovery-summary">
+          <Info label="Acionadas" value={patioRevisaoResultados.length.toString()} />
+          <Info label="Taxa retorno" value={`${patioRevisaoTaxa}%`} />
+          <Info label="Retornaram" value={numberLabel(patioRevisaoRetornaram)} />
+          <Info label="Aguardando" value={numberLabel(patioRevisaoAguardando)} />
+          <Info label="Sem retorno" value={numberLabel(patioRevisaoSemRetorno)} />
+        </div>
+        <div className="table">
+          <div className="table-head patio-revision-effectiveness-row">
+            <span>Placa / cliente</span>
+            <span>Mensagem</span>
+            <span>Resultado</span>
+            <span>Retorno</span>
+            <span>KM</span>
+            <span>Acao</span>
+          </div>
+          {patioRevisaoResultados.slice(0, 8).map((row) => (
+            <div className="table-row patio-revision-effectiveness-row" key={`${row.patioVeiculoId}-${row.dataRevisaoProativa}`}>
+              <span>
+                <strong>{row.placa ?? 'Sem placa'}</strong>
+                <small>{row.clienteNome ?? 'Cliente sem vinculo'} - {row.veiculoDescricao || 'Veiculo sem descricao'}</small>
+              </span>
+              <span>{dateLabel(row.dataRevisaoProativa)}</span>
+              <span className={row.resultado === 'aguardando' ? 'status-pill warn' : row.resultado.includes('sem_retorno') ? 'status-pill danger' : 'status-pill ok'}>
+                {resultadoRevisaoLabel(row.resultado, row.janelaDias)}
+              </span>
+              <span>{row.retornoEm ? dateLabel(row.retornoEm) : '-'}</span>
+              <span>{row.retornoKm ? numberLabel(row.retornoKm) : '-'}</span>
+              <span>
+                <button className="button" type="button" onClick={() => onOpenClient(row.clienteId)}>Ficha</button>
+              </span>
+            </div>
+          ))}
+          {patioRevisaoResultados.length === 0 && <div className="empty-state">Sem revisoes proativas medidas ainda.</div>}
+        </div>
       </section>
 
       <section className="panel wide">

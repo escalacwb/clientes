@@ -69,11 +69,15 @@ export type Interacao = {
   id: string
   clienteId: string
   vendedorId: string
+  tarefaId?: string
+  patioVeiculoId?: number
+  placa?: string
   data: string
   canal: 'WhatsApp' | 'Ligacao' | 'Presencial' | 'Email' | 'Campanha'
   tipo: string
   resumo: string
   resultado: string
+  motivoQueda?: string
   proximaAcao?: string
   dataProximaAcao?: string
   campanhaId?: string
@@ -82,6 +86,29 @@ export type Interacao = {
 
 export type InteracaoInput = Omit<Interacao, 'id' | 'data'> & {
   data?: string
+}
+
+export type TarefaContexto = {
+  tipo?: string
+  oportunidadeTipo?: string
+  motivo?: string
+  proximaAcao?: string
+  recorrencia?: string
+  alerta?: string
+  janelaDias?: number
+  periodoBaseMeses?: number
+  visitasRecentes?: number
+  visitasMediana?: number
+  visitasP25?: number
+  diasSemVisita?: number
+  placasRecentes?: number
+  placasMediana?: number
+  placasP25?: number
+  alinhamentosRecentes?: number
+  alinhamentosMediana?: number
+  alinhamentosP25?: number
+  ultimaVisita?: string
+  [key: string]: unknown
 }
 
 export type Orcamento = {
@@ -269,6 +296,7 @@ export type Tarefa = {
   status: 'aberta' | 'concluida' | 'cancelada'
   prioridade: number
   origem: string
+  contexto?: TarefaContexto
   concluidaEm?: string
   reagendadaEm?: string
   reagendamentoMotivo?: string
@@ -446,6 +474,13 @@ export type PatioRevisaoProativa = {
   contatoNome?: string
   contatoTipo?: string
 }
+
+export type PatioRevisaoResultadoStatus =
+  | 'retornou_janela'
+  | 'sem_retorno_janela'
+  | 'retornou_15d'
+  | 'sem_retorno_15d'
+  | 'aguardando'
 
 export type PatioVeiculoBusca = {
   patioVeiculoId: number

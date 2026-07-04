@@ -694,24 +694,35 @@ where pa.status = 'finalizado'
   and pai.status = 'finalizado'
   and pa.fim_execucao is not null;
 
+alter table public.interacoes
+  add column if not exists patio_veiculo_id bigint,
+  add column if not exists placa text;
+
+create index if not exists interacoes_revisao_patio_idx
+on public.interacoes(tipo, patio_veiculo_id, data_interacao desc)
+where tipo = 'revisao_proativa';
+
 create or replace view public.vw_patio_revisao_resultados
 with (security_invoker = true) as
 with acoes as (
   select
-    pvs.patio_veiculo_id,
-    pvs.cliente_id,
+    i.patio_veiculo_id,
+    i.cliente_id,
     c.nome as cliente_nome,
-    c.vendedor_id,
+    coalesce(i.vendedor_id, c.vendedor_id) as vendedor_id,
     pvs.veiculo_id,
-    coalesce(v.placa, pvs.placa) as placa,
+    coalesce(i.placa, v.placa, pvs.placa) as placa,
+    nullif(upper(regexp_replace(coalesce(i.placa, v.placa, pvs.placa, ''), '[^A-Z0-9]', '', 'g')), '') as placa_key,
     coalesce(v.descricao, pvs.modelo) as veiculo_descricao,
     pvs.nome_motorista,
     pvs.contato_motorista,
-    pvs.data_revisao_proativa
-  from public.patio_veiculos_snapshot pvs
-  join public.clientes c on c.id = pvs.cliente_id
+    i.data_interacao::date as data_revisao_proativa
+  from public.interacoes i
+  join public.clientes c on c.id = i.cliente_id
+  left join public.patio_veiculos_snapshot pvs on pvs.patio_veiculo_id = i.patio_veiculo_id
   left join public.veiculos v on v.id = pvs.veiculo_id
-  where pvs.data_revisao_proativa is not null
+  where i.tipo = 'revisao_proativa'
+    and i.patio_veiculo_id is not null
     and c.excluido_em is null
 ),
 retornos as (
@@ -721,10 +732,15 @@ retornos as (
     pa.inicio_execucao,
     pa.quilometragem
   from acoes a
-  join public.patio_atendimentos pa on pa.patio_veiculo_id = a.patio_veiculo_id
+  join public.patio_atendimentos pa
+    on pa.patio_veiculo_id = a.patio_veiculo_id
+    or (
+      a.placa_key is not null
+      and nullif(upper(regexp_replace(coalesce(pa.placa_snapshot, ''), '[^A-Z0-9]', '', 'g')), '') = a.placa_key
+    )
   where pa.status = 'finalizado'
     and pa.inicio_execucao::date > a.data_revisao_proativa
-    and pa.inicio_execucao::date <= a.data_revisao_proativa + 15
+    and pa.inicio_execucao::date <= a.data_revisao_proativa + 30
   order by a.patio_veiculo_id, pa.inicio_execucao asc
 )
 select
@@ -742,11 +758,12 @@ select
   retorno.inicio_execucao as retorno_em,
   retorno.quilometragem as retorno_km,
   case
-    when retorno.patio_execucao_id is not null then 'retornou_15d'
-    when a.data_revisao_proativa <= current_date - 15 then 'sem_retorno_15d'
+    when retorno.patio_execucao_id is not null then 'retornou_janela'
+    when a.data_revisao_proativa <= current_date - 30 then 'sem_retorno_janela'
     else 'aguardando'
   end as resultado,
-  greatest(0, current_date - a.data_revisao_proativa)::integer as dias_desde_acao
+  greatest(0, current_date - a.data_revisao_proativa)::integer as dias_desde_acao,
+  30::integer as janela_dias
 from acoes a
 left join retornos retorno on retorno.patio_veiculo_id = a.patio_veiculo_id;
 

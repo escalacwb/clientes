@@ -145,11 +145,15 @@ create table public.interacoes (
   id uuid primary key default gen_random_uuid(),
   cliente_id uuid not null references public.clientes(id),
   vendedor_id uuid references public.users(id),
+  tarefa_id uuid,
+  patio_veiculo_id bigint,
+  placa text,
   data_interacao timestamptz not null default now(),
   canal text not null,
   tipo text not null,
   resumo text not null,
   resultado text,
+  motivo_queda text,
   proxima_acao text,
   data_proxima_acao timestamptz,
   campanha_id uuid,
@@ -167,11 +171,15 @@ create table public.tarefas (
   status text not null default 'aberta',
   prioridade integer not null default 0,
   origem text,
+  contexto jsonb not null default '{}'::jsonb,
   concluida_em timestamptz,
   reagendada_em timestamptz,
   reagendamento_motivo text,
   criado_em timestamptz not null default now()
 );
+
+alter table public.interacoes
+  add constraint interacoes_tarefa_id_fkey foreign key (tarefa_id) references public.tarefas(id);
 
 create table public.catalogo_itens (
   id uuid primary key default gen_random_uuid(),
@@ -656,10 +664,17 @@ create index clientes_ultima_compra_idx on public.clientes(ultima_compra_em desc
 create index vendas_cliente_data_idx on public.vendas_itens(cliente_id, data_venda desc);
 create index servicos_cliente_data_idx on public.servicos_itens(cliente_id, data_servico desc);
 create index interacoes_cliente_data_idx on public.interacoes(cliente_id, data_interacao desc);
+create index if not exists interacoes_tarefa_idx on public.interacoes(tarefa_id);
+create index if not exists interacoes_revisao_patio_idx
+on public.interacoes(tipo, patio_veiculo_id, data_interacao desc)
+where tipo = 'revisao_proativa';
 create unique index if not exists interacoes_campanha_cliente_resultado_idx
 on public.interacoes (cliente_id, campanha_id, resultado)
 where canal = 'Campanha' and campanha_id is not null;
 create index tarefas_vendedor_vencimento_idx on public.tarefas(vendedor_id, data_vencimento);
+create index if not exists tarefas_service_origem_idx
+on public.tarefas(cliente_id, origem, criado_em desc)
+where origem in ('oportunidade:service_risco_visitas', 'oportunidade:service_mix_caiu', 'gestao:recuperacao_service');
 create unique index if not exists tarefas_abertas_cliente_origem_idx
 on public.tarefas (cliente_id, origem)
 where status = 'aberta' and origem is not null;
@@ -1340,12 +1355,16 @@ begin
     data_vencimento,
     status,
     prioridade,
-    origem
+    origem,
+    contexto
   )
   select
     oc.cliente_id,
     coalesce(oc.vendedor_id, c.vendedor_id),
-    oc.proxima_acao,
+    case
+      when oc.tipo in ('service_risco_visitas', 'service_mix_caiu') then 'Recuperar Service'
+      else oc.proxima_acao
+    end,
     concat(
       oc.motivo,
       E'\n\nGerada automaticamente pela fila de oportunidades. ',
@@ -1354,7 +1373,16 @@ begin
     current_date,
     'aberta',
     oc.prioridade,
-    'oportunidade:' || oc.tipo
+    'oportunidade:' || oc.tipo,
+    case
+      when oc.tipo in ('service_risco_visitas', 'service_mix_caiu') then jsonb_build_object(
+        'tipo', 'service_risco',
+        'oportunidadeTipo', oc.tipo,
+        'motivo', oc.motivo,
+        'proximaAcao', oc.proxima_acao
+      )
+      else jsonb_build_object('tipo', 'oportunidade', 'oportunidadeTipo', oc.tipo, 'motivo', oc.motivo)
+    end
   from public.oportunidades_cache oc
   join public.clientes c on c.id = oc.cliente_id
   where not oc.bloqueada
@@ -1373,6 +1401,20 @@ begin
       where recente.cliente_id = oc.cliente_id
         and recente.origem = 'oportunidade:' || oc.tipo
         and coalesce(recente.concluida_em, recente.reagendada_em, recente.criado_em) >= now() - interval '30 days'
+    )
+    and not exists (
+      select 1
+      from public.interacoes contato
+      join public.tarefas tarefa_contato on tarefa_contato.id = contato.tarefa_id
+      where contato.cliente_id = oc.cliente_id
+        and tarefa_contato.origem = 'oportunidade:' || oc.tipo
+        and contato.resultado in ('Sem interesse', 'Comprar depois', 'Nao contatar')
+        and contato.data_interacao >= now() - case contato.resultado
+          when 'Sem interesse' then interval '60 days'
+          when 'Comprar depois' then interval '45 days'
+          when 'Nao contatar' then interval '365 days'
+          else interval '30 days'
+        end
     );
 
   get diagnostics inserted_count = row_count;

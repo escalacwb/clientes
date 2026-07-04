@@ -6,11 +6,15 @@ type InteracaoRow = {
   id: string
   cliente_id: string
   vendedor_id: string
+  tarefa_id: string | null
+  patio_veiculo_id: number | null
+  placa: string | null
   data_interacao: string
   canal: Interacao['canal']
   tipo: string
   resumo: string
   resultado: string
+  motivo_queda: string | null
   proxima_acao: string | null
   data_proxima_acao: string | null
   campanha_id: string | null
@@ -52,11 +56,15 @@ export async function createInteracao(input: InteracaoInput): Promise<Interacao>
     .insert({
       cliente_id: input.clienteId,
       vendedor_id: input.vendedorId,
+      tarefa_id: input.tarefaId ?? null,
+      patio_veiculo_id: input.patioVeiculoId ?? null,
+      placa: input.placa ?? null,
       data_interacao: input.data ?? new Date().toISOString(),
       canal: input.canal,
       tipo: input.tipo,
       resumo: input.resumo,
       resultado: input.resultado,
+      motivo_queda: input.motivoQueda ?? null,
       proxima_acao: input.proximaAcao ?? null,
       data_proxima_acao: input.dataProximaAcao ?? null,
       campanha_id: input.campanhaId ?? null,
@@ -99,11 +107,15 @@ function mapInteracao(row: InteracaoRow): Interacao {
     id: row.id,
     clienteId: row.cliente_id,
     vendedorId: row.vendedor_id,
+    tarefaId: row.tarefa_id ?? undefined,
+    patioVeiculoId: row.patio_veiculo_id ?? undefined,
+    placa: row.placa ?? undefined,
     data: row.data_interacao,
     canal: row.canal,
     tipo: row.tipo,
     resumo: row.resumo,
     resultado: row.resultado,
+    motivoQueda: row.motivo_queda ?? undefined,
     proximaAcao: row.proxima_acao ?? undefined,
     dataProximaAcao: row.data_proxima_acao ?? undefined,
     campanhaId: row.campanha_id ?? undefined,

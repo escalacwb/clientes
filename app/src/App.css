@@ -2400,6 +2400,14 @@ h3 {
   grid-template-columns: minmax(180px, 1.2fr) 64px 76px 76px 70px 100px 80px 86px;
 }
 
+.service-effectiveness-row {
+  grid-template-columns: minmax(220px, 1.4fr) 120px 120px 90px 110px 82px;
+}
+
+.patio-revision-effectiveness-row {
+  grid-template-columns: minmax(220px, 1.4fr) 105px 140px 105px 80px 82px;
+}
+
 .seller-goals {
   grid-template-columns: minmax(180px, 1.1fr) 110px 82px 110px 90px 90px minmax(160px, 1fr) 82px;
 }

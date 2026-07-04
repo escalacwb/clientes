@@ -61,12 +61,16 @@ begin
     data_vencimento,
     status,
     prioridade,
-    origem
+    origem,
+    contexto
   )
   select
     oc.cliente_id,
     coalesce(oc.vendedor_id, c.vendedor_id),
-    oc.proxima_acao,
+    case
+      when oc.tipo in ('service_risco_visitas', 'service_mix_caiu') then 'Recuperar Service'
+      else oc.proxima_acao
+    end,
     concat(
       oc.motivo,
       E'\n\nGerada automaticamente pela fila de oportunidades. ',
@@ -75,9 +79,36 @@ begin
     current_date,
     'aberta',
     oc.prioridade,
-    'oportunidade:' || oc.tipo
+    'oportunidade:' || oc.tipo,
+    case
+      when oc.tipo in ('service_risco_visitas', 'service_mix_caiu') then jsonb_strip_nulls(jsonb_build_object(
+        'tipo', 'service_risco',
+        'oportunidadeTipo', oc.tipo,
+        'motivo', oc.motivo,
+        'proximaAcao', oc.proxima_acao,
+        'recorrencia', svr.recorrencia,
+        'alerta', svr.alerta,
+        'janelaDias', svr.janela_dias,
+        'periodoBaseMeses', svr.periodo_base_meses,
+        'visitasRecentes', case when svr.janela_dias = 30 then svr.visitas30 else svr.visitas60 end,
+        'visitasMediana', svr.visitas_mediana,
+        'visitasP25', svr.visitas_p25,
+        'diasSemVisita', svr.dias_sem_visita,
+        'placasRecentes', case when svr.janela_dias = 30 then svr.placas30 else svr.placas60 end,
+        'placasMediana', svr.placas_mediana,
+        'placasP25', svr.placas_p25,
+        'alinhamentosRecentes', case when svr.janela_dias = 30 then svr.alinhamentos30 else svr.alinhamentos60 end,
+        'alinhamentosMediana', svr.alinhamentos_mediana,
+        'alinhamentosP25', svr.alinhamentos_p25,
+        'ultimaVisita', svr.ultima_visita
+      ))
+      else jsonb_build_object('tipo', 'oportunidade', 'oportunidadeTipo', oc.tipo, 'motivo', oc.motivo)
+    end
   from public.oportunidades_cache oc
   join public.clientes c on c.id = oc.cliente_id
+  left join public.vw_service_visitas_risco svr
+    on svr.cliente_id = oc.cliente_id
+   and svr.tipo = oc.tipo
   where not oc.bloqueada
     and oc.tipo <> 'sem_vendedor'
     and coalesce(oc.vendedor_id, c.vendedor_id) is not null
@@ -94,6 +125,20 @@ begin
       where recente.cliente_id = oc.cliente_id
         and recente.origem = 'oportunidade:' || oc.tipo
         and coalesce(recente.concluida_em, recente.reagendada_em, recente.criado_em) >= now() - interval '30 days'
+    )
+    and not exists (
+      select 1
+      from public.interacoes contato
+      join public.tarefas tarefa_contato on tarefa_contato.id = contato.tarefa_id
+      where contato.cliente_id = oc.cliente_id
+        and tarefa_contato.origem = 'oportunidade:' || oc.tipo
+        and contato.resultado in ('Sem interesse', 'Comprar depois', 'Nao contatar')
+        and contato.data_interacao >= now() - case contato.resultado
+          when 'Sem interesse' then interval '60 days'
+          when 'Comprar depois' then interval '45 days'
+          when 'Nao contatar' then interval '365 days'
+          else interval '30 days'
+        end
     );
 
   get diagnostics inserted_count = row_count;

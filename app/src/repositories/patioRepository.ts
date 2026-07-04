@@ -15,6 +15,7 @@ import type {
   PatioFuncionario,
   PatioPainelBox,
   PatioRevisaoProativa,
+  PatioRevisaoResultadoStatus,
   PatioVeiculoBusca,
 } from '../types'
 
@@ -177,6 +178,7 @@ type PatioRevisaoResultadoRow = {
   retorno_km: number | null
   resultado: string | null
   dias_desde_acao: number | null
+  janela_dias: number | null
 }
 
 export type PatioContatoExportacao = {
@@ -224,8 +226,9 @@ export type PatioRevisaoResultado = {
   retornoPatioExecucaoId?: number
   retornoEm?: string
   retornoKm?: number
-  resultado: 'retornou_15d' | 'sem_retorno_15d' | 'aguardando'
+  resultado: PatioRevisaoResultadoStatus
   diasDesdeAcao: number
+  janelaDias: number
 }
 
 export type PatioPlateConsultResult = {
@@ -758,8 +761,9 @@ export async function listPatioRelatorioServicos(input: {
 }
 
 export async function listPatioRevisaoResultados(input: {
-  status?: 'todos' | 'retornou_15d' | 'sem_retorno_15d' | 'aguardando'
+  status?: 'todos' | 'retornou' | 'sem_retorno' | 'aguardando'
   limit?: number
+  janelaDias?: number
 } = {}): Promise<PatioRevisaoResultado[]> {
   const supabase = await getSupabase()
   if (!supabase) return []
@@ -768,6 +772,7 @@ export async function listPatioRevisaoResultados(input: {
     .rpc('listar_patio_revisao_resultados', {
       p_status: input.status ?? 'todos',
       p_limit: input.limit ?? 300,
+      p_dias_janela: input.janelaDias ?? 30,
     })
 
   if (!rpcError) {
@@ -780,7 +785,10 @@ export async function listPatioRevisaoResultados(input: {
     .order('data_revisao_proativa', { ascending: false })
     .limit(input.limit ?? 300)
 
-  if (input.status && input.status !== 'todos') query = query.eq('resultado', input.status)
+  if (input.status && input.status !== 'todos') {
+    const legacyStatus = input.status === 'retornou' ? 'retornou_15d' : input.status === 'sem_retorno' ? 'sem_retorno_15d' : input.status
+    query = query.eq('resultado', legacyStatus)
+  }
 
   const { data, error } = await query
   if (error) throw error
@@ -802,9 +810,17 @@ function mapPatioRevisaoResultado(row: PatioRevisaoResultadoRow): PatioRevisaoRe
     retornoPatioExecucaoId: row.retorno_patio_execucao_id ?? undefined,
     retornoEm: row.retorno_em ?? undefined,
     retornoKm: row.retorno_km ?? undefined,
-    resultado: (row.resultado as PatioRevisaoResultado['resultado']) ?? 'aguardando',
+    resultado: normalizePatioRevisaoResultado(row.resultado),
     diasDesdeAcao: Number(row.dias_desde_acao ?? 0),
+    janelaDias: Number(row.janela_dias ?? 15),
   }
+}
+
+function normalizePatioRevisaoResultado(value: string | null | undefined): PatioRevisaoResultado['resultado'] {
+  if (value === 'retornou_15d') return 'retornou_janela'
+  if (value === 'sem_retorno_15d') return 'sem_retorno_janela'
+  if (value === 'retornou_janela' || value === 'sem_retorno_janela' || value === 'aguardando') return value
+  return 'aguardando'
 }
 
 export async function registerPatioEntrada(input: PatioEntradaInput): Promise<number> {

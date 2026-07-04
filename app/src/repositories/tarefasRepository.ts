@@ -1,6 +1,6 @@
 import { clientes as mockClientes, tarefas as mockTarefas, vendedores as mockVendedores } from '../data/mockData'
 import { getSupabase } from '../lib/supabase'
-import type { Tarefa, TarefaInput } from '../types'
+import type { Tarefa, TarefaContexto, TarefaInput } from '../types'
 
 type TarefaRow = {
   id: string
@@ -12,6 +12,7 @@ type TarefaRow = {
   status: Tarefa['status']
   prioridade: number
   origem: string | null
+  contexto: TarefaContexto | null
   concluida_em: string | null
   reagendada_em: string | null
   reagendamento_motivo: string | null
@@ -34,6 +35,7 @@ export type TarefaOriginFilter =
   | 'importacao'
   | 'campanha'
   | 'oportunidade'
+  | 'service'
   | 'rodobens'
 
 export async function listTarefas(limit = 100): Promise<Tarefa[]> {
@@ -86,7 +88,9 @@ export async function listTarefasPage(input: {
   }
 
   if (input.vendedorId) query = query.eq('vendedor_id', input.vendedorId)
-  if (input.origem !== 'todas') {
+  if (input.origem === 'service') {
+    query = query.in('origem', ['oportunidade:service_risco_visitas', 'oportunidade:service_mix_caiu', 'gestao:recuperacao_service'])
+  } else if (input.origem !== 'todas') {
     query = ['orcamento', 'oportunidade', 'rodobens', 'atendimento', 'cliente360', 'cockpit', 'campanha'].includes(input.origem)
       ? query.ilike('origem', `${input.origem}%`)
       : query.eq('origem', input.origem)
@@ -142,6 +146,7 @@ export async function createTarefa(input: TarefaInput): Promise<Tarefa> {
       status: input.status ?? 'aberta',
       prioridade: input.prioridade,
       origem: input.origem,
+      contexto: input.contexto ?? {},
     })
     .select(TAREFA_SELECT)
     .single()
@@ -204,6 +209,7 @@ function mapTarefa(row: TarefaRow): Tarefa {
     status: row.status,
     prioridade: row.prioridade,
     origem: row.origem ?? 'app',
+    contexto: row.contexto ?? undefined,
     concluidaEm: row.concluida_em ?? undefined,
     reagendadaEm: row.reagendada_em ?? undefined,
     reagendamentoMotivo: row.reagendamento_motivo ?? undefined,
@@ -225,6 +231,7 @@ function filterMockTarefas(
     })
     .filter((tarefa) => {
       if (origem === 'todas') return true
+      if (origem === 'service') return ['oportunidade:service_risco_visitas', 'oportunidade:service_mix_caiu', 'gestao:recuperacao_service'].includes(tarefa.origem)
       if (['orcamento', 'oportunidade', 'rodobens', 'atendimento', 'cliente360', 'cockpit', 'campanha'].includes(origem)) return tarefa.origem.startsWith(origem)
       return tarefa.origem === origem
     })

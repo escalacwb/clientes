@@ -119,6 +119,31 @@ export type MetaVendedor = {
   observacao?: string
 }
 
+export type ServiceContatoEfetividadeResumo = {
+  tarefaId: string
+  clienteId: string
+  clienteNome: string
+  vendedorId?: string
+  vendedorNome: string
+  origem: string
+  tarefaStatus: string
+  criadoEm: string
+  concluidaEm?: string
+  dataInteracao?: string
+  resultado?: string
+  motivoQueda?: string
+  statusRetorno: 'sem_contato_registrado' | 'voltou_30d' | 'voltou_60d' | 'sem_retorno_60d'
+  recuperouPadrao?: boolean
+  primeiraVisitaPosContato?: string
+  visitas30d: number
+  visitas60d: number
+  placas60d: number
+  valorService60d: number
+  visitasMediana?: number
+  visitasRecentesNoAlerta?: number
+  diasSemVisitaNoAlerta?: number
+}
+
 type DashboardResumoRow = {
   clientes_total: number
   clientes_ativos_90: number
@@ -238,6 +263,31 @@ type MetaVendedorRow = {
   observacao: string | null
 }
 
+type ServiceContatoEfetividadeRow = {
+  tarefa_id: string
+  cliente_id: string
+  cliente_nome: string
+  vendedor_id: string | null
+  vendedor_nome: string
+  origem: string
+  tarefa_status: string
+  criado_em: string
+  concluida_em: string | null
+  data_interacao: string | null
+  resultado: string | null
+  motivo_queda: string | null
+  status_retorno: ServiceContatoEfetividadeResumo['statusRetorno']
+  recuperou_padrao: boolean | null
+  primeira_visita_pos_contato: string | null
+  visitas_30d: number
+  visitas_60d: number
+  placas_60d: number
+  valor_service_60d: number
+  visitas_mediana: number | null
+  visitas_recentes_no_alerta: number | null
+  dias_sem_visita_no_alerta: number | null
+}
+
 export async function getDashboardResumo(): Promise<DashboardResumo | undefined> {
   const supabase = await getSupabase()
   if (!supabase) return undefined
@@ -332,6 +382,43 @@ export async function listAtividadesDia(): Promise<AtividadeDiaResumo[]> {
     orcamentosHoje: Number(row.orcamentos_hoje ?? 0),
     tarefasConcluidasHoje: Number(row.tarefas_concluidas_hoje ?? 0),
     tarefasVencidas: Number(row.tarefas_vencidas ?? 0),
+  }))
+}
+
+export async function listServiceContatosEfetividade(limit = 80): Promise<ServiceContatoEfetividadeResumo[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('vw_service_contatos_efetividade')
+    .select('*')
+    .order('criado_em', { ascending: false })
+    .limit(limit)
+
+  if (error) throw error
+  return (data as ServiceContatoEfetividadeRow[] | null ?? []).map((row) => ({
+    tarefaId: row.tarefa_id,
+    clienteId: row.cliente_id,
+    clienteNome: row.cliente_nome,
+    vendedorId: row.vendedor_id ?? undefined,
+    vendedorNome: row.vendedor_nome,
+    origem: row.origem,
+    tarefaStatus: row.tarefa_status,
+    criadoEm: row.criado_em,
+    concluidaEm: row.concluida_em ?? undefined,
+    dataInteracao: row.data_interacao ?? undefined,
+    resultado: row.resultado ?? undefined,
+    motivoQueda: row.motivo_queda ?? undefined,
+    statusRetorno: row.status_retorno,
+    recuperouPadrao: row.recuperou_padrao ?? undefined,
+    primeiraVisitaPosContato: row.primeira_visita_pos_contato ?? undefined,
+    visitas30d: Number(row.visitas_30d ?? 0),
+    visitas60d: Number(row.visitas_60d ?? 0),
+    placas60d: Number(row.placas_60d ?? 0),
+    valorService60d: Number(row.valor_service_60d ?? 0),
+    visitasMediana: row.visitas_mediana == null ? undefined : Number(row.visitas_mediana),
+    visitasRecentesNoAlerta: row.visitas_recentes_no_alerta == null ? undefined : Number(row.visitas_recentes_no_alerta),
+    diasSemVisitaNoAlerta: row.dias_sem_visita_no_alerta == null ? undefined : Number(row.dias_sem_visita_no_alerta),
   }))
 }
 
