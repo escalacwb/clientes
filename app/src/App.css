@@ -5656,12 +5656,20 @@ h3 {
 
 .table-head.client360-sale,
 .table-row.client360-sale {
-  grid-template-columns: 96px minmax(220px, 1.5fr) minmax(130px, 0.8fr) minmax(110px, 0.6fr) 100px 84px;
+  grid-template-columns: 96px minmax(220px, 1.5fr) minmax(130px, 0.8fr) minmax(110px, 0.6fr) 100px 116px;
 }
 
 .table-head.client360-service,
 .table-row.client360-service {
-  grid-template-columns: 96px minmax(220px, 1.5fr) minmax(110px, 0.6fr) minmax(130px, 0.8fr) 100px 84px;
+  grid-template-columns: 96px minmax(220px, 1.5fr) minmax(110px, 0.6fr) minmax(130px, 0.8fr) 100px 116px;
+}
+
+.table-row.client360-sale .compact-button,
+.table-row.client360-service .compact-button {
+  width: 100%;
+  line-height: 1.15;
+  text-align: center;
+  white-space: normal;
 }
 
 .table-head.client360-vehicle,

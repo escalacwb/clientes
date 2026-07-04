@@ -47,7 +47,6 @@ import {
   money,
   opportunityReason,
   opportunityScore,
-  opportunityScoreDetails,
   smartSummary,
 } from './lib/crm'
 import { previewXmlFiles, type XmlImportPreview } from './lib/xmlImport'
@@ -171,7 +170,6 @@ import {
   listPatioAlocacaoVeiculos,
   listPatioAreasPendentes,
   listPatioBoxServicos,
-  listClientePatioAtendimentoItens,
   listClientePatioAtendimentos,
   listPatioBoxesPainel,
   listPatioBoxesLivres,
@@ -650,7 +648,6 @@ function App() {
   const [clienteOportunidades, setClienteOportunidades] = useState<Oportunidade[]>([])
   const [clienteContatoRecomendado, setClienteContatoRecomendado] = useState<ClienteContatoRecomendado | undefined>()
   const [clientePatioAtendimentos, setClientePatioAtendimentos] = useState<PatioAtendimentoResumo[]>([])
-  const [clientePatioItens, setClientePatioItens] = useState<PatioAtendimentoItemResumo[]>([])
   const [patioFeedbackItems, setPatioFeedbackItems] = useState<PatioFeedbackPendente[]>([])
   const [patioFeedbackTotal, setPatioFeedbackTotal] = useState(0)
   const [patioFeedbackPage, setPatioFeedbackPage] = useState(1)
@@ -1620,7 +1617,6 @@ function App() {
           loadedOportunidades,
           loadedContatoRecomendado,
           loadedPatioAtendimentos,
-          loadedPatioItens,
         ] = await Promise.all([
           listClienteVendasItens(selectedClientId),
           listClienteServicosItens(selectedClientId),
@@ -1630,7 +1626,6 @@ function App() {
           listClienteOportunidades(selectedClientId),
           getClienteContatoRecomendado(selectedClientId),
           listClientePatioAtendimentos(selectedClientId),
-          listClientePatioAtendimentoItens(selectedClientId),
         ])
         if (!isMounted) return
         setVendasItens(loadedVendas)
@@ -1641,7 +1636,6 @@ function App() {
         setClienteOportunidades(loadedOportunidades)
         setClienteContatoRecomendado(loadedContatoRecomendado)
         setClientePatioAtendimentos(loadedPatioAtendimentos)
-        setClientePatioItens(loadedPatioItens)
         clearModuleError('cliente360')
       } catch (exception) {
         if (isMounted) setModuleError('cliente360', exception instanceof Error ? exception.message : 'Nao foi possivel carregar o historico do cliente.')
@@ -2743,7 +2737,6 @@ function App() {
             oportunidades={clienteOportunidades}
             contatoRecomendado={clienteContatoRecomendado}
             patioAtendimentos={clientePatioAtendimentos}
-            patioItens={clientePatioItens}
             currentUser={session}
             onUpdateClient={async (patch) => {
               await updateClienteComercial(selectedClient.id, patch)
@@ -12940,7 +12933,6 @@ function Cliente360({
   oportunidades,
   contatoRecomendado,
   patioAtendimentos,
-  patioItens,
   currentUser,
   onUpdateClient,
   onAddInteraction,
@@ -12964,7 +12956,6 @@ function Cliente360({
   oportunidades: Oportunidade[]
   contatoRecomendado?: ClienteContatoRecomendado
   patioAtendimentos: PatioAtendimentoResumo[]
-  patioItens: PatioAtendimentoItemResumo[]
   currentUser: SessaoUsuario
   onUpdateClient: (patch: Partial<Cliente>) => Promise<void>
   onAddInteraction: (interacao: InteracaoInput) => Promise<Interacao>
@@ -12981,6 +12972,7 @@ function Cliente360({
   const [vehicleFilter, setVehicleFilter] = useState('todos')
   const [kindFilter, setKindFilter] = useState<'todos' | 'vendas' | 'servicos'>('todos')
   const [activeTab, setActiveTab] = useState<'resumo' | 'veiculos' | 'vendas' | 'servicos' | 'orcamentos' | 'tarefas' | 'campanhas' | 'timeline'>('resumo')
+  const tabsRef = useRef<HTMLDivElement | null>(null)
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [isCreatingTask, setIsCreatingTask] = useState(false)
@@ -13089,7 +13081,6 @@ function Cliente360({
   const ultimoAtendimentoPatio = [...patioAtendimentos].sort((a, b) =>
     (b.fimExecucao ?? b.inicioExecucao ?? '').localeCompare(a.fimExecucao ?? a.inicioExecucao ?? ''),
   )[0]
-  const patioServicosRecentes = patioItens.slice(0, 8)
   const contatoOperacional = contatoRecomendado?.whatsapp
     ? contatoRecomendado
     : ultimoAtendimentoPatio?.contatoMotorista
@@ -13107,7 +13098,6 @@ function Cliente360({
   const whatsappUrl = whatsappNumber
     ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(buildServiceOpeningMessage(cliente, contatoOperacional?.nome))}`
     : undefined
-  const opportunityDetails = opportunityScoreDetails(cliente, clienteOrcamentos)
   const clienteScore = opportunityScore(cliente, clienteOrcamentos)
   const routineReasons = uniqueBy([
     ...tarefasAbertas
@@ -13209,10 +13199,17 @@ function Cliente360({
     setIsCreatingTask(true)
     try {
       await onCreateTask()
-      setActiveTab('tarefas')
+      showClientTab('tarefas')
     } finally {
       setIsCreatingTask(false)
     }
+  }
+
+  function showClientTab(nextTab: typeof activeTab) {
+    setActiveTab(nextTab)
+    window.requestAnimationFrame(() => {
+      tabsRef.current?.scrollIntoView({ block: 'start', behavior: 'auto' })
+    })
   }
 
   async function registerContact(createQuote = false) {
@@ -13465,9 +13462,9 @@ function Cliente360({
               {approachFacts.slice(0, 5).map((fact) => <span key={fact}>{fact}</span>)}
             </div>
             <div className="client360-guidance-actions">
-              <button className="button compact-button" type="button" onClick={() => setActiveTab('timeline')}>Linha do tempo</button>
-              <button className="button compact-button" type="button" onClick={() => setActiveTab('vendas')}>Vendas</button>
-              <button className="button compact-button" type="button" onClick={() => setActiveTab('orcamentos')}>Propostas</button>
+              <button className="button compact-button" type="button" onClick={() => showClientTab('timeline')}>Linha do tempo</button>
+              <button className="button compact-button" type="button" onClick={() => showClientTab('vendas')}>Vendas</button>
+              <button className="button compact-button" type="button" onClick={() => showClientTab('orcamentos')}>Propostas</button>
               <button className="button compact-button" type="button" onClick={() => setIsEditingClient(true)}>Cadastro</button>
             </div>
           </article>
@@ -13481,42 +13478,6 @@ function Cliente360({
             </div>
           </article>
         </section>
-        {(ultimoAtendimentoPatio || patioServicosRecentes.length > 0) && (
-          <section className="client360-command-center">
-            <article className="client360-routine-card">
-              <span className="next-action-label">Sinal do patio</span>
-              <h3>{ultimoAtendimentoPatio ? `Ultimo atendimento ${dateLabel(ultimoAtendimentoPatio.fimExecucao ?? ultimoAtendimentoPatio.inicioExecucao)}` : 'Sem atendimento recente'}</h3>
-              <div className="client360-approach-list">
-                {ultimoAtendimentoPatio?.placa && <span>Placa: {ultimoAtendimentoPatio.placa}</span>}
-                {ultimoAtendimentoPatio?.quilometragem && <span>KM: {numberLabel(ultimoAtendimentoPatio.quilometragem)}</span>}
-                {ultimoAtendimentoPatio?.nomeMotorista && <span>Motorista: {ultimoAtendimentoPatio.nomeMotorista}</span>}
-                {ultimoAtendimentoPatio?.dataFeedback ? <span>Feedback registrado</span> : <span>Feedback ainda nao registrado</span>}
-              </div>
-            </article>
-            <article className="client360-routine-card">
-              <span className="next-action-label">Servicos do patio</span>
-              <h3>{patioServicosRecentes.length} itens recentes</h3>
-              <div className="client360-approach-list">
-                {patioServicosRecentes.slice(0, 5).map((item) => (
-                  <span key={item.id}>
-                    {dateLabel(item.solicitadoEm)} - {item.servicoNome || item.descricao || item.area}
-                    {item.quilometragem ? ` - KM ${numberLabel(item.quilometragem)}` : ''}
-                  </span>
-                ))}
-              </div>
-            </article>
-          </section>
-        )}
-        {opportunityDetails.length > 0 && (
-          <details className="client360-contact-tools client360-score-details">
-            <summary>{routineReasons.length > 0 ? 'Ver criterios que ajudam a priorizar' : 'Ver criterios de potencial comercial'}</summary>
-            <div className="client360-score-list">
-              {opportunityDetails.map((item) => (
-                <span key={item.label}>{item.label} <strong>+{item.points}</strong></span>
-              ))}
-            </div>
-          </details>
-        )}
         <div className="info-grid">
           <Info label="Ultima compra" value={dateLabel(cliente.ultimaCompraEm)} />
           <Info label="Produto principal" value={produtoPrincipal || cliente.produtoPrincipal || 'Sem historico'} />
@@ -13952,15 +13913,15 @@ function Cliente360({
       </div>
       </details>
 
-      <div className="client360-tabs">
-        <button className={activeTab === 'resumo' ? 'active' : ''} type="button" onClick={() => setActiveTab('resumo')}>Resumo</button>
-        <button className={activeTab === 'veiculos' ? 'active' : ''} type="button" onClick={() => setActiveTab('veiculos')}>Veiculos</button>
-        <button className={activeTab === 'vendas' ? 'active' : ''} type="button" onClick={() => setActiveTab('vendas')}>Vendas</button>
-        <button className={activeTab === 'servicos' ? 'active' : ''} type="button" onClick={() => setActiveTab('servicos')}>Servicos</button>
-        <button className={activeTab === 'orcamentos' ? 'active' : ''} type="button" onClick={() => setActiveTab('orcamentos')}>Orcamentos</button>
-        <button className={activeTab === 'tarefas' ? 'active' : ''} type="button" onClick={() => setActiveTab('tarefas')}>Tarefas</button>
-        <button className={activeTab === 'campanhas' ? 'active' : ''} type="button" onClick={() => setActiveTab('campanhas')}>Campanhas</button>
-        <button className={activeTab === 'timeline' ? 'active' : ''} type="button" onClick={() => setActiveTab('timeline')}>Timeline</button>
+      <div className="client360-tabs" ref={tabsRef}>
+        <button className={activeTab === 'resumo' ? 'active' : ''} type="button" onClick={() => showClientTab('resumo')}>Resumo</button>
+        <button className={activeTab === 'veiculos' ? 'active' : ''} type="button" onClick={() => showClientTab('veiculos')}>Veiculos</button>
+        <button className={activeTab === 'vendas' ? 'active' : ''} type="button" onClick={() => showClientTab('vendas')}>Vendas</button>
+        <button className={activeTab === 'servicos' ? 'active' : ''} type="button" onClick={() => showClientTab('servicos')}>Servicos</button>
+        <button className={activeTab === 'orcamentos' ? 'active' : ''} type="button" onClick={() => showClientTab('orcamentos')}>Orcamentos</button>
+        <button className={activeTab === 'tarefas' ? 'active' : ''} type="button" onClick={() => showClientTab('tarefas')}>Tarefas</button>
+        <button className={activeTab === 'campanhas' ? 'active' : ''} type="button" onClick={() => showClientTab('campanhas')}>Campanhas</button>
+        <button className={activeTab === 'timeline' ? 'active' : ''} type="button" onClick={() => showClientTab('timeline')}>Timeline</button>
       </div>
 
       {activeTab === 'resumo' && (
