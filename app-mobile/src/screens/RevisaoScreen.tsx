@@ -13,9 +13,12 @@ import api from "../api/client";
 import { ActionButton } from "../components/ActionButton";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
+import { Field } from "../components/Field";
 import { Header } from "../components/Header";
 import { theme } from "../theme";
 import { dateLabel, numberLabel, openWhatsApp } from "./crmHelpers";
+
+const DEFAULT_KM_MIN = 20000;
 
 type RevisaoItem = {
   patio_veiculo_id: number;
@@ -61,6 +64,8 @@ Se a quilometragem atual estiver diferente dessa estimativa, por favor nos envie
 export function RevisaoScreen() {
   const [items, setItems] = useState<RevisaoItem[]>([]);
   const [notes, setNotes] = useState<Record<number, string>>({});
+  const [kmMinText, setKmMinText] = useState(String(DEFAULT_KM_MIN));
+  const [appliedKmMin, setAppliedKmMin] = useState(DEFAULT_KM_MIN);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [runningId, setRunningId] = useState<number | null>(null);
@@ -68,7 +73,9 @@ export function RevisaoScreen() {
   async function loadData() {
     setLoading(true);
     try {
-      const response = await api.get<RevisaoItem[]>("/crm/revisao");
+      const response = await api.get<RevisaoItem[]>("/crm/revisao", {
+        params: { km_min: appliedKmMin },
+      });
       setItems(response.data || []);
     } finally {
       setLoading(false);
@@ -77,13 +84,22 @@ export function RevisaoScreen() {
 
   useEffect(() => {
     loadData().catch(() => Alert.alert("CRM", "Falha ao carregar revisoes proativas."));
-  }, []);
+  }, [appliedKmMin]);
 
   const stats = useMemo(() => {
     const total = Number(items[0]?.total_count || items.length);
-    const highKm = items.filter((item) => Number(item.km_estimado_desde_visita || 0) >= 10000).length;
+    const highKm = items.filter((item) => Number(item.km_estimado_desde_visita || 0) >= appliedKmMin).length;
     return { total, highKm };
-  }, [items]);
+  }, [appliedKmMin, items]);
+
+  function applyKmFilter() {
+    const nextKm = Number(kmMinText.replace(/\D/g, ""));
+    if (!Number.isFinite(nextKm) || nextKm <= 0) {
+      Alert.alert("Revisao proativa", "Informe um KM minimo valido.");
+      return;
+    }
+    setAppliedKmMin(nextKm);
+  }
 
   async function complete(item: RevisaoItem) {
     setRunningId(item.patio_veiculo_id);
@@ -124,13 +140,27 @@ export function RevisaoScreen() {
       >
         <Header title="Revisao proativa" subtitle="Placas que devem receber contato com base em KM e ultima visita." />
 
+        <Card>
+          <Field
+            label="KM minimo para entrar na fila"
+            value={kmMinText}
+            onChangeText={(value) => setKmMinText(value.replace(/\D/g, ""))}
+            placeholder="Ex.: 20000"
+            keyboardType="numeric"
+          />
+          <ActionButton label="Aplicar KM" onPress={applyKmFilter} />
+          <Text style={{ color: theme.colors.muted, marginTop: theme.spacing.xs }}>
+            Base atual: {numberLabel(appliedKmMin)} km estimados desde a ultima visita.
+          </Text>
+        </Card>
+
         <View style={{ flexDirection: "row", gap: theme.spacing.sm, marginBottom: theme.spacing.sm }}>
           <View style={{ flex: 1, backgroundColor: theme.colors.card, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.border, padding: theme.spacing.md }}>
             <Text style={{ color: theme.colors.muted, fontWeight: "800" }}>Fila</Text>
             <Text style={{ color: theme.colors.text, fontSize: 24, fontWeight: "900", marginTop: 4 }}>{stats.total}</Text>
           </View>
           <View style={{ flex: 1, backgroundColor: theme.colors.card, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.border, padding: theme.spacing.md }}>
-            <Text style={{ color: theme.colors.muted, fontWeight: "800" }}>Acima 10k km</Text>
+            <Text style={{ color: theme.colors.muted, fontWeight: "800" }}>Acima do minimo</Text>
             <Text style={{ color: theme.colors.text, fontSize: 24, fontWeight: "900", marginTop: 4 }}>{stats.highKm}</Text>
           </View>
         </View>

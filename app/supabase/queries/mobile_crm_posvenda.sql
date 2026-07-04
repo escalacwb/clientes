@@ -1,3 +1,6 @@
+drop function if exists public.mobile_revisao_pending(integer, integer);
+drop function if exists public.mobile_revisao_pending(integer, integer, numeric);
+
 create or replace function public.mobile_feedback_pending(
   p_limit integer default 100
 )
@@ -48,7 +51,8 @@ $$;
 
 create or replace function public.mobile_revisao_pending(
   p_limit integer default 100,
-  p_offset integer default 0
+  p_offset integer default 0,
+  p_km_min numeric default 20000
 )
 returns table (
   patio_veiculo_id bigint,
@@ -77,7 +81,7 @@ stable
 as $$
   select *
   from public.listar_patio_revisao_proativa(
-    null,
+    greatest(0, coalesce(p_km_min, 20000)),
     null,
     null,
     case
@@ -206,11 +210,11 @@ end;
 $$;
 
 revoke execute on function public.mobile_feedback_pending(integer) from anon;
-revoke execute on function public.mobile_revisao_pending(integer, integer) from anon;
+revoke execute on function public.mobile_revisao_pending(integer, integer, numeric) from anon;
 revoke execute on function public.mobile_feedback_done(bigint, text) from anon;
 revoke execute on function public.mobile_revisao_done(bigint, text) from anon;
 
 grant execute on function public.mobile_feedback_pending(integer) to authenticated, service_role;
-grant execute on function public.mobile_revisao_pending(integer, integer) to authenticated, service_role;
+grant execute on function public.mobile_revisao_pending(integer, integer, numeric) to authenticated, service_role;
 grant execute on function public.mobile_feedback_done(bigint, text) to authenticated, service_role;
 grant execute on function public.mobile_revisao_done(bigint, text) to authenticated, service_role;

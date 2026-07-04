@@ -204,7 +204,14 @@ const api = {
       }
 
       if (path === "/crm/revisao") {
-        return ok(await rpc<T>("mobile_revisao_pending", { p_limit: 100, p_offset: 0 }));
+        const kmMin = Number(config?.params?.km_min ?? 20000);
+        return ok(
+          await rpc<T>("mobile_revisao_pending", {
+            p_limit: 100,
+            p_offset: 0,
+            p_km_min: Number.isFinite(kmMin) ? kmMin : 20000,
+          })
+        );
       }
 
       const termExecucaoId = extractId(path, /^\/terms\/(\d+)$/);
