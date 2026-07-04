@@ -13062,7 +13062,6 @@ function Cliente360({
   const tarefasAbertas = clienteTarefas.filter((tarefa) => tarefa.status === 'aberta')
   const orcamentosAbertos = clienteOrcamentos.filter((orcamento) => ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando'].includes(orcamento.status))
   const orcamentoAbertoPrincipal = [...orcamentosAbertos].sort((a, b) => b.data.localeCompare(a.data))[0]
-  const ultimoOrcamento = [...clienteOrcamentos].sort((a, b) => b.data.localeCompare(a.data))[0]
   const latestMovements = buildClientServiceTimeline(clienteInteracoes, clienteOrcamentos, clienteTarefas, clienteCampanhas)
   const contactIsTerminal = isTerminalContactResult(contactResult)
   const contactMissingNextStep = !contactIsTerminal && (!nextActionDate || !contactNextActionText.trim())
@@ -13478,16 +13477,6 @@ function Cliente360({
             </div>
           </article>
         </section>
-        <div className="info-grid">
-          <Info label="Ultima compra" value={dateLabel(cliente.ultimaCompraEm)} />
-          <Info label="Produto principal" value={produtoPrincipal || cliente.produtoPrincipal || 'Sem historico'} />
-          <Info label="Ultimo contato" value={latestInteraction ? dateLabel(latestInteraction.data) : 'Sem registro'} />
-          <Info label="WhatsApp" value={cliente.whatsapp || 'Atualizar cadastro'} />
-          <Info label="Propostas abertas" value={orcamentosAbertos.length.toString()} />
-          <Info label="Tarefas abertas" value={tarefasAbertas.length.toString()} />
-          <Info label="Total historico" value={money(cliente.totalComprado + cliente.totalServicos)} />
-          <Info label="Ultima proposta" value={ultimoOrcamento ? `${money(ultimoOrcamento.valorTotal)} · ${ultimoOrcamento.status}` : 'Sem historico'} />
-        </div>
         </details>
         {clientFeedback && <div className="readiness ok">{clientFeedback}</div>}
         {isEditingClient && (
