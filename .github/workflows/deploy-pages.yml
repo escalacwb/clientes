@@ -41,8 +41,11 @@ jobs:
           VITE_SUPABASE_URL: https://rdaahndxfmaxkfnyrhlc.supabase.co
           VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkYWFobmR4Zm1heGtmbnlyaGxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5ODYzNDEsImV4cCI6MjA5NTU2MjM0MX0.L2g4J5rQQ57Kkhll5kzDw_f_ZlfARzHMr65TnL-A5uU
 
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: app/dist
 
