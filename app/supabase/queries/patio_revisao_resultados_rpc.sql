@@ -85,7 +85,7 @@ as $$
       a.contato_motorista,
       a.data_revisao_proativa,
       retorno.patio_execucao_id as retorno_patio_execucao_id,
-      retorno.inicio_execucao as retorno_em,
+      retorno.retorno_em,
       retorno.quilometragem as retorno_km,
       case
         when retorno.patio_execucao_id is not null then 'retornou_janela'
@@ -97,7 +97,10 @@ as $$
     from acoes a
     cross join params
     left join lateral (
-      select pa.patio_execucao_id, pa.inicio_execucao, pa.quilometragem
+      select
+        pa.patio_execucao_id,
+        coalesce(pa.fim_execucao, pa.inicio_execucao) as retorno_em,
+        pa.quilometragem
       from public.patio_atendimentos pa
       where pa.status = 'finalizado'
         and (
@@ -107,9 +110,9 @@ as $$
             and nullif(upper(regexp_replace(coalesce(pa.placa_snapshot, ''), '[^A-Z0-9]', '', 'g')), '') = a.placa_key
           )
         )
-        and pa.inicio_execucao::date > a.data_revisao_proativa
-        and pa.inicio_execucao::date <= a.data_revisao_proativa + params.janela_dias
-      order by pa.inicio_execucao asc
+        and coalesce(pa.fim_execucao, pa.inicio_execucao)::date > a.data_revisao_proativa
+        and coalesce(pa.fim_execucao, pa.inicio_execucao)::date <= a.data_revisao_proativa + params.janela_dias
+      order by coalesce(pa.fim_execucao, pa.inicio_execucao) asc
       limit 1
     ) retorno on true
   )
@@ -226,21 +229,32 @@ as $$
       pa.patio_execucao_id,
       pa.patio_veiculo_id,
       nullif(upper(regexp_replace(coalesce(pa.placa_snapshot, ''), '[^A-Z0-9]', '', 'g')), '') as placa_key,
-      pa.inicio_execucao
+      coalesce(pa.fim_execucao, pa.inicio_execucao) as retorno_em
     from public.patio_atendimentos pa
     join limites l on true
     where pa.status = 'finalizado'
       and l.inicio is not null
-      and pa.inicio_execucao >= (l.inicio + 1)::timestamptz
-      and pa.inicio_execucao < (l.fim + l.janela_dias + 1)::timestamptz
+      and coalesce(pa.fim_execucao, pa.inicio_execucao) >= (l.inicio + 1)::timestamptz
+      and coalesce(pa.fim_execucao, pa.inicio_execucao) < (l.fim + l.janela_dias + 1)::timestamptz
+  ),
+  servicos_importados as (
+    select
+      nullif(upper(regexp_replace(coalesce(s.placa, ''), '[^A-Z0-9]', '', 'g')), '') as placa_key,
+      s.data_servico
+    from public.servicos_itens s
+    join limites l on true
+    where l.inicio is not null
+      and s.placa is not null
+      and s.data_servico > l.inicio
+      and s.data_servico <= l.fim + l.janela_dias
   ),
   retornos_id as (
     select distinct a.acao_id
     from acoes a
     cross join params
     join atendimentos pa on pa.patio_veiculo_id = a.patio_veiculo_id
-      and pa.inicio_execucao >= (a.data_acao + 1)::timestamptz
-      and pa.inicio_execucao < (a.data_acao + params.janela_dias + 1)::timestamptz
+      and pa.retorno_em >= (a.data_acao + 1)::timestamptz
+      and pa.retorno_em < (a.data_acao + params.janela_dias + 1)::timestamptz
   ),
   retornos_placa as (
     select distinct a.acao_id
@@ -248,15 +262,24 @@ as $$
     cross join params
     join atendimentos pa on a.placa_key is not null
       and pa.placa_key = a.placa_key
-      and pa.inicio_execucao >= (a.data_acao + 1)::timestamptz
-      and pa.inicio_execucao < (a.data_acao + params.janela_dias + 1)::timestamptz
+      and pa.retorno_em >= (a.data_acao + 1)::timestamptz
+      and pa.retorno_em < (a.data_acao + params.janela_dias + 1)::timestamptz
+  ),
+  retornos_servicos_importados as (
+    select distinct a.acao_id
+    from acoes a
+    cross join params
+    join servicos_importados s on a.placa_key is not null
+      and s.placa_key = a.placa_key
+      and s.data_servico > a.data_acao
+      and s.data_servico <= a.data_acao + params.janela_dias
   ),
   resultados as (
     select
       a.fonte,
       a.data_acao,
       case
-        when ri.acao_id is not null or rp.acao_id is not null then 'retornou_janela'
+        when ri.acao_id is not null or rp.acao_id is not null or rs.acao_id is not null then 'retornou_janela'
         when a.data_acao <= current_date - params.janela_dias then 'sem_retorno_janela'
         else 'aguardando'
       end as resultado,
@@ -265,6 +288,7 @@ as $$
     cross join params
     left join retornos_id ri on ri.acao_id = a.acao_id
     left join retornos_placa rp on rp.acao_id = a.acao_id
+    left join retornos_servicos_importados rs on rs.acao_id = a.acao_id
   ),
   agregado as (
     select
