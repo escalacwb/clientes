@@ -164,6 +164,7 @@ import { listClienteOportunidades, listOportunidadesPage, listOportunidadesResum
 import {
   allocatePatioServices,
   addPatioBoxServico,
+  confirmPatioOmsysSaleOpened,
   consultPatioPlate,
   finishPatioBox,
   getClienteContatoRecomendado,
@@ -252,6 +253,7 @@ import type {
   PatioAlocacaoVeiculo,
   PatioAreaPendente,
   PatioBox,
+  PatioBoxFinalizeResult,
   PatioBoxServico,
   PatioCatalogoServico,
   PatioEntradaInput,
@@ -260,6 +262,7 @@ import type {
   PatioFilaPainel,
   PatioFilaItem,
   PatioFuncionario,
+  PatioOmsysVendaPrompt,
   PatioPainelBox,
   PatioRevisaoProativa,
   PatioVeiculoBusca,
@@ -2249,7 +2252,7 @@ function App() {
               setPatioBoxesAtivos(await listPatioBoxesPainel())
             }}
             onFinalizar={async (input) => {
-              await finishPatioBox(input)
+              const result = await finishPatioBox(input)
               notifyPatioBoxFinalized({
                 patioExecucaoId: input.patioExecucaoId,
                 finalizadoPor: session.nome,
@@ -2258,7 +2261,9 @@ function App() {
                 console.warn('Nao foi possivel enviar notificacao Telegram do patio.', error)
               })
               setPatioBoxesAtivos(await listPatioBoxesPainel())
+              return result
             }}
+            onConfirmOmsysSaleOpened={confirmPatioOmsysSaleOpened}
             onRefresh={async () => {
               setPatioBoxesAtivos(await listPatioBoxesPainel())
             }}
@@ -11814,6 +11819,7 @@ function PatioBoxes({
   onSaveServicos,
   onRetirar,
   onFinalizar,
+  onConfirmOmsysSaleOpened,
   onRefresh,
   onOpenClient,
 }: {
@@ -11824,7 +11830,8 @@ function PatioBoxes({
   onAddServico: (input: { patioExecucaoId: number; area: PatioBoxServico['area']; servicoNome: string; quantidade: number }) => Promise<void>
   onSaveServicos: (input: { boxId: number; servicos: Array<{ id: string; quantidade: number; observacaoExecucao?: string }> }) => Promise<void>
   onRetirar: (patioExecucaoId: number) => Promise<void>
-  onFinalizar: (input: { patioExecucaoId: number; servicos: Array<{ id: string; quantidade: number; observacaoExecucao?: string }>; observacaoFinal?: string }) => Promise<void>
+  onFinalizar: (input: { boxId: number; patioExecucaoId: number; servicos: Array<{ id: string; quantidade: number; observacaoExecucao?: string }>; observacaoFinal?: string }) => Promise<PatioBoxFinalizeResult>
+  onConfirmOmsysSaleOpened: (vendaId: string) => Promise<void>
   onRefresh: () => Promise<void>
   onOpenClient: (clienteId: string) => void
 }) {
@@ -11944,6 +11951,37 @@ function PatioBoxes({
     }
   }
 
+  const handleOmsysVendaAposFinalizacao = async (venda?: PatioOmsysVendaPrompt) => {
+    if (!venda) return
+
+    if (venda.devePerguntar && venda.vendaId && venda.urlSistema) {
+      const total = venda.total !== undefined ? `\nTotal sugerido: ${money(Number(venda.total) || 0)}` : ''
+      const consumidor = venda.clienteConsumidor ? '\nCliente OMSYS: Consumidor 55555' : ''
+      const shouldOpen = window.confirm(
+        `Abrir venda no sistema?\n\n${venda.placa ?? 'Veiculo'} - ${venda.km ?? 'KM NAO LANCADO'}\n${venda.itens ?? 0} itens${total}${consumidor}`,
+      )
+      if (!shouldOpen) return
+
+      const opened = window.open(venda.urlSistema, '_blank')
+      try {
+        await onConfirmOmsysSaleOpened(venda.vendaId)
+      } catch (exception) {
+        window.alert('O box foi finalizado e a venda foi aberta, mas nao conseguimos marcar a abertura no CRM.')
+      }
+      if (!opened) window.alert('O navegador bloqueou a nova aba. Libere pop-ups para abrir o sistema automaticamente.')
+      return
+    }
+
+    if (venda.motivo === 'venda_aberta_existente') {
+      window.alert('Box finalizado. Ja existe venda aberta marcada para esta placa.')
+      return
+    }
+
+    if (venda.motivo === 'venda_bloqueada' && venda.bloqueios?.length) {
+      window.alert(`Box finalizado, mas a venda OMSYS ficou bloqueada: ${venda.bloqueios.join(', ')}.`)
+    }
+  }
+
   const handleFinalizar = async (item: PatioPainelBox) => {
     if (!item.patioExecucaoId) return
     if (!window.confirm(`Finalizar atendimento?\n\n${boxActionLabel(item)}\n\nConfira quantidades e observacoes antes de confirmar.`)) return
@@ -11952,7 +11990,8 @@ function PatioBoxes({
     setError('')
     try {
       const rows = servicosByExecucao[patioExecucaoId] ?? await loadServicos(patioExecucaoId)
-      await onFinalizar({
+      const result = await onFinalizar({
+        boxId: item.boxId,
         patioExecucaoId,
         servicos: rows.map((servico) => ({
           id: servico.id,
@@ -11967,6 +12006,7 @@ function PatioBoxes({
         delete next[patioExecucaoId]
         return next
       })
+      await handleOmsysVendaAposFinalizacao(result.omsysVenda)
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Nao foi possivel finalizar o box.')
     } finally {

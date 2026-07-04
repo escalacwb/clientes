@@ -66,7 +66,7 @@ as $$
       from public.users u
       where u.auth_user_id = auth.uid()
         and u.ativo = true
-        and u.role in ('operacao', 'admin')
+        and u.role in ('operacao', 'admin', 'vendedor')
     )
 $$;
 
@@ -425,6 +425,11 @@ begin
   set ocupado = false,
       sincronizado_em = now()
   where patio_box_id = v_atendimento.box_id;
+
+  if to_regprocedure('public.refresh_patio_omsys_vendas_exportacoes(timestamp with time zone)') is not null then
+    execute 'select public.refresh_patio_omsys_vendas_exportacoes($1)'
+    using now() - interval '2 days';
+  end if;
 end;
 $$;
 

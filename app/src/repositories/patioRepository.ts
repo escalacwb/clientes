@@ -6,6 +6,7 @@ import type {
   PatioAlocacaoVeiculo,
   PatioAreaPendente,
   PatioBox,
+  PatioBoxFinalizeResult,
   PatioBoxServico,
   PatioCatalogoServico,
   PatioEntradaInput,
@@ -13,6 +14,7 @@ import type {
   PatioFilaPainel,
   PatioFilaItem,
   PatioFuncionario,
+  PatioOmsysVendaPrompt,
   PatioPainelBox,
   PatioRevisaoProativa,
   PatioRevisaoResultadoStatus,
@@ -1136,21 +1138,33 @@ export async function unassignPatioBox(patioExecucaoId: number): Promise<void> {
 }
 
 export async function finishPatioBox(input: {
+  boxId: number
   patioExecucaoId: number
   servicos: Array<{ id: string; quantidade: number; observacaoExecucao?: string }>
   observacaoFinal?: string
-}): Promise<void> {
+}): Promise<PatioBoxFinalizeResult> {
   const supabase = await getSupabase()
   if (!supabase) throw new Error('Supabase nao configurado.')
 
-  const { error } = await supabase.rpc('finalizar_box_patio_crm', {
-    p_patio_execucao_id: input.patioExecucaoId,
+  const { data, error } = await supabase.rpc('mobile_finalize_box', {
+    p_box_id: input.boxId,
+    p_obs_final: input.observacaoFinal?.trim() || '',
     p_servicos: input.servicos.map((servico) => ({
       id: servico.id,
       quantidade: Math.max(0, Math.round(Number(servico.quantidade) || 0)),
       observacao_execucao: servico.observacaoExecucao?.trim() ?? '',
     })),
-    p_observacao_final: input.observacaoFinal?.trim() || null,
+  })
+  if (error) throw error
+  return mapPatioFinalizeResult(data)
+}
+
+export async function confirmPatioOmsysSaleOpened(vendaId: string): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase) throw new Error('Supabase nao configurado.')
+
+  const { error } = await supabase.rpc('mobile_confirm_omsys_sale_opened', {
+    p_exportacao_id: vendaId,
   })
   if (error) throw error
 }
@@ -1484,6 +1498,50 @@ function mapBoxServico(row: BoxServicoRow): PatioBoxServico {
     status: row.status ?? undefined,
     boxId: row.box_id ?? undefined,
   }
+}
+
+function mapPatioFinalizeResult(data: unknown): PatioBoxFinalizeResult {
+  const payload = (data ?? {}) as Record<string, unknown>
+  return {
+    ok: Boolean(payload.ok ?? true),
+    execucaoId: payload.execucao_id ? Number(payload.execucao_id) : undefined,
+    omsysVenda: mapPatioOmsysVenda(payload.omsys_venda),
+  }
+}
+
+function mapPatioOmsysVenda(data: unknown): PatioOmsysVendaPrompt | undefined {
+  if (!data || typeof data !== 'object') return undefined
+  const payload = data as Record<string, unknown>
+
+  return {
+    devePerguntar: Boolean(payload.deve_perguntar),
+    motivo: stringOrUndefined(payload.motivo),
+    vendaId: stringOrUndefined(payload.venda_id),
+    vendaAbertaId: stringOrUndefined(payload.venda_aberta_id),
+    status: stringOrUndefined(payload.status),
+    placa: stringOrUndefined(payload.placa),
+    km: stringOrUndefined(payload.km),
+    clienteCodigo: stringOrUndefined(payload.cliente_codigo),
+    clienteConsumidor: Boolean(payload.cliente_consumidor),
+    itens: numberOrUndefined(payload.itens),
+    total: typeof payload.total === 'number' || typeof payload.total === 'string' ? payload.total : undefined,
+    urlSistema: stringOrUndefined(payload.url_sistema),
+    bloqueios: arrayOfStrings(payload.bloqueios),
+    avisos: arrayOfStrings(payload.avisos),
+  }
+}
+
+function stringOrUndefined(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value : undefined
+}
+
+function numberOrUndefined(value: unknown): number | undefined {
+  const numberValue = Number(value)
+  return Number.isFinite(numberValue) ? numberValue : undefined
+}
+
+function arrayOfStrings(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 }
 
 function mapFilaPainel(row: FilaPainelRow): PatioFilaPainel {

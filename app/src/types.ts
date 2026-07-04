@@ -583,6 +583,29 @@ export type PatioBoxServico = {
   boxId?: number
 }
 
+export type PatioOmsysVendaPrompt = {
+  devePerguntar: boolean
+  motivo?: string
+  vendaId?: string
+  vendaAbertaId?: string
+  status?: string
+  placa?: string
+  km?: string
+  clienteCodigo?: string
+  clienteConsumidor?: boolean
+  itens?: number
+  total?: string | number
+  urlSistema?: string
+  bloqueios?: string[]
+  avisos?: string[]
+}
+
+export type PatioBoxFinalizeResult = {
+  ok: boolean
+  execucaoId?: number
+  omsysVenda?: PatioOmsysVendaPrompt
+}
+
 export type PatioCatalogoServico = {
   area: 'borracharia' | 'alinhamento' | 'manutencao'
   nome: string
