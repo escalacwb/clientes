@@ -10964,12 +10964,30 @@ function PatioAnalisePneus({
 function RelatoriosCrm({
   onLoadRevisaoEfetividade,
 }: {
-  onLoadRevisaoEfetividade: (input?: { janelaDias?: number }) => Promise<PatioRevisaoEfetividadeResumo[]>
+  onLoadRevisaoEfetividade: (input?: { janelaDias?: number; startDate?: string; endDate?: string }) => Promise<PatioRevisaoEfetividadeResumo[]>
 }) {
   const janelaDias = 30
   const [rows, setRows] = useState<PatioRevisaoEfetividadeResumo[]>([])
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const loadRevisaoEfetividade = async () => {
+    setIsLoading(true)
+    setError('')
+    try {
+      setRows(await onLoadRevisaoEfetividade({
+        janelaDias,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+      }))
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar relatorios CRM.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
     let isMounted = true
@@ -11003,14 +11021,13 @@ function RelatoriosCrm({
     janelaDias,
   }
   const total = rows.find((row) => row.fonte === 'total') ?? emptyTotal
-  const emptySource = (fonte: 'crm' | 'historico_patio', fonteLabel: string): PatioRevisaoEfetividadeResumo => ({
+  const emptySource = (fonte: 'crm', fonteLabel: string): PatioRevisaoEfetividadeResumo => ({
     ...emptyTotal,
     fonte,
     fonteLabel,
   })
   const fonteRows = [
     rows.find((row) => row.fonte === 'crm') ?? emptySource('crm', 'CRM atual'),
-    rows.find((row) => row.fonte === 'historico_patio') ?? emptySource('historico_patio', 'Historico patio'),
   ]
   const baseFechada = total.retornaramJanela + total.semRetornoJanela
 
@@ -11020,18 +11037,22 @@ function RelatoriosCrm({
         <div>
           <span>Gestao CRM</span>
           <h2>Relatorios CRM</h2>
-          <p>Efetividade dos contatos de revisao proativa com retorno da placa em ate {janelaDias} dias.</p>
+          <p>Efetividade dos contatos concluidos na aba Revisao Proativa com retorno da placa em ate {janelaDias} dias.</p>
         </div>
-        <button className="button" type="button" onClick={() => {
-          setIsLoading(true)
-          setError('')
-          onLoadRevisaoEfetividade({ janelaDias })
-            .then(setRows)
-            .catch((exception) => setError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar relatorios CRM.'))
-            .finally(() => setIsLoading(false))
-        }}>
+        <button className="button" type="button" onClick={() => void loadRevisaoEfetividade()}>
           {isLoading ? 'Atualizando...' : 'Atualizar'}
         </button>
+      </div>
+
+      <div className="filters-grid">
+        <label>
+          Inicio do contato
+          <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+        </label>
+        <label>
+          Fim do contato
+          <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+        </label>
       </div>
 
       {error && <div className="alert">{error}</div>}
@@ -11062,8 +11083,8 @@ function RelatoriosCrm({
       <section className="panel">
         <div className="panel-header">
           <div>
-            <h3>Por fonte</h3>
-            <p>Separacao entre contatos marcados no CRM atual e historico ja trazido do patio.</p>
+            <h3>Base considerada</h3>
+            <p>Somente contatos marcados como concluidos dentro do CRM. Marcacoes importadas do patio ficam fora deste termometro.</p>
           </div>
         </div>
         <div className="table">

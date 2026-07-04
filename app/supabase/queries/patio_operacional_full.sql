@@ -775,8 +775,13 @@ select
 from acoes a
 left join retornos retorno on retorno.patio_veiculo_id = a.patio_veiculo_id;
 
+drop function if exists public.resumo_patio_revisao_efetividade(integer);
+drop function if exists public.resumo_patio_revisao_efetividade(integer, date, date);
+
 create or replace function public.resumo_patio_revisao_efetividade(
-  p_dias_janela integer default 30
+  p_dias_janela integer default 30,
+  p_data_inicio date default null,
+  p_data_fim date default null
 )
 returns table (
   fonte text,
@@ -797,9 +802,12 @@ security definer
 set search_path = public
 as $$
   with params as (
-    select greatest(1, least(coalesce(p_dias_janela, 30), 180))::integer as janela_dias
+    select
+      greatest(1, least(coalesce(p_dias_janela, 30), 180))::integer as janela_dias,
+      p_data_inicio as data_inicio,
+      p_data_fim as data_fim
   ),
-  crm_acoes as (
+  acoes as (
     select
       'crm'::text as fonte,
       ('crm:' || i.id::text) as acao_id,
@@ -812,35 +820,15 @@ as $$
     join public.clientes c on c.id = i.cliente_id
     left join public.patio_veiculos_snapshot pvs on pvs.patio_veiculo_id = i.patio_veiculo_id
     left join public.veiculos v on v.id = pvs.veiculo_id
+    cross join params
     where i.tipo = 'revisao_proativa'
       and c.excluido_em is null
-      and i.patio_veiculo_id is not null
-  ),
-  historico_patio_acoes as (
-    select
-      'historico_patio'::text as fonte,
-      ('patio:' || pvs.patio_veiculo_id::text || ':' || pvs.data_revisao_proativa::text) as acao_id,
-      pvs.patio_veiculo_id,
-      pvs.cliente_id,
-      c.vendedor_id,
-      pvs.data_revisao_proativa as data_acao,
-      nullif(upper(regexp_replace(coalesce(v.placa, pvs.placa, ''), '[^A-Z0-9]', '', 'g')), '') as placa_key
-    from public.patio_veiculos_snapshot pvs
-    join public.clientes c on c.id = pvs.cliente_id
-    left join public.veiculos v on v.id = pvs.veiculo_id
-    where pvs.data_revisao_proativa is not null
-      and c.excluido_em is null
-      and not exists (
-        select 1
-        from crm_acoes ca
-        where ca.patio_veiculo_id = pvs.patio_veiculo_id
-          and ca.data_acao = pvs.data_revisao_proativa
+      and (params.data_inicio is null or i.data_interacao::date >= params.data_inicio)
+      and (params.data_fim is null or i.data_interacao::date <= params.data_fim)
+      and (
+        i.patio_veiculo_id is not null
+        or nullif(upper(regexp_replace(coalesce(i.placa, v.placa, pvs.placa, ''), '[^A-Z0-9]', '', 'g')), '') is not null
       )
-  ),
-  acoes as (
-    select * from crm_acoes
-    union all
-    select * from historico_patio_acoes
   ),
   limites as (
     select
@@ -900,7 +888,6 @@ as $$
       coalesce(fonte, 'total') as fonte,
       case coalesce(fonte, 'total')
         when 'crm' then 'CRM atual'
-        when 'historico_patio' then 'Historico patio'
         else 'Total geral'
       end as fonte_label,
       count(*)::integer as contatos_total,
@@ -911,7 +898,7 @@ as $$
       coalesce(round((count(*) filter (where resultado = 'retornou_janela'))::numeric * 100 / nullif(count(*) filter (where resultado <> 'aguardando'), 0), 1), 0) as taxa_maturada,
       min(data_acao) as primeira_acao,
       max(data_acao) as ultima_acao,
-      max(janela_dias)::integer as janela_dias
+      coalesce(max(janela_dias), (select janela_dias from params))::integer as janela_dias
     from resultados
     group by grouping sets ((fonte), ())
   )
@@ -920,7 +907,7 @@ as $$
   order by case fonte when 'total' then 0 when 'crm' then 1 else 2 end;
 $$;
 
-grant execute on function public.resumo_patio_revisao_efetividade(integer) to anon, authenticated, service_role;
+grant execute on function public.resumo_patio_revisao_efetividade(integer, date, date) to anon, authenticated, service_role;
 
 create or replace function public.listar_patio_revisao_proativa(
   p_km_min numeric default null,

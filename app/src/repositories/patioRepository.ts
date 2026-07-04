@@ -246,7 +246,7 @@ export type PatioRevisaoResultado = {
 }
 
 export type PatioRevisaoEfetividadeResumo = {
-  fonte: 'total' | 'crm' | 'historico_patio' | string
+  fonte: 'total' | 'crm' | string
   fonteLabel: string
   contatosTotal: number
   retornaramJanela: number
@@ -837,12 +837,16 @@ export async function listPatioRevisaoResultados(input: {
 
 export async function listPatioRevisaoEfetividadeResumo(input: {
   janelaDias?: number
+  startDate?: string
+  endDate?: string
 } = {}): Promise<PatioRevisaoEfetividadeResumo[]> {
   const supabase = await getSupabase()
   if (!supabase) return []
 
   const { data, error } = await supabase.rpc('resumo_patio_revisao_efetividade', {
     p_dias_janela: input.janelaDias ?? 30,
+    p_data_inicio: input.startDate || null,
+    p_data_fim: input.endDate || null,
   })
 
   if (error) throw error
