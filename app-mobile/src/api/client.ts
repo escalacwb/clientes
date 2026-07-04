@@ -135,6 +135,10 @@ const api = {
         return ok(await rpc<T>("mobile_catalog_services"));
       }
 
+      if (path === "/catalog/items") {
+        return ok(await rpc<T>("mobile_catalog_items"));
+      }
+
       if (path === "/clients/search") {
         const term = String(config?.params?.term || "");
         return ok(await rpc<T>("mobile_clients_search", { p_term: term }));
@@ -322,6 +326,16 @@ const api = {
         );
       }
 
+      const saveServicesBoxId = extractId(path, /^\/boxes\/(\d+)\/services\/save$/);
+      if (saveServicesBoxId !== null) {
+        return ok(
+          await rpc<T>("mobile_save_box_services", {
+            p_box_id: saveServicesBoxId,
+            p_servicos: body.servicos || [],
+          })
+        );
+      }
+
       const unassignBoxId = extractId(path, /^\/boxes\/(\d+)\/unassign$/);
       if (unassignBoxId !== null) {
         return ok(await rpc<T>("mobile_unassign_box", { p_box_id: unassignBoxId }));
@@ -335,6 +349,15 @@ const api = {
             p_obs_final: body.obs_final || "",
             p_servicos: body.servicos || [],
             p_usuario_id: await currentUserId(),
+          })
+        );
+      }
+
+      const openedSaleId = extractTextId(path, /^\/omsys\/sales\/([^/]+)\/opened$/);
+      if (openedSaleId !== null) {
+        return ok(
+          await rpc<T>("mobile_confirm_omsys_sale_opened", {
+            p_exportacao_id: openedSaleId,
           })
         );
       }

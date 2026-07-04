@@ -543,6 +543,8 @@ export type PatioFuncionario = {
   patioFuncionarioId: number
   nome: string
   ativo: boolean
+  codigoOmsys?: string
+  origem?: string
 }
 
 export type PatioBox = {

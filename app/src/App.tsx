@@ -193,6 +193,7 @@ import {
   notifyPatioBoxFinalized,
   registerPatioEntrada,
   revertPatioVisit,
+  savePatioBoxServicos,
   searchPatioVeiculos,
   unassignPatioBox,
   updatePatioAtendimentoKm,
@@ -2237,6 +2238,10 @@ function App() {
             onLoadServicos={listPatioBoxServicos}
             onAddServico={async (input) => {
               await addPatioBoxServico(input)
+              setPatioBoxesAtivos(await listPatioBoxesPainel())
+            }}
+            onSaveServicos={async (input) => {
+              await savePatioBoxServicos(input)
               setPatioBoxesAtivos(await listPatioBoxesPainel())
             }}
             onRetirar={async (patioExecucaoId) => {
@@ -11780,7 +11785,7 @@ function PatioAlocacao({
                 <option value="">Selecione</option>
                 {funcionarios.map((funcionario) => (
                   <option value={funcionario.patioFuncionarioId} key={funcionario.patioFuncionarioId}>
-                    {funcionario.patioFuncionarioId} - {funcionario.nome}
+                    {funcionario.codigoOmsys ?? funcionario.patioFuncionarioId} - {funcionario.nome}
                   </option>
                 ))}
               </select>
@@ -11806,6 +11811,7 @@ function PatioBoxes({
   catalogoServicos,
   onLoadServicos,
   onAddServico,
+  onSaveServicos,
   onRetirar,
   onFinalizar,
   onRefresh,
@@ -11816,6 +11822,7 @@ function PatioBoxes({
   catalogoServicos: PatioCatalogoServico[]
   onLoadServicos: (patioExecucaoId: number) => Promise<PatioBoxServico[]>
   onAddServico: (input: { patioExecucaoId: number; area: PatioBoxServico['area']; servicoNome: string; quantidade: number }) => Promise<void>
+  onSaveServicos: (input: { boxId: number; servicos: Array<{ id: string; quantidade: number; observacaoExecucao?: string }> }) => Promise<void>
   onRetirar: (patioExecucaoId: number) => Promise<void>
   onFinalizar: (input: { patioExecucaoId: number; servicos: Array<{ id: string; quantidade: number; observacaoExecucao?: string }>; observacaoFinal?: string }) => Promise<void>
   onRefresh: () => Promise<void>
@@ -11854,6 +11861,37 @@ function PatioBoxes({
         servico.id === servicoId ? { ...servico, ...patch } : servico,
       ),
     }))
+  }
+
+  const handleSaveServicos = async (item: PatioPainelBox, servicosOverride?: PatioBoxServico[], skipRemoveConfirm = false) => {
+    if (!item.patioExecucaoId) return
+    const rows = servicosOverride ?? servicosByExecucao[item.patioExecucaoId] ?? await loadServicos(item.patioExecucaoId)
+    const removidos = rows.filter((servico) => Number(servico.quantidade) <= 0)
+    if (!skipRemoveConfirm && removidos.length > 0 && !window.confirm(`${removidos.length} servico(s) com quantidade 0 serao removidos deste box. Continuar?`)) return
+
+    setSavingAction(`save-${item.patioExecucaoId}`)
+    setError('')
+    try {
+      await onSaveServicos({
+        boxId: item.boxId,
+        servicos: rows.map((servico) => ({
+          id: servico.id,
+          quantidade: servico.quantidade,
+          observacaoExecucao: servico.observacaoExecucao,
+        })),
+      })
+      await loadServicos(item.patioExecucaoId)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Nao foi possivel salvar os servicos do box.')
+    } finally {
+      setSavingAction('')
+    }
+  }
+
+  const handleRemoveServico = async (item: PatioPainelBox, servico: PatioBoxServico) => {
+    if (!item.patioExecucaoId) return
+    if (!window.confirm(`Remover este servico do box?\n\n${servico.servicoNome ?? areaLabel(servico.area)}`)) return
+    await handleSaveServicos(item, [{ ...servico, quantidade: 0 }], true)
   }
 
   const handleAddServico = async (event: FormEvent, patioExecucaoId: number) => {
@@ -12016,7 +12054,20 @@ function PatioBoxes({
                 </div>
                 {expanded === item.patioExecucaoId && (
                   <div className="patio-box-detail">
-                    <h4>Servicos em execucao</h4>
+                    <div className="patio-box-detail-heading">
+                      <div>
+                        <h4>Servicos em execucao</h4>
+                        <p className="muted">Altere a quantidade e clique em salvar. Quantidade 0 remove o servico do box.</p>
+                      </div>
+                      <button
+                        className="button primary"
+                        type="button"
+                        disabled={savingAction !== ''}
+                        onClick={() => void handleSaveServicos(item)}
+                      >
+                        {savingAction === `save-${item.patioExecucaoId}` ? 'Salvando...' : 'Salvar alteracoes'}
+                      </button>
+                    </div>
                     {(servicosByExecucao[item.patioExecucaoId] ?? []).map((servico) => (
                       <div className="patio-box-service-row" key={servico.id}>
                         <div>
@@ -12040,6 +12091,9 @@ function PatioBoxes({
                             placeholder="Opcional"
                           />
                         </label>
+                        <button className="button compact-button" type="button" disabled={savingAction !== ''} onClick={() => void handleRemoveServico(item, servico)}>
+                          Remover
+                        </button>
                       </div>
                     ))}
                     <form className="patio-box-extra" onSubmit={(event) => void handleAddServico(event, item.patioExecucaoId!)}>

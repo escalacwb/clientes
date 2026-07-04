@@ -348,14 +348,20 @@ as $$
   where patio_veiculo_id = p_veiculo_id
 $$;
 
+drop function if exists public.mobile_funcionarios();
+
 create or replace function public.mobile_funcionarios()
-returns table (id bigint, nome text)
+returns table (id bigint, nome text, codigo_omsys text, origem text)
 language sql
 stable
 security definer
 set search_path = public
 as $$
-  select patio_funcionario_id as id, nome
+  select
+    patio_funcionario_id as id,
+    nome,
+    raw_data->>'omsys_codigo' as codigo_omsys,
+    raw_data->>'origem' as origem
   from public.patio_funcionarios_snapshot
   where ativo = true and patio_funcionario_id > 0
   order by nome
@@ -561,6 +567,62 @@ begin
 end;
 $$;
 
+create or replace function public.mobile_save_box_services(
+  p_box_id integer,
+  p_servicos jsonb default '[]'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_execucao_id bigint;
+  v_servico jsonb;
+  v_quantidade integer;
+begin
+  select patio_execucao_id into v_execucao_id
+  from public.patio_atendimentos
+  where box_id = p_box_id and status = 'em_andamento'
+  limit 1;
+
+  if v_execucao_id is null then
+    raise exception 'Box sem atendimento em andamento.';
+  end if;
+
+  for v_servico in select * from jsonb_array_elements(coalesce(p_servicos, '[]'::jsonb))
+  loop
+    if nullif(v_servico->>'id', '') is null then
+      continue;
+    end if;
+
+    v_quantidade := case
+      when coalesce(v_servico->>'quantidade', '') ~ '^-?[0-9]+$' then greatest(0, (v_servico->>'quantidade')::integer)
+      else null
+    end;
+
+    if v_quantidade is null then
+      continue;
+    end if;
+
+    update public.patio_atendimento_itens
+    set quantidade = case when v_quantidade > 0 then v_quantidade else quantidade end,
+        status = case when v_quantidade = 0 then 'cancelado' else status end,
+        observacao_execucao = case
+          when v_quantidade = 0 then coalesce(nullif(v_servico->>'observacao_execucao', ''), observacao_execucao, 'Removido no box')
+          else coalesce(nullif(v_servico->>'observacao_execucao', ''), observacao_execucao)
+        end,
+        atualizado_em = now(),
+        sincronizado_em = now()
+    where id = (v_servico->>'id')::uuid
+      and patio_execucao_id = v_execucao_id
+      and status = 'em_andamento';
+  end loop;
+
+  return public.mobile_box_details(p_box_id);
+end;
+$$;
+
 create or replace function public.mobile_unassign_box(p_box_id integer)
 returns jsonb
 language plpgsql
@@ -597,6 +659,11 @@ as $$
 declare
   v_execucao_id bigint;
   v_payload jsonb;
+  v_venda record;
+  v_venda_atual record;
+  v_venda_aberta record;
+  v_deve_perguntar boolean := false;
+  v_motivo text := 'sem_venda_preparada';
 begin
   select patio_execucao_id into v_execucao_id
   from public.patio_atendimentos
@@ -620,7 +687,67 @@ begin
   );
 
   perform public.finalizar_box_patio_crm(v_execucao_id, v_payload, p_obs_final);
-  return jsonb_build_object('ok', true, 'execucao_id', v_execucao_id);
+
+  select v.* into v_venda
+  from public.vw_patio_omsys_visitas_consolidadas v
+  where exists (
+    select 1
+    from jsonb_array_elements(coalesce(v.payload_omsys->'itens', '[]'::jsonb)) item
+    where coalesce(item->>'patio_execucao_id', '') ~ '^[0-9]+$'
+      and (item->>'patio_execucao_id')::bigint = v_execucao_id
+  )
+  order by v.ultima_finalizacao desc
+  limit 1;
+
+  if v_venda.visita_chave is not null then
+    select e.* into v_venda_atual
+    from public.patio_omsys_vendas_exportacoes e
+    where e.visita_chave = v_venda.visita_chave
+    limit 1;
+
+    select e.* into v_venda_aberta
+    from public.patio_omsys_vendas_exportacoes e
+    where e.placa = v_venda.placa
+      and e.visita_chave <> v_venda.visita_chave
+      and e.status in ('preparada', 'exportando')
+    order by e.atualizado_em desc
+    limit 1;
+
+    v_deve_perguntar :=
+      v_venda_atual.id is not null
+      and v_venda_aberta.id is null
+      and v_venda_atual.status in ('pendente', 'preparada')
+      and coalesce(cardinality(v_venda_atual.bloqueios), 0) = 0;
+
+    v_motivo := case
+      when v_venda_aberta.id is not null then 'venda_aberta_existente'
+      when v_venda_atual.id is null then 'venda_nao_entrou_na_fila'
+      when coalesce(cardinality(v_venda_atual.bloqueios), 0) > 0 then 'venda_bloqueada'
+      when v_venda_atual.status not in ('pendente', 'preparada') then 'status_sem_pergunta'
+      else 'pode_abrir'
+    end;
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'execucao_id', v_execucao_id,
+    'omsys_venda', jsonb_build_object(
+      'deve_perguntar', v_deve_perguntar,
+      'motivo', v_motivo,
+      'venda_id', case when v_venda_atual.id is not null then v_venda_atual.id::text else null end,
+      'venda_aberta_id', case when v_venda_aberta.id is not null then v_venda_aberta.id::text else null end,
+      'status', v_venda_atual.status,
+      'placa', coalesce(v_venda.placa, ''),
+      'km', coalesce(v_venda.payload_omsys->>'chassi', 'KM NÃO LANÇADO'),
+      'cliente_codigo', v_venda.cliente_codigo_omsys,
+      'cliente_consumidor', coalesce(v_venda.cliente_fallback_consumidor, false),
+      'itens', coalesce(jsonb_array_length(v_venda.payload_omsys->'itens'), 0),
+      'total', coalesce(v_venda.payload_omsys->>'total', '0'),
+      'url_sistema', v_venda.payload_omsys->>'url_sistema',
+      'bloqueios', coalesce(to_jsonb(v_venda_atual.bloqueios), '[]'::jsonb),
+      'avisos', coalesce(to_jsonb(v_venda_atual.avisos), '[]'::jsonb)
+    )
+  );
 end;
 $$;
 
@@ -789,6 +916,7 @@ grant execute on function public.mobile_queues() to anon, authenticated, service
 grant execute on function public.mobile_boxes_active() to anon, authenticated, service_role;
 grant execute on function public.mobile_box_details(integer) to anon, authenticated, service_role;
 grant execute on function public.mobile_add_box_service(integer, text, integer) to anon, authenticated, service_role;
+grant execute on function public.mobile_save_box_services(integer, jsonb) to anon, authenticated, service_role;
 grant execute on function public.mobile_unassign_box(integer) to anon, authenticated, service_role;
 grant execute on function public.mobile_finalize_box(integer, text, jsonb, bigint) to anon, authenticated, service_role;
 grant execute on function public.mobile_completed_services(date, date) to anon, authenticated, service_role;

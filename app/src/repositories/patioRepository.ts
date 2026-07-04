@@ -311,6 +311,10 @@ type FuncionarioRow = {
   patio_funcionario_id: number
   nome: string
   ativo: boolean | null
+  raw_data?: {
+    origem?: string | null
+    omsys_codigo?: string | null
+  } | null
 }
 
 type BoxRow = {
@@ -982,7 +986,7 @@ export async function listPatioFuncionarios(): Promise<PatioFuncionario[]> {
 
   const { data, error } = await supabase
     .from('patio_funcionarios_snapshot')
-    .select('patio_funcionario_id,nome,ativo')
+    .select('patio_funcionario_id,nome,ativo,raw_data')
     .eq('ativo', true)
     .order('nome', { ascending: true })
 
@@ -1101,6 +1105,24 @@ export async function addPatioBoxServico(input: {
 
   if (error) throw error
   return String(data)
+}
+
+export async function savePatioBoxServicos(input: {
+  boxId: number
+  servicos: Array<{ id: string; quantidade: number; observacaoExecucao?: string }>
+}): Promise<void> {
+  const supabase = await getSupabase()
+  if (!supabase) throw new Error('Supabase nao configurado.')
+
+  const { error } = await supabase.rpc('mobile_save_box_services', {
+    p_box_id: input.boxId,
+    p_servicos: input.servicos.map((servico) => ({
+      id: servico.id,
+      quantidade: Math.max(0, Math.round(Number(servico.quantidade) || 0)),
+      observacao_execucao: servico.observacaoExecucao?.trim() ?? '',
+    })),
+  })
+  if (error) throw error
 }
 
 export async function unassignPatioBox(patioExecucaoId: number): Promise<void> {
@@ -1417,6 +1439,8 @@ function mapFuncionario(row: FuncionarioRow): PatioFuncionario {
     patioFuncionarioId: Number(row.patio_funcionario_id),
     nome: row.nome,
     ativo: Boolean(row.ativo ?? true),
+    codigoOmsys: row.raw_data?.omsys_codigo ?? undefined,
+    origem: row.raw_data?.origem ?? undefined,
   }
 }
 

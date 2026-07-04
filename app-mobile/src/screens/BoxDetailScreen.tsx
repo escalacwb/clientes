@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
   Alert,
   Button,
+  Linking,
   SafeAreaView,
   ScrollView,
   Text,
@@ -27,6 +28,23 @@ type ServiceItem = {
   quantidade: number;
   observacao_cadastro?: string | null;
   observacao_execucao?: string | null;
+};
+
+type OmsysVendaPrompt = {
+  deve_perguntar?: boolean;
+  motivo?: string;
+  venda_id?: string | null;
+  venda_aberta_id?: string | null;
+  status?: string | null;
+  placa?: string | null;
+  km?: string | null;
+  cliente_codigo?: string | null;
+  cliente_consumidor?: boolean;
+  itens?: number;
+  total?: string | number;
+  url_sistema?: string | null;
+  bloqueios?: string[];
+  avisos?: string[];
 };
 
 type Props = {
@@ -88,7 +106,7 @@ export function BoxDetailScreen({ route }: Props) {
   const [execucao, setExecucao] = useState<any>(null);
   const [servicos, setServicos] = useState<ServiceItem[]>([]);
   const [obsFinal, setObsFinal] = useState("");
-  const [loadingAction, setLoadingAction] = useState<"finalize" | "unassign" | "add" | null>(null);
+  const [loadingAction, setLoadingAction] = useState<"finalize" | "unassign" | "add" | "save" | null>(null);
   const [catalogo, setCatalogo] = useState<any>(null);
   const [novoTipo, setNovoTipo] = useState("");
   const [tipoSearch, setTipoSearch] = useState("");
@@ -123,6 +141,55 @@ export function BoxDetailScreen({ route }: Props) {
     );
   }
 
+  async function salvarServicos(servicosParaSalvar = servicos) {
+    if (!execucao) {
+      Alert.alert("Box livre");
+      return;
+    }
+
+    setLoadingAction("save");
+    try {
+      const response = await api.post<{ servicos?: ServiceItem[] }>(`/boxes/${boxId}/services/save`, {
+        servicos: servicosParaSalvar.map((s) => ({
+          id: s.id,
+          quantidade: Math.max(0, Math.round(Number(s.quantidade) || 0)),
+          observacao_execucao: s.observacao_execucao || "",
+        })),
+      });
+      setServicos(response.data?.servicos || []);
+      Alert.alert("Servicos salvos");
+    } catch (err) {
+      logEvent({ level: "error", message: "Falha ao salvar servicos do box", meta: { boxId } });
+      Alert.alert("Falha ao salvar servicos");
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
+  function salvarAlteracoesServicos() {
+    const removidos = servicos.filter((s) => Number(s.quantidade) <= 0);
+    if (removidos.length > 0) {
+      Alert.alert(
+        "Remover servicos?",
+        `${removidos.length} servico(s) com quantidade 0 serao removidos deste box.`,
+        [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Salvar", onPress: () => salvarServicos() },
+        ],
+      );
+      return;
+    }
+
+    salvarServicos();
+  }
+
+  function removerServico(servico: ServiceItem) {
+    Alert.alert("Remover servico?", servico.tipo, [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Remover", style: "destructive", onPress: () => salvarServicos([{ ...servico, quantidade: 0 }]) },
+    ]);
+  }
+
   async function finalizeExecucao() {
     if (!execucao) {
       Alert.alert("Box livre");
@@ -130,7 +197,7 @@ export function BoxDetailScreen({ route }: Props) {
     }
     setLoadingAction("finalize");
     try {
-      await api.post(`/boxes/${boxId}/finalize`, {
+      const response = await api.post<{ omsys_venda?: OmsysVendaPrompt }>(`/boxes/${boxId}/finalize`, {
         obs_final: obsFinal,
         servicos: servicos.map((s) => ({
           area: s.area,
@@ -138,14 +205,55 @@ export function BoxDetailScreen({ route }: Props) {
           quantidade: s.quantidade,
         })),
       });
-      Alert.alert("Box finalizado");
+      const venda = response.data?.omsys_venda;
       setObsFinal("");
       await loadData();
+      handleOmsysVendaPrompt(venda);
     } catch (err) {
       logEvent({ level: "error", message: "Falha ao finalizar box", meta: { boxId } });
       Alert.alert("Falha ao finalizar");
     } finally {
       setLoadingAction(null);
+    }
+  }
+
+  function handleOmsysVendaPrompt(venda?: OmsysVendaPrompt) {
+    if (venda?.deve_perguntar && venda.venda_id && venda.url_sistema) {
+      const total = venda.total ? `Total sugerido: R$ ${String(venda.total).replace(".", ",")}.` : "";
+      const cliente = venda.cliente_consumidor ? " Cliente sera Consumidor 55555." : "";
+      Alert.alert(
+        "Abrir venda no sistema?",
+        `${venda.placa || "Veiculo"} - ${venda.km || "KM NÃO LANÇADO"}\n${venda.itens || 0} itens. ${total}${cliente}`,
+        [
+          { text: "Depois", style: "cancel" },
+          { text: "Abrir", onPress: () => abrirVendaNoSistema(venda) },
+        ],
+      );
+      return;
+    }
+
+    if (venda?.motivo === "venda_aberta_existente") {
+      Alert.alert("Box finalizado", "Ja existe venda aberta marcada para esta placa.");
+      return;
+    }
+
+    if (venda?.motivo === "venda_bloqueada") {
+      Alert.alert("Box finalizado", `Venda nao sugerida: ${venda.bloqueios?.join(", ") || "bloqueada"}.`);
+      return;
+    }
+
+    Alert.alert("Box finalizado");
+  }
+
+  async function abrirVendaNoSistema(venda: OmsysVendaPrompt) {
+    if (!venda.venda_id || !venda.url_sistema) return;
+
+    try {
+      await api.post(`/omsys/sales/${venda.venda_id}/opened`);
+      await Linking.openURL(venda.url_sistema);
+    } catch (err) {
+      logEvent({ level: "error", message: "Falha ao abrir venda OMSYS", meta: { vendaId: venda.venda_id } });
+      Alert.alert("Falha ao abrir venda", "A venda foi finalizada no patio, mas nao conseguimos abrir o sistema.");
     }
   }
 
@@ -244,6 +352,9 @@ export function BoxDetailScreen({ route }: Props) {
               <Text style={{ fontWeight: "600", marginBottom: theme.spacing.xs }}>
                 Servicos em execucao
               </Text>
+              <Text style={{ color: theme.colors.muted, marginBottom: theme.spacing.xs }}>
+                Altere a quantidade e toque em Salvar. Quantidade 0 remove o servico do box.
+              </Text>
               {servicos.map((srv) => (
                 <View key={`${srv.area}-${srv.id}`} style={{ marginBottom: theme.spacing.sm }}>
                   <Text style={{ fontWeight: "600" }}>{srv.tipo}</Text>
@@ -264,8 +375,18 @@ export function BoxDetailScreen({ route }: Props) {
                     onChangeText={(val) => updateQuantidade(srv.id, val)}
                     keyboardType="numeric"
                   />
+                  <Button
+                    title="Remover"
+                    onPress={() => removerServico(srv)}
+                    disabled={loadingAction !== null}
+                  />
                 </View>
               ))}
+              <Button
+                title={loadingAction === "save" ? "Salvando..." : "Salvar alterações"}
+                onPress={salvarAlteracoesServicos}
+                disabled={loadingAction !== null}
+              />
             </Card>
 
             <Card>
