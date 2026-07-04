@@ -159,7 +159,7 @@ import { listOrcamentoVersoes } from './repositories/orcamentosRepository'
 import { reviseOrcamento } from './repositories/orcamentosRepository'
 import { updateOrcamentoFollowup } from './repositories/orcamentosRepository'
 import { updateOrcamentoStatus, type PedidoConfirmadoInput } from './repositories/orcamentosRepository'
-import { listOportunidadesPage, listOportunidadesResumo, markOportunidadeComTarefa, refreshOportunidadesCache, type OportunidadeFilter, type OportunidadeResumo } from './repositories/oportunidadesRepository'
+import { listClienteOportunidades, listOportunidadesPage, listOportunidadesResumo, markOportunidadeComTarefa, refreshOportunidadesCache, type OportunidadeFilter, type OportunidadeResumo } from './repositories/oportunidadesRepository'
 import {
   allocatePatioServices,
   addPatioBoxServico,
@@ -293,21 +293,13 @@ const navSectionsByMode: Record<AppMode, Array<{ title: string; items: Array<{ i
   ],
   crm: [
     {
-      title: 'Rotina',
+      title: 'CRM',
       items: [
-        { id: 'cockpit', label: 'Minha rotina', icon: Gauge },
+        { id: 'cockpit', label: 'Hoje', icon: Gauge },
+        { id: 'tarefas', label: 'Tarefas', icon: CalendarClock },
         { id: 'clientes', label: 'Clientes', icon: UsersRound },
-        { id: 'oportunidades', label: 'Oportunidades', icon: AlertTriangle },
-        { id: 'patio-feedback', label: 'Feedback patio', icon: MessageCircle },
-        { id: 'patio-revisao', label: 'Revisao proativa', icon: RefreshCw },
-      ],
-    },
-    {
-      title: 'Comercial',
-      items: [
-        { id: 'campanhas', label: 'Campanhas', icon: Send },
         { id: 'orcamentos', label: 'Propostas', icon: WalletCards },
-        { id: 'catalogo', label: 'Catalogo', icon: ClipboardList },
+        { id: 'campanhas', label: 'Campanhas', icon: Send },
       ],
     },
   ],
@@ -342,9 +334,9 @@ const hiddenViewRedirects: Record<string, string> = {
 }
 
 const adminOnlyViews = new Set(['importacoes', 'conflitos', 'mesclagem', 'relatorios', 'relatorio-patio', 'patio-km-medio', 'patio-resultados', 'vendedores', 'usuarios', 'auditoria'])
-const sellerPrimaryViews = new Set(['cockpit', 'clientes', 'campanhas', 'orcamentos', 'catalogo'])
-const mobilePrimaryViews = new Set(['cockpit', 'clientes', 'campanhas', 'orcamentos'])
-const mobileAllowedViews = new Set(['cockpit', 'clientes', 'campanhas', 'orcamentos', 'cliente360', 'orcamento-editor', 'orcamento-detalhe'])
+const sellerPrimaryViews = new Set(['cockpit', 'tarefas', 'clientes', 'campanhas', 'orcamentos'])
+const mobilePrimaryViews = new Set(['cockpit', 'tarefas', 'clientes', 'campanhas', 'orcamentos'])
+const mobileAllowedViews = new Set(['cockpit', 'tarefas', 'clientes', 'campanhas', 'orcamentos', 'cliente360', 'orcamento-editor', 'orcamento-detalhe'])
 
 function normalizeView(view: string) {
   return hiddenViewRedirects[view] ?? view
@@ -419,6 +411,175 @@ function uniqueBy<T>(items: T[], getKey: (item: T) => string) {
   })
 }
 
+type CommercialLane = 'todos' | 'pneus' | 'service'
+
+const commercialLaneOptions: Array<{ id: CommercialLane; label: string; title: string; description: string }> = [
+  {
+    id: 'todos',
+    label: 'Geral',
+    title: 'Carteira geral',
+    description: 'Mostra toda a base, para distribuicao e visao ampla.',
+  },
+  {
+    id: 'pneus',
+    label: 'Pneu',
+    title: 'Contatos de pneu',
+    description: 'Foco em recompra, medida, marca e cotacao de pneus.',
+  },
+  {
+    id: 'service',
+    label: 'Service',
+    title: 'Contatos de service',
+    description: 'Foco em alinhamento, balanceamento, geometria e manutencao.',
+  },
+]
+
+function commercialLaneLabel(lane: CommercialLane) {
+  return commercialLaneOptions.find((option) => option.id === lane)?.label ?? 'Geral'
+}
+
+function clienteMatchesCommercialLane(cliente: Cliente, lane: CommercialLane) {
+  if (lane === 'todos') return true
+  const tags = cliente.tags.join(' ')
+  const text = `${cliente.produtoPrincipal ?? ''} ${tags} ${cliente.tipoCliente} ${cliente.observacoes ?? ''}`.toLowerCase()
+  const hasPneuSignal =
+    cliente.totalComprado > 0
+    || /pneu|michelin|goodrich|bfg|bf goodrich|r22|r17|r16|295\/|275\/|315\/|18\.4/.test(text)
+  const hasServiceSignal =
+    cliente.totalServicos > 0
+    || /service|servico|alinh|balanc|geometr|cambag|caster|rodizio|montag|bucha|terminal|manutencao/.test(text)
+
+  return lane === 'pneus' ? hasPneuSignal : hasServiceSignal
+}
+
+function commercialLaneAction(cliente: Cliente, lane: CommercialLane) {
+  if (lane === 'pneus') {
+    return cliente.produtoPrincipal
+      ? `Cotar reposicao: ${cliente.produtoPrincipal}`
+      : 'Cotar pneus para a frota'
+  }
+  if (lane === 'service') {
+    if (cliente.ultimoServicoEm) return 'Retomar rotina de service'
+    return 'Oferecer alinhamento/balanceamento'
+  }
+  return bestNextAction(cliente)
+}
+
+function commercialContactInsights(cliente?: Cliente) {
+  if (!cliente) return []
+  const insights: Array<{ lane: Exclude<CommercialLane, 'todos'>; label: string; detail: string }> = []
+  if (clienteMatchesCommercialLane(cliente, 'pneus')) {
+    insights.push({
+      lane: 'pneus',
+      label: 'Pneu',
+      detail: cliente.produtoPrincipal
+        ? `Falar de ${cliente.produtoPrincipal}`
+        : `Historico de pneus: ${money(cliente.totalComprado)}`,
+    })
+  }
+  if (clienteMatchesCommercialLane(cliente, 'service')) {
+    insights.push({
+      lane: 'service',
+      label: 'Service',
+      detail: cliente.ultimoServicoEm
+        ? `Ultimo service em ${dateLabel(cliente.ultimoServicoEm)}`
+        : `Historico de service: ${money(cliente.totalServicos)}`,
+    })
+  }
+  return insights
+}
+
+function CommercialContactHints({ cliente }: { cliente?: Cliente }) {
+  const insights = commercialContactInsights(cliente)
+  if (insights.length === 0) return null
+
+  return (
+    <div className="commercial-contact-hints">
+      {insights.map((insight) => (
+        <span className={`commercial-contact-chip ${insight.lane}`} key={insight.lane}>
+          <strong>{insight.label}</strong>
+          <small>{insight.detail}</small>
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function hasPneuServiceBundle(oportunidades: Oportunidade[]) {
+  return oportunidades.some((oportunidade) => oportunidade.tipo === 'contato_obrigatorio_pneu_service')
+    || (
+      oportunidades.some((oportunidade) => oportunidade.tipo === 'crm_pneu_sem_servico_patio') &&
+      oportunidades.some((oportunidade) => oportunidade.tipo === 'patio_servico_sem_venda_pneu')
+    )
+}
+
+function opportunitySignalLabel(oportunidade: Oportunidade) {
+  const labels: Record<string, { label: string; detail: string }> = {
+    contato_obrigatorio_pneu_service: {
+      label: 'Pneu + Service',
+      detail: 'Tratar as duas frentes no mesmo contato',
+    },
+    patio_servico_sem_venda_pneu: {
+      label: 'Service sem pneu',
+      detail: 'Fez servico de pneu sem venda vinculada',
+    },
+    crm_pneu_sem_servico_patio: {
+      label: 'Pneu sem service',
+      detail: 'Comprou pneu sem service vinculado',
+    },
+    service_risco_visitas: {
+      label: 'Risco service',
+      detail: 'Visitas abaixo do padrao',
+    },
+    service_mix_caiu: {
+      label: 'Mix service',
+      detail: 'Alinhamento/balanceamento caiu',
+    },
+    alto_valor_sem_contato: {
+      label: 'Alto valor',
+      detail: 'Relacionamento parado',
+    },
+    recompra_90: {
+      label: 'Recompra',
+      detail: 'Compra passou do ciclo',
+    },
+  }
+  return labels[oportunidade.tipo]
+}
+
+function OpportunityContactHints({ oportunidades }: { oportunidades: Oportunidade[] }) {
+  const signals = uniqueBy(
+    oportunidades
+      .map((oportunidade) => opportunitySignalLabel(oportunidade))
+      .filter((signal): signal is { label: string; detail: string } => Boolean(signal)),
+    (signal) => signal.label,
+  ).slice(0, 3)
+
+  if (signals.length === 0) return null
+
+  return (
+    <div className="commercial-contact-hints opportunity-signal-hints">
+      {signals.map((signal) => (
+        <span className="commercial-contact-chip opportunity" key={signal.label}>
+          <strong>{signal.label}</strong>
+          <small>{signal.detail}</small>
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function opportunityMatchesCommercialLane(oportunidade: Oportunidade, lane: CommercialLane) {
+  if (lane === 'todos') return true
+  const text = `${oportunidade.tipo} ${oportunidade.motivo} ${oportunidade.proximaAcao}`.toLowerCase()
+  const isPneu =
+    /pneu|recompra|cotacao|cota|medida|295|275|315|r22|bf|goodrich|michelin|orcamento/.test(text)
+  const isService =
+    /service|servico|alinh|balanc|geometr|cambag|caster|montag|rodizio|bucha|terminal|preventiva/.test(text)
+
+  return lane === 'pneus' ? isPneu : isService
+}
+
 type QuoteOriginContext =
   | { kind: 'campanha'; sourceId?: string; label: string; initialItems?: OrcamentoItemInput[] }
   | { kind: 'tarefa'; sourceId?: string; label: string; initialItems?: OrcamentoItemInput[] }
@@ -474,6 +635,7 @@ function App() {
   const [clienteVeiculos, setClienteVeiculos] = useState<ClienteVeiculoResumo[]>([])
   const [clienteTarefas, setClienteTarefas] = useState<Tarefa[]>([])
   const [clienteCampanhas, setClienteCampanhas] = useState<CampanhaEnvio[]>([])
+  const [clienteOportunidades, setClienteOportunidades] = useState<Oportunidade[]>([])
   const [clienteContatoRecomendado, setClienteContatoRecomendado] = useState<ClienteContatoRecomendado | undefined>()
   const [clientePatioAtendimentos, setClientePatioAtendimentos] = useState<PatioAtendimentoResumo[]>([])
   const [clientePatioItens, setClientePatioItens] = useState<PatioAtendimentoItemResumo[]>([])
@@ -853,7 +1015,7 @@ function App() {
           listOrcamentosPage({ page: 1, pageSize: 5, status: 'vencidos', vendedorId }),
           listRodobensLeads({ page: 1, pageSize: 5, status: 'novo' }),
           isSupabaseConfigured
-            ? listOportunidadesPage({ page: 1, pageSize: 6, filter: 'ativas', tipo: 'todos' })
+            ? listOportunidadesPage({ page: 1, pageSize: 120, filter: 'ativas', tipo: 'todos', vendedorId })
             : Promise.resolve({ oportunidades: [], total: 0 }),
           listCampanhaInbox({ statuses: ['respondeu', 'virou_orcamento', 'enviado'], vendedorId, limit: 12 }),
           listTarefasSlaVendedor(),
@@ -1435,6 +1597,7 @@ function App() {
           loadedVeiculos,
           loadedTarefas,
           loadedCampanhas,
+          loadedOportunidades,
           loadedContatoRecomendado,
           loadedPatioAtendimentos,
           loadedPatioItens,
@@ -1444,6 +1607,7 @@ function App() {
           listClienteVeiculos(selectedClientId),
           listClienteTarefas(selectedClientId),
           listClienteCampanhaEnvios(selectedClientId),
+          listClienteOportunidades(selectedClientId),
           getClienteContatoRecomendado(selectedClientId),
           listClientePatioAtendimentos(selectedClientId),
           listClientePatioAtendimentoItens(selectedClientId),
@@ -1454,6 +1618,7 @@ function App() {
         setClienteVeiculos(loadedVeiculos)
         setClienteTarefas(loadedTarefas)
         setClienteCampanhas(loadedCampanhas)
+        setClienteOportunidades(loadedOportunidades)
         setClienteContatoRecomendado(loadedContatoRecomendado)
         setClientePatioAtendimentos(loadedPatioAtendimentos)
         setClientePatioItens(loadedPatioItens)
@@ -1730,7 +1895,7 @@ function App() {
         .filter((item) => !isMobileShell || appMode === 'patio' || mobileAllowedViews.has(item.id))
         .filter((item) => session.role === 'admin' || !adminOnlyViews.has(item.id))
         .filter(() => appMode !== 'gestao' || session.role === 'admin')
-        .filter((item) => appMode !== 'crm' || session.role === 'admin' || sellerPrimaryViews.has(item.id) || item.id === 'oportunidades')
+        .filter((item) => appMode !== 'crm' || session.role === 'admin' || sellerPrimaryViews.has(item.id))
         .map((item) => item.id === 'orcamentos' ? { ...item, label: 'Propostas' } : item),
     }))
     .filter((section) => section.items.length > 0)
@@ -1888,29 +2053,11 @@ function App() {
             </div>
             <div className="quick-jump-bar" aria-label="Atalhos operacionais">
               <button className="primary quick-orcar" type="button" onClick={() => openQuickAction('orcamentos')}>
-                Orcar
-              </button>
-              <button className="mobile-only" type="button" onClick={() => setView('clientes')}>
-                Historico
-              </button>
-              <button className="mobile-only" type="button" onClick={() => setView('cockpit')}>
-                Inicio
+                Nova proposta
               </button>
               <button className="quick-tarefas" type="button" onClick={() => openQuickAction('tarefas-vencidas')}>
                 <span>{cockpitTarefasVencidas.length}</span>
                 Tarefas
-              </button>
-              <button className="quick-propostas" type="button" onClick={() => openQuickAction('orcamentos-vencidos')}>
-                <span>{cockpitOrcamentos.length}</span>
-                Propostas
-              </button>
-              <button className="quick-sem-cadastro" type="button" onClick={() => openQuickAction('clientes-sem-cadastro')}>
-                <span>{cockpitRodobens.length}</span>
-                Sem cadastro
-              </button>
-              <button className="quick-campanhas" type="button" onClick={() => openQuickAction('campanhas')}>
-                <span>{cockpitCampanhas.length}</span>
-                Campanhas
               </button>
             </div>
           </div>
@@ -2349,30 +2496,21 @@ function App() {
             onOpenClient={openClientFromCockpit}
             onOpenBudget={openBudgetFromCockpit}
             onOpenModule={(target) => {
-              if (target === 'tarefas') {
+              const nextTarget = target === 'oportunidades' ? 'tarefas' : target
+              if (nextTarget === 'tarefas') {
                 setTarefasStatusFilter('abertas')
                 setTarefasOriginFilter('todas')
                 setTarefasPage(1)
               }
-              if (target === 'orcamentos') {
+              if (nextTarget === 'orcamentos') {
                 setOrcamentosFilter('vencidos')
                 setOrcamentosPage(1)
               }
-              if (target === 'rodobens') {
+              if (nextTarget === 'rodobens') {
                 setRodobensStatusFilter('novo')
                 setRodobensPage(1)
               }
-              if (target === 'oportunidades') {
-                setOportunidadesFilter('ativas')
-                setOportunidadesPage(1)
-              }
-              setView(target)
-            }}
-            onOpenTasksOrigin={(filter) => {
-              setTarefasStatusFilter('abertas')
-              setTarefasOriginFilter(filter)
-              setTarefasPage(1)
-              setView('tarefas')
+              setView(nextTarget)
             }}
             onCompleteTask={async (id) => {
               await completeTarefa(id)
@@ -2385,12 +2523,6 @@ function App() {
               setCockpitTarefas((current) => current.map((tarefa) => tarefa.id === id ? updated : tarefa).filter((tarefa) => tarefa.status === 'aberta'))
               setCockpitTarefasVencidas((current) => current.filter((tarefa) => tarefa.id !== id))
               setTarefas((current) => current.map((tarefa) => tarefa.id === id ? updated : tarefa))
-            }}
-            onCreateTask={async (task) => {
-              const created = await createTarefa(task)
-              setCockpitTarefas((current) => [created, ...current])
-              setTarefas((current) => [created, ...current])
-              return created
             }}
             onUpdateCampaignResult={async (item, status, result) => {
               const updated = await upsertCampanhaEnvio({
@@ -2585,6 +2717,7 @@ function App() {
             veiculos={clienteVeiculos}
             tarefas={clienteTarefas}
             campanhaEnvios={clienteCampanhas}
+            oportunidades={clienteOportunidades}
             contatoRecomendado={clienteContatoRecomendado}
             patioAtendimentos={clientePatioAtendimentos}
             patioItens={clientePatioItens}
@@ -2856,7 +2989,7 @@ function App() {
               ])
               setOportunidades((current) =>
                 current.map((item) =>
-                  item.id === oportunidade.id ? { ...item, bloqueada: true, tarefaExistente: true } : item,
+                  item.id === oportunidade.id ? { ...item, tarefaExistente: true } : item,
                 ),
               )
               return created
@@ -3577,21 +3710,21 @@ function App() {
 
 function titleFor(view: string) {
   const titles: Record<string, string> = {
-    cockpit: 'Minha rotina',
-    dashboard: 'Minha rotina',
-    clientes: 'Base unica de clientes',
+    cockpit: 'Hoje',
+    dashboard: 'Hoje',
+    clientes: 'Clientes',
     rodobens: 'Clientes sem cadastro',
     'orcamento-editor': 'Editor de proposta',
     'orcamento-detalhe': 'Proposta comercial',
     carteira: 'Base unica de clientes',
-    oportunidades: 'Oportunidades automaticas',
-    tarefas: 'Tarefas e proximas acoes',
+    oportunidades: 'Oportunidades',
+    tarefas: 'Tarefas',
     importacoes: 'Controle de importacoes',
     conflitos: 'Controle de importacoes',
     mesclagem: 'Controle de importacoes',
-    campanhas: 'Campanhas e respostas',
-    'campanhas-inbox': 'Campanhas e respostas',
-    orcamentos: 'Propostas e conversao',
+    campanhas: 'Campanhas',
+    'campanhas-inbox': 'Campanhas',
+    orcamentos: 'Propostas',
     catalogo: 'Catalogo e precos',
     relatorios: 'Relatorios gerenciais',
     'relatorio-patio': 'Relatorio Patio',
@@ -3828,10 +3961,8 @@ function Cockpit({
   onOpenClient,
   onOpenBudget,
   onOpenModule,
-  onOpenTasksOrigin,
   onCompleteTask,
   onRescheduleTask,
-  onCreateTask,
   onUpdateCampaignResult,
   onRunFollowupAutomations,
 }: {
@@ -3849,15 +3980,12 @@ function Cockpit({
   onOpenClient: (clienteId: string) => Promise<void>
   onOpenBudget: (clienteId: string, originContext: QuoteOriginContext) => Promise<void>
   onOpenModule: (target: 'tarefas' | 'orcamentos' | 'rodobens' | 'oportunidades' | 'campanhas') => void
-  onOpenTasksOrigin: (filter: TarefaOriginFilter) => void
   onCompleteTask: (id: string) => Promise<void>
   onRescheduleTask: (id: string, dataVencimento: string, motivo: string) => Promise<void>
-  onCreateTask: (task: TarefaInput) => Promise<Tarefa>
   onUpdateCampaignResult: (item: CampanhaInboxItem, status: CampanhaEnvioStatus, result: CampaignInboxResultForm) => Promise<void>
   onRunFollowupAutomations: () => Promise<{ total: number; orcamentos: number; campanhas: number }>
 }) {
   const [busyTaskId, setBusyTaskId] = useState('')
-  const [creatingTaskClientId, setCreatingTaskClientId] = useState('')
   const [rescheduleTarget, setRescheduleTarget] = useState<Tarefa | null>(null)
   const [rescheduleDate, setRescheduleDate] = useState(tomorrowDate())
   const [rescheduleReason, setRescheduleReason] = useState('')
@@ -3869,13 +3997,9 @@ function Cockpit({
   const [campaignResultStatus, setCampaignResultStatus] = useState<CampanhaEnvioStatus>('respondeu')
   const [campaignResultForm, setCampaignResultForm] = useState<CampaignInboxResultForm>({ resumo: '', proximaAcao: '', dataProximaAcao: '' })
   const [busyCampaignId, setBusyCampaignId] = useState('')
+  const [activeCommercialLane, setActiveCommercialLane] = useState<CommercialLane>('todos')
+  const [showAllNextActions, setShowAllNextActions] = useState(false)
   const todayTasks = uniqueBy(tarefas.filter((tarefa) => daysSince(tarefa.dataVencimento) >= 0), (tarefa) => tarefa.id)
-  const contactFollowups = uniqueBy(
-    tarefas.filter((tarefa) => isCommercialFollowupTask(tarefa)),
-    (tarefa) => tarefa.id,
-  )
-    .sort((a, b) => taskCommercialPriority(b) - taskCommercialPriority(a) || a.dataVencimento.localeCompare(b.dataVencimento))
-    .slice(0, 12)
   const openTaskClientIds = new Set([...tarefas, ...tarefasVencidas].filter((tarefa) => tarefa.status === 'aberta').map((tarefa) => tarefa.clienteId))
   const openBudgetClientIds = new Set(orcamentos.map((orcamento) => orcamento.clienteId))
   const clientesSemProximaAcao = clientes
@@ -3914,6 +4038,13 @@ function Cockpit({
     .sort((a, b) => b.atrasadas - a.atrasadas || b.tarefas - a.tarefas)
   const slaAlerts = workload.filter((item) => item.atrasadas >= slaAlertLimit || item.criticas >= slaAlertLimit)
   const clienteContactById = new Map(clientes.map((cliente) => [cliente.id, cliente.whatsapp || cliente.telefone || '']))
+  const clienteById = new Map<string, Cliente>([...clientes, ...rodobens].map((cliente) => [cliente.id, cliente]))
+  const oportunidadesByCliente = oportunidades.reduce((acc, oportunidade) => {
+    const current = acc.get(oportunidade.clienteId) ?? []
+    current.push(oportunidade)
+    acc.set(oportunidade.clienteId, current)
+    return acc
+  }, new Map<string, Oportunidade[]>())
   const campaignWhatsappUrl = (envio: CampanhaInboxItem) => waMeUrl(envio.telefone, envio.mensagemFinal)
   const taskWhatsappUrl = (tarefa: Tarefa) => {
     const phone = clienteContactById.get(tarefa.clienteId)
@@ -3972,7 +4103,7 @@ function Cockpit({
       clienteId: cliente.id,
       cliente,
     })),
-    ...oportunidades.slice(0, 10).map((oportunidade) => ({
+    ...oportunidades.map((oportunidade) => ({
       id: `oportunidade-${oportunidade.id}`,
       kind: 'oportunidade' as const,
       priority: opportunityRoutinePriority(oportunidade),
@@ -3982,16 +4113,41 @@ function Cockpit({
       detail: opportunityRoutineDetail(oportunidade),
       clienteId: oportunidade.clienteId,
       oportunidade,
+      relatedOportunidades: oportunidadesByCliente.get(oportunidade.clienteId) ?? [oportunidade],
     })),
   ].sort((a, b) => b.priority - a.priority)
-  const nextActions = uniqueBy(nextActionCandidates, (item) => item.clienteId).slice(0, 14)
+  const allNextActions = uniqueBy(nextActionCandidates, (item) => item.clienteId)
+  type CockpitAction = typeof allNextActions[number]
+  const actionCliente = (item: CockpitAction) => {
+    if (item.kind === 'lead') return item.cliente
+    return clienteById.get(item.clienteId)
+  }
+  const actionOportunidades = (item: CockpitAction) => {
+    if (item.kind !== 'oportunidade') return []
+    return item.relatedOportunidades
+  }
+  const actionMatchesCommercialLane = (item: CockpitAction, lane: CommercialLane) => {
+    if (lane === 'todos') return true
+    if (item.kind === 'oportunidade' && opportunityMatchesCommercialLane(item.oportunidade, lane)) return true
+    const cliente = actionCliente(item)
+    return cliente ? clienteMatchesCommercialLane(cliente, lane) : false
+  }
+  const commercialLaneActionCounts = commercialLaneOptions.reduce<Record<CommercialLane, number>>((acc, lane) => {
+    acc[lane.id] = allNextActions.filter((item) => actionMatchesCommercialLane(item, lane.id)).length
+    return acc
+  }, { todos: 0, pneus: 0, service: 0 })
+  const nextActions = allNextActions.filter((item) => actionMatchesCommercialLane(item, activeCommercialLane)).slice(0, 40)
+  const visibleQueueActions = nextActions.slice(1, showAllNextActions ? 31 : 7)
+  const canExpandNextActions = nextActions.length > 7
+  const laneActions = {
+    pneus: allNextActions.filter((item) => actionMatchesCommercialLane(item, 'pneus')).slice(0, 5),
+    service: allNextActions.filter((item) => actionMatchesCommercialLane(item, 'service')).slice(0, 5),
+  }
   const responderAgoraActions = nextActions.filter((item) => item.kind === 'campanha' && ['respondeu', 'virou_orcamento'].includes(item.envio.status)).slice(0, 4)
   const checarEnviadosActions = nextActions.filter((item) => item.kind === 'campanha' && item.envio.status === 'enviado').slice(0, 4)
   const propostaActions = nextActions.filter((item) => item.kind === 'orcamento').slice(0, 4)
   const tarefaActions = nextActions.filter((item) => item.kind === 'tarefa').slice(0, 4)
   const oportunidadeActions = nextActions.filter((item) => ['lead', 'oportunidade'].includes(item.kind)).slice(0, 4)
-  const campanhasComResposta = campanhas.filter((envio) => ['respondeu', 'virou_orcamento'].includes(envio.status))
-  const campanhasParaChecar = campanhas.filter((envio) => envio.status === 'enviado')
   const routineGroups = [
     {
       id: 'responder',
@@ -4030,20 +4186,14 @@ function Cockpit({
     },
   ]
   const primaryAction = nextActions[0]
-  const actionReason = (item: typeof nextActions[number]) => {
+  const actionReason = (item: CockpitAction) => {
     if (item.kind === 'campanha') return campaignRoutineReason(item.envio.status)
     if (item.kind === 'tarefa') return item.sla.tone === 'danger' ? 'Tarefa atrasada ou de alta prioridade.' : 'Follow-up planejado para agora.'
     if (item.kind === 'orcamento') return 'Proposta aberta passou da validade e precisa de retomada.'
     if (item.kind === 'lead') return 'Lista externa ainda nao qualificada para virar cliente ativo.'
+    if (hasPneuServiceBundle(actionOportunidades(item))) return 'Contato obrigatorio: aproveitar a mesma ligacao para Pneu e Service.'
     return opportunityRoutineReason(item.oportunidade)
   }
-  const actionDetail = (item: typeof nextActions[number]) => {
-    if (item.kind === 'campanha') return item.envio.status === 'enviado'
-      ? `Aguardando resposta. Abra a conversa e registre o resultado quando o cliente retornar.`
-      : item.detail
-    return item.detail
-  }
-
   function openCampaignResult(item: CampanhaInboxItem, status?: CampanhaEnvioStatus) {
     const nextStatus = status ?? (item.status === 'virou_orcamento' ? 'virou_orcamento' : item.status === 'comprar_depois' ? 'comprar_depois' : 'respondeu')
     setCampaignResultTarget(item)
@@ -4062,17 +4212,11 @@ function Cockpit({
     }
   }
 
-  const actionButtons = (item: typeof nextActions[number], compact = false) => (
+  const actionButtons = (item: CockpitAction, compact = false) => (
     <>
-      <button className="button" type="button" onClick={() => onOpenClient(item.clienteId)}>{compact ? 'Ficha' : 'Abrir ficha'}</button>
       {item.kind === 'campanha' && (
         <>
-          {campaignWhatsappUrl(item.envio) && (
-            <a className="button" href={campaignWhatsappUrl(item.envio)} target="_blank" rel="noreferrer">
-              Abrir conversa
-            </a>
-          )}
-          {['respondeu', 'virou_orcamento'].includes(item.envio.status) && (
+          {['respondeu', 'virou_orcamento'].includes(item.envio.status) ? (
             <button
               className="button primary"
               type="button"
@@ -4080,7 +4224,11 @@ function Cockpit({
             >
               {item.envio.status === 'virou_orcamento' ? 'Criar proposta' : 'Nova proposta'}
             </button>
-          )}
+          ) : campaignWhatsappUrl(item.envio) ? (
+            <a className="button" href={campaignWhatsappUrl(item.envio)} target="_blank" rel="noreferrer">
+              Abrir conversa
+            </a>
+          ) : null}
           <button
             className={item.envio.status === 'enviado' ? 'button primary' : 'button'}
             type="button"
@@ -4088,6 +4236,7 @@ function Cockpit({
           >
             Registrar resultado
           </button>
+          <button className="button" type="button" onClick={() => onOpenClient(item.clienteId)}>{compact ? 'Ficha' : 'Abrir ficha'}</button>
         </>
       )}
       {item.kind === 'tarefa' && (
@@ -4097,32 +4246,39 @@ function Cockpit({
               Abrir conversa
             </a>
           )}
-          <button className="button" type="button" onClick={() => openReschedule(item.tarefa)}>Reagendar</button>
           <button className="button primary" type="button" disabled={busyTaskId === item.tarefa.id} onClick={() => complete(item.tarefa.id)}>
             {busyTaskId === item.tarefa.id ? 'Concluindo...' : 'Concluir'}
           </button>
+          <button className="button" type="button" onClick={() => openReschedule(item.tarefa)}>Reagendar</button>
+          {!taskWhatsappUrl(item.tarefa) && <button className="button" type="button" onClick={() => onOpenClient(item.clienteId)}>{compact ? 'Ficha' : 'Abrir ficha'}</button>}
         </>
       )}
       {item.kind === 'orcamento' && (
-        <button
-          className="button primary"
-          type="button"
-          onClick={() => onOpenBudget(item.clienteId, { kind: 'cliente', sourceId: item.orcamento.id, label: 'Retomada de proposta vencida' })}
-        >
-          Revisar proposta
-        </button>
+        <>
+          <button
+            className="button primary"
+            type="button"
+            onClick={() => onOpenBudget(item.clienteId, { kind: 'cliente', sourceId: item.orcamento.id, label: 'Retomada de proposta vencida' })}
+          >
+            Revisar proposta
+          </button>
+          <button className="button" type="button" onClick={() => onOpenClient(item.clienteId)}>{compact ? 'Ficha' : 'Abrir ficha'}</button>
+        </>
       )}
       {item.kind === 'lead' && (
         <button className="button primary" type="button" onClick={() => onOpenClient(item.clienteId)}>Qualificar</button>
       )}
       {item.kind === 'oportunidade' && (
-        <button
-          className="button primary"
-          type="button"
-          onClick={() => onOpenBudget(item.clienteId, { kind: 'cliente', sourceId: item.oportunidade.id, label: item.oportunidade.proximaAcao || 'Oportunidade' })}
-        >
-          Nova proposta
-        </button>
+        <>
+          <button
+            className="button primary"
+            type="button"
+            onClick={() => onOpenBudget(item.clienteId, { kind: 'cliente', sourceId: item.oportunidade.id, label: item.oportunidade.proximaAcao || 'Oportunidade' })}
+          >
+            Nova proposta
+          </button>
+          <button className="button" type="button" onClick={() => onOpenClient(item.clienteId)}>{compact ? 'Ficha' : 'Abrir ficha'}</button>
+        </>
       )}
     </>
   )
@@ -4177,56 +4333,43 @@ function Cockpit({
     }
   }
 
-  async function createNoNextActionTask(cliente: Cliente & { score?: number; motivo?: string; proximaMelhorAcao?: string }) {
-    setCreatingTaskClientId(cliente.id)
-    try {
-      const score = Number(cliente.score ?? opportunityScore(cliente, []))
-      await onCreateTask({
-        clienteId: cliente.id,
-        vendedorId: cliente.vendedorId || currentUser.id,
-        titulo: 'Definir proxima acao comercial',
-        descricao: [
-          cliente.proximaMelhorAcao ?? bestNextAction(cliente),
-          cliente.motivo ? `Motivo: ${cliente.motivo}` : '',
-          cliente.whatsapp ? `WhatsApp: ${cliente.whatsapp}` : '',
-        ].filter(Boolean).join('\n'),
-        dataVencimento: tomorrowDate(),
-        prioridade: Math.min(95, Math.max(65, score)),
-        origem: 'cockpit:sem_proxima_acao',
-      })
-    } finally {
-      setCreatingTaskClientId('')
-    }
-  }
-
   return (
     <section className="cockpit-layout">
       <section className="panel wide cockpit-hero">
         <div>
-          <p className="eyebrow">Minha rotina</p>
+          <p className="eyebrow">Fila de trabalho</p>
           <h2>{ownerLabel}</h2>
-          <p>Priorize respostas, propostas vencidas, tarefas e leads sem precisar procurar modulo por modulo.</p>
+          <p>Um cliente por vez. Faça o contato, registre o resultado e avance para o proximo.</p>
         </div>
-        <div className="cockpit-kpis">
-          <Info label="Atrasadas" value={tarefasVencidas.length.toString()} />
-          <Info label="Follow-ups" value={contactFollowups.length.toString()} />
-          <Info label="Respostas campanha" value={campanhasComResposta.length.toString()} />
-          <Info label="Aguardando resposta" value={campanhasParaChecar.length.toString()} />
-          <Info label="Prop. vencidas" value={orcamentos.length.toString()} />
-          <Info label="Sem cadastro" value={rodobens.length.toString()} />
+        <div className="today-focus-switcher">
+          {commercialLaneOptions.map((lane) => (
+            <button
+              className={activeCommercialLane === lane.id ? 'active' : ''}
+              type="button"
+              key={lane.id}
+              onClick={() => {
+                setActiveCommercialLane(lane.id)
+                setShowAllNextActions(false)
+              }}
+            >
+              <span>{lane.label}</span>
+              <strong>{commercialLaneActionCounts[lane.id]}</strong>
+            </button>
+          ))}
         </div>
       </section>
 
       {isLoading && <div className="empty-state compact">Carregando rotina comercial...</div>}
 
       {primaryAction && (
-        <section className={`panel wide cockpit-focus-card ${primaryAction.kind}`}>
+        <section className={`panel wide cockpit-focus-card today-primary-action ${primaryAction.kind}`}>
           <div>
-            <span className="next-action-label">Comece por aqui</span>
+            <span className="next-action-label">1. Fazer agora</span>
             <h2>{primaryAction.title}</h2>
-            <p>{primaryAction.label} - {primaryAction.subtitle}</p>
-            <small className="next-action-why">{actionReason(primaryAction)}</small>
-            <small>{primaryAction.detail}</small>
+            <p>{actionReason(primaryAction)}</p>
+            <small>{primaryAction.label} - {primaryAction.subtitle}</small>
+            <CommercialContactHints cliente={actionCliente(primaryAction)} />
+            <OpportunityContactHints oportunidades={actionOportunidades(primaryAction)} />
           </div>
           <div className="toolbar-actions">
             {actionButtons(primaryAction)}
@@ -4234,63 +4377,22 @@ function Cockpit({
         </section>
       )}
 
-      <section className="panel wide cockpit-workflow">
+      <section className="panel wide today-queue-panel">
         <div className="panel-header">
           <div>
-            <h2>Fluxo de trabalho</h2>
-            <p>Trabalhe por tipo de acao. Respostas e checagens ficam antes de oportunidades frias.</p>
+            <h2>Proximos contatos</h2>
+            <p>Quando terminar o primeiro, siga a ordem da lista.</p>
           </div>
-          <button className="button" type="button" onClick={runFollowups} disabled={isRunningFollowups}>
-            {isRunningFollowups ? 'Sincronizando...' : 'Sincronizar follow-ups'}
-          </button>
-        </div>
-        {followupAutomationMessage && <div className="success-banner compact">{followupAutomationMessage}</div>}
-        <div className="cockpit-workflow-grid">
-          {routineGroups.map((group) => (
-            <article className={`cockpit-workflow-card ${group.id}`} key={group.id}>
-              <div className="cockpit-workflow-heading">
-                <span>
-                  <strong>{group.title}</strong>
-                  <small>{group.description}</small>
-                </span>
-                <b>{group.actions.length}</b>
-              </div>
-              <div className="cockpit-workflow-list">
-                {group.actions.map((item) => (
-                  <div className={`cockpit-workflow-item ${item.kind}`} key={item.id}>
-                    <span>
-                      <strong>{item.title}</strong>
-                      <small>{item.subtitle}</small>
-                    </span>
-                    <p>{actionReason(item)}</p>
-                    <div className="row-actions">
-                      {actionButtons(item, true)}
-                    </div>
-                  </div>
-                ))}
-                {group.actions.length === 0 && <div className="empty-state compact">{group.empty}</div>}
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel wide cockpit-next-actions">
-        <div className="panel-header">
-          <div>
-            <h2>Fila completa priorizada</h2>
-            <p>Lista unica deduplicada quando o mesmo cliente aparece em mais de uma frente.</p>
-          </div>
-          <div className="toolbar-actions">
-            <button className="button" type="button" onClick={() => onOpenModule('tarefas')}>Tarefas</button>
-            <button className="button" type="button" onClick={() => onOpenModule('orcamentos')}>Propostas</button>
-            <button className="button" type="button" onClick={() => onOpenModule('campanhas')}>Campanhas</button>
-          </div>
+          {canExpandNextActions && (
+            <button className="button ghost" type="button" onClick={() => setShowAllNextActions((current) => !current)}>
+              {showAllNextActions ? 'Mostrar menos' : `Ver mais ${nextActions.length - 7}`}
+            </button>
+          )}
         </div>
         <div className="next-action-list">
-          {nextActions.map((item, index) => (
-            <article className={`next-action-card ${item.kind}`} key={item.id}>
-              <div className="next-action-rank">{index + 1}</div>
+          {visibleQueueActions.map((item, index) => (
+            <article className={`next-action-card today-action-card ${item.kind}`} key={item.id}>
+              <div className="next-action-rank">{index + 2}</div>
               <div className="next-action-content">
                 <div>
                   <span className="next-action-label">{item.label}</span>
@@ -4299,7 +4401,8 @@ function Cockpit({
                 </div>
                 <div>
                   <small className="next-action-why">{actionReason(item)}</small>
-                  <p>{actionDetail(item)}</p>
+                  <CommercialContactHints cliente={actionCliente(item)} />
+                  <OpportunityContactHints oportunidades={actionOportunidades(item)} />
                 </div>
               </div>
               <div className="next-action-actions">
@@ -4311,115 +4414,58 @@ function Cockpit({
         </div>
       </section>
 
-      <section className="panel wide cockpit-followups">
-        <div className="panel-header">
+      <details className="panel wide today-diagnostics">
+        <summary>Apoio e diagnostico</summary>
+        <div className="today-diagnostics-grid">
           <div>
-            <h2>Clientes sem proxima acao</h2>
-            <p>Clientes com potencial ou risco, mas sem tarefa aberta nem proposta vencida na fila.</p>
+            <h3>Tipos de pendencia</h3>
+            <div className="status-list">
+              {routineGroups.map((group) => (
+                <div className="status-row" key={group.id}>
+                  <span>{group.title}</span>
+                  <strong>{group.actions.length}</strong>
+                </div>
+              ))}
+            </div>
           </div>
-          <button className="button" type="button" onClick={() => onOpenTasksOrigin('cockpit')}>Abrir tarefas</button>
-        </div>
-        <div className="cockpit-list two-col">
-          {clientesSemProximaAcao.map((cliente) => (
-            <article className="cockpit-card" key={cliente.id}>
-              <div>
-                <strong>{cliente.nome}</strong>
-                <small>{cliente.proximaMelhorAcao ?? bestNextAction(cliente)}</small>
-                <small>
-                  {cliente.cidade}/{cliente.uf} - {cliente.status} - score {Math.round(Number(cliente.score ?? opportunityScore(cliente, [])))}
-                </small>
-              </div>
-              <p>{cliente.proximaMelhorAcao ?? bestNextAction(cliente)}</p>
-              {cliente.motivo && <small className="muted">{cliente.motivo}</small>}
-              <div className="row-actions">
-                <button className="button" type="button" onClick={() => onOpenClient(cliente.id)}>Ficha</button>
-                <button
-                  className="button primary"
-                  type="button"
-                  disabled={creatingTaskClientId === cliente.id}
-                  onClick={() => createNoNextActionTask(cliente)}
-                >
-                  {creatingTaskClientId === cliente.id ? 'Criando...' : 'Criar follow-up'}
+          <div>
+            <h3>Clientes sem proxima acao</h3>
+            <div className="status-list">
+              {clientesSemProximaAcao.slice(0, 4).map((cliente) => (
+                <button className="status-row clickable" type="button" key={cliente.id} onClick={() => onOpenClient(cliente.id)}>
+                  <span>
+                    <strong>{cliente.nome}</strong>
+                    <small>{cliente.proximaMelhorAcao ?? bestNextAction(cliente)}</small>
+                  </span>
+                  <strong>{Math.round(Number(cliente.score ?? opportunityScore(cliente, [])))}</strong>
                 </button>
-              </div>
-            </article>
-          ))}
-          {clientesSemProximaAcao.length === 0 && <div className="empty-state compact">Todos os clientes prioritarios ja tem proxima acao.</div>}
-        </div>
-      </section>
-
-      <section className="panel wide cockpit-followups">
-        <div className="panel-header">
-          <div>
-            <h2>Fila de follow-up comercial</h2>
-            <p>Retornos criados por atendimento, propostas, campanhas e ficha completa.</p>
+              ))}
+              {clientesSemProximaAcao.length === 0 && <div className="empty-state compact">Todos os prioritarios ja tem acao.</div>}
+            </div>
           </div>
+          <div>
+            <h3>Pneu e Service</h3>
+            <div className="status-list">
+              <div className="status-row"><span>Pneu</span><strong>{laneActions.pneus.length}</strong></div>
+              <div className="status-row"><span>Service</span><strong>{laneActions.service.length}</strong></div>
+            </div>
+          </div>
+        </div>
+        <div className="inline-actions">
           <button className="button" type="button" onClick={() => onOpenModule('tarefas')}>Abrir tarefas</button>
+          <button className="button" type="button" onClick={() => onOpenModule('orcamentos')}>Abrir propostas</button>
+          <button className="button" type="button" onClick={() => onOpenModule('campanhas')}>Abrir campanhas</button>
+          <button className="button" type="button" onClick={runFollowups} disabled={isRunningFollowups}>
+            {isRunningFollowups ? 'Sincronizando...' : 'Sincronizar follow-ups'}
+          </button>
         </div>
-        <div className="followup-stage-grid">
-          {[
-            ['atendimento', 'Atendimento'],
-            ['orcamento', 'Propostas'],
-            ['campanha', 'Campanhas'],
-            ['cliente360', 'Ficha completa'],
-            ['cockpit', 'Sem prox. acao'],
-          ].map(([origin, label]) => {
-            const items = contactFollowups.filter((tarefa) => (tarefa.origem ?? '').startsWith(origin))
-            return (
-              <article className="followup-stage-card" key={origin}>
-                <div>
-                  <strong>{label}</strong>
-                  <span>{items.length}</span>
-                </div>
-                {items.slice(0, 3).map((tarefa) => {
-                  const sla = taskSla(tarefa)
-                  return (
-                    <button className="followup-mini-row" key={tarefa.id} type="button" onClick={() => onOpenClient(tarefa.clienteId)}>
-                      <span>
-                        <strong>{tarefa.clienteNome || tarefa.titulo}</strong>
-                        <small>{tarefa.titulo} - {dateLabel(tarefa.dataVencimento)}</small>
-                      </span>
-                      <b className={`sla-pill ${sla.tone}`}>{sla.label}</b>
-                    </button>
-                  )
-                })}
-                {items.length === 0 && <small className="muted">Sem pendencias nesta etapa.</small>}
-              </article>
-            )
-          })}
-        </div>
-        <div className="cockpit-list">
-          {contactFollowups.slice(0, 6).map((tarefa) => {
-            const sla = taskSla(tarefa)
-            return (
-              <article className={sla.tone === 'danger' ? 'cockpit-card danger' : 'cockpit-card'} key={tarefa.id}>
-                <div>
-                  <strong>{tarefa.clienteNome || tarefa.titulo}</strong>
-                  <small>{taskOriginLabel(tarefa.origem)} - {dateLabel(tarefa.dataVencimento)} - prioridade {tarefa.prioridade}</small>
-                </div>
-                <span className={`sla-pill ${sla.tone}`}>{sla.label}</span>
-                {tarefa.descricao && <p>{tarefa.descricao}</p>}
-                <div className="row-actions">
-                  <button className="button" type="button" onClick={() => onOpenClient(tarefa.clienteId)}>Ficha</button>
-                  {taskWhatsappUrl(tarefa) && (
-                    <a className="button" href={taskWhatsappUrl(tarefa)} target="_blank" rel="noreferrer">
-                      Abrir conversa
-                    </a>
-                  )}
-                  <button className="button" type="button" onClick={() => openReschedule(tarefa)}>Reagendar</button>
-                  <button className="button primary" type="button" disabled={busyTaskId === tarefa.id} onClick={() => complete(tarefa.id)}>
-                    {busyTaskId === tarefa.id ? 'Concluindo...' : 'Concluir'}
-                  </button>
-                </div>
-              </article>
-            )
-          })}
-          {contactFollowups.length === 0 && <div className="empty-state compact">Nenhum follow-up comercial aberto.</div>}
-        </div>
-      </section>
+        {followupAutomationMessage && <div className="success-banner compact">{followupAutomationMessage}</div>}
+      </details>
 
       {currentUser.role === 'admin' && (
-        <section className="panel wide cockpit-alerts">
+        <details className="panel wide today-diagnostics today-manager-details">
+          <summary>Gestao da equipe</summary>
+          <section className="cockpit-alerts">
           <div className="panel-header">
             <div>
               <h2>Alertas de SLA</h2>
@@ -4462,11 +4508,13 @@ function Cockpit({
             ))}
             {slaAlerts.length === 0 && <div className="empty-state compact">Nenhum vendedor acima do limite selecionado.</div>}
           </div>
-        </section>
+          </section>
+        </details>
       )}
 
       {currentUser.role === 'admin' && (
-        <section className="panel wide">
+        <details className="panel wide today-diagnostics today-manager-details">
+          <summary>Carga por vendedor</summary>
           <div className="panel-header">
             <div>
               <h2>Carga por vendedor</h2>
@@ -4498,7 +4546,7 @@ function Cockpit({
               </div>
             ))}
           </div>
-        </section>
+        </details>
       )}
       {campaignResultTarget && (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setCampaignResultTarget(null)}>
@@ -5078,7 +5126,12 @@ function Clientes({
 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const safePage = Math.min(page, totalPages)
-  const visibleClientes = clientes
+  const [commercialLane, setCommercialLane] = useState<CommercialLane>('todos')
+  const visibleClientes = clientes.filter((cliente) => clienteMatchesCommercialLane(cliente, commercialLane))
+  const laneCounts = commercialLaneOptions.reduce<Record<CommercialLane, number>>((acc, lane) => {
+    acc[lane.id] = clientes.filter((cliente) => clienteMatchesCommercialLane(cliente, lane.id)).length
+    return acc
+  }, { todos: 0, pneus: 0, service: 0 })
 
   return (
     <section className="client-layout">
@@ -5086,16 +5139,33 @@ function Clientes({
         <div className="panel-header">
           <div>
             <h2>Clientes</h2>
-            <p>{total} registros encontrados. Exibindo ate {pageSize} por pagina.</p>
+            <p>Use quando precisar procurar alguem fora da fila Hoje.</p>
           </div>
-          <FilterControl clientes={clientes} orcamentos={orcamentos} value={filtro} onChange={onFilterChange} />
+          <span className="status-pill">{total} encontrados</span>
         </div>
+        <details className="support-details client-filter-details">
+          <summary>Filtros de apoio</summary>
+          <FilterControl clientes={clientes} orcamentos={orcamentos} value={filtro} onChange={onFilterChange} />
+          <div className="commercial-lane-strip compact">
+            {commercialLaneOptions.map((lane) => (
+              <button
+                className={commercialLane === lane.id ? 'commercial-lane-card active' : 'commercial-lane-card'}
+                type="button"
+                key={lane.id}
+                onClick={() => setCommercialLane(lane.id)}
+              >
+                <span>{lane.label}</span>
+                <strong>{laneCounts[lane.id]}</strong>
+              </button>
+            ))}
+          </div>
+        </details>
         <div className="table">
           <div className="table-head four">
             <span>Cliente</span>
-            <span>Local</span>
-            <span>Proxima acao</span>
-            <span>Prioridade</span>
+            <span>Contato</span>
+            <span>Acao indicada</span>
+            <span>Foco</span>
           </div>
           {visibleClientes.map((cliente) => (
             <button className="table-row four clickable" key={cliente.id} onClick={() => onSelect(cliente)} type="button">
@@ -5104,16 +5174,16 @@ function Clientes({
                 <small>{cliente.tipoCliente} · {origemLabel(cliente.origemBase)}</small>
               </span>
               <span>
-                {cliente.cidade}/{cliente.uf}
-                <small>{cliente.vendedorNome ?? 'Sem vendedor'}</small>
+                {cliente.whatsapp || cliente.telefone || 'Sem contato'}
+                <small>{cliente.cidade}/{cliente.uf}</small>
               </span>
               <span>
-                <strong>{cliente.proximaMelhorAcao || bestNextAction(cliente)}</strong>
+                <strong>{commercialLaneAction(cliente, commercialLane)}</strong>
                 <small>{cliente.proximaAcaoEm ? `Agendada: ${dateLabel(cliente.proximaAcaoEm)}` : 'Sem data definida'}</small>
               </span>
               <span className="score">
-                {cliente.score >= 75 ? 'Alta' : cliente.score >= 55 ? 'Media' : 'Baixa'}
-                <small>{opportunityScoreDetails(cliente, orcamentos).slice(0, 2).map((item) => item.label).join(' + ') || cliente.motivo}</small>
+                {commercialContactInsights(cliente).map((item) => item.label).join(' + ') || 'Geral'}
+                <small>{cliente.vendedorNome ?? 'Sem vendedor'}</small>
               </span>
             </button>
           ))}
@@ -5531,12 +5601,21 @@ function opportunityTypeLabel(type: string) {
     alto_valor_sem_contato: 'Alto valor',
     orcamento_aberto: 'Orc. aberto',
     orcamento_vencido: 'Orc. vencido',
-    sem_whatsapp: 'Sem WhatsApp',
+    contato_obrigatorio_pneu_service: 'Pneu + Service',
+    patio_servico_sem_venda_pneu: 'Service sem pneu',
+    crm_pneu_sem_servico_patio: 'Pneu sem service',
+    service_risco_visitas: 'Risco service',
+    service_mix_caiu: 'Mix service',
   }
   return labels[type] ?? type.replaceAll('_', ' ')
 }
 
 function opportunityRoutineReason(oportunidade: Oportunidade) {
+  if (oportunidade.tipo === 'contato_obrigatorio_pneu_service') return 'Contato obrigatorio: cliente tem sinal recente de Pneu e Service.'
+  if (oportunidade.tipo === 'patio_servico_sem_venda_pneu') return 'Contato obrigatorio: service recente indica chance de venda de pneu.'
+  if (oportunidade.tipo === 'crm_pneu_sem_servico_patio') return 'Contato obrigatorio: venda de pneu indica chance de service.'
+  if (oportunidade.tipo === 'service_risco_visitas') return 'Risco comercial: visitas de service abaixo do padrao do cliente.'
+  if (oportunidade.tipo === 'service_mix_caiu') return 'Oportunidade de mix: visitas continuam, mas parte do service caiu.'
   if (oportunidade.tipo === 'cliente_risco_180') return 'Oportunidade: cliente sem compra recente.'
   if (oportunidade.tipo === 'rodobens_primeiro_contato') return 'Oportunidade: lista externa para qualificar.'
   if (oportunidade.tipo === 'sem_vendedor') return 'Oportunidade: cliente precisa ser distribuido para uma carteira.'
@@ -5544,6 +5623,11 @@ function opportunityRoutineReason(oportunidade: Oportunidade) {
 }
 
 function opportunityRoutineDetail(oportunidade: Oportunidade) {
+  if (oportunidade.tipo === 'contato_obrigatorio_pneu_service') return 'Aproveite a ligacao para entender a compra de pneus e oferecer service.'
+  if (oportunidade.tipo === 'patio_servico_sem_venda_pneu') return 'Pergunte de onde veio o pneu usado no service e ofereca recompra.'
+  if (oportunidade.tipo === 'crm_pneu_sem_servico_patio') return 'Ofereca montagem, balanceamento ou alinhamento para a compra recente.'
+  if (oportunidade.tipo === 'service_risco_visitas') return oportunidade.motivo || 'Confirmar se houve perda de rota, frota parada, concorrente ou problema de atendimento.'
+  if (oportunidade.tipo === 'service_mix_caiu') return oportunidade.motivo || 'Cliente segue visitando, mas precisa de abordagem para recuperar alinhamento/balanceamento.'
   if (oportunidade.tipo === 'cliente_risco_180') return 'Mais de 180 dias sem compra. Retome o contato ou monte uma proposta objetiva.'
   if (oportunidade.tipo === 'rodobens_primeiro_contato') return oportunidade.motivo || 'Validar contato e decidir se vira cliente ativo.'
   if (oportunidade.tipo === 'sem_vendedor') return 'Distribuir carteira antes de iniciar rotina comercial.'
@@ -5551,13 +5635,29 @@ function opportunityRoutineDetail(oportunidade: Oportunidade) {
 }
 
 function opportunityRoutinePriority(oportunidade: Oportunidade) {
-  if (oportunidade.tipo === 'sem_vendedor') return 90
-  if (oportunidade.tipo === 'rodobens_primeiro_contato') return 82
-  if (oportunidade.tipo === 'cliente_risco_180') return 70
-  return 75
+  const priorities: Record<string, number> = {
+    sem_vendedor: 200,
+    rodobens_primeiro_contato: 160,
+    orcamento_vencido: 145,
+    orcamento_aberto: 138,
+    contato_obrigatorio_pneu_service: 136,
+    patio_servico_sem_venda_pneu: 134,
+    crm_pneu_sem_servico_patio: 132,
+    service_risco_visitas: 130,
+    service_mix_caiu: 108,
+    alto_valor_sem_contato: 116,
+    recompra_90: 110,
+    cliente_risco_180: 72,
+  }
+  return priorities[oportunidade.tipo] ?? Math.max(75, Math.min(130, oportunidade.prioridade))
 }
 
 function opportunityRoutineSubtitle(oportunidade: Oportunidade) {
+  if (oportunidade.tipo === 'contato_obrigatorio_pneu_service') return 'Contato unico para as duas frentes'
+  if (oportunidade.tipo === 'patio_servico_sem_venda_pneu') return 'Sinal recente do patio'
+  if (oportunidade.tipo === 'crm_pneu_sem_servico_patio') return 'Sinal recente de venda'
+  if (oportunidade.tipo === 'service_risco_visitas') return 'Queda contra historico'
+  if (oportunidade.tipo === 'service_mix_caiu') return 'Mix de service caiu'
   if (oportunidade.tipo === 'cliente_risco_180') return 'Fila automatica de reativacao'
   if (oportunidade.tipo === 'rodobens_primeiro_contato') return 'Lista externa'
   if (oportunidade.tipo === 'sem_vendedor') return 'Precisa de carteira'
@@ -5689,20 +5789,28 @@ function Oportunidades({
     proximaAcao: '',
     dataProximaAcao: '',
   })
+  const [commercialLane, setCommercialLane] = useState<CommercialLane>('todos')
   const [isSavingDeal, setIsSavingDeal] = useState(false)
   const vendedores = usuarios.filter((usuario) => usuario.role === 'vendedor')
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const totalAtivas = resumo.reduce((sum, item) => sum + item.ativas, 0)
   const totalBloqueadas = resumo.reduce((sum, item) => sum + item.bloqueadas, 0)
+  const totalComTarefa = resumo.reduce((sum, item) => sum + item.comTarefa, 0)
   const topResumo = resumo.slice(0, 6)
   const pipelineAberto = pipeline.filter((item) => item.estagio !== 'ganho' && item.estagio !== 'perdido')
   const pipelineValor = pipelineAberto.reduce((sum, item) => sum + item.valorEstimado, 0)
   const pipelineForecast = pipelineAberto.reduce((sum, item) => sum + (item.valorEstimado * item.probabilidade) / 100, 0)
-  const filtered = isSupabaseConfigured ? oportunidades : oportunidades.filter((oportunidade) => {
+  const statusFiltered = oportunidades.filter((oportunidade) => {
     if (filter === 'bloqueadas') return oportunidade.bloqueada
     if (filter === 'ativas') return !oportunidade.bloqueada
     return true
-  }).slice((page - 1) * pageSize, page * pageSize)
+  })
+  const laneFiltered = statusFiltered.filter((oportunidade) => opportunityMatchesCommercialLane(oportunidade, commercialLane))
+  const filtered = isSupabaseConfigured ? laneFiltered : laneFiltered.slice((page - 1) * pageSize, page * pageSize)
+  const opportunityLaneCounts = commercialLaneOptions.reduce<Record<CommercialLane, number>>((acc, lane) => {
+    acc[lane.id] = statusFiltered.filter((oportunidade) => opportunityMatchesCommercialLane(oportunidade, lane.id)).length
+    return acc
+  }, { todos: 0, pneus: 0, service: 0 })
   const isSemVendedor = tipoFilter === 'sem_vendedor'
   const selectableIds = filtered
     .filter((oportunidade) => !oportunidade.bloqueada && !oportunidade.tarefaExistente)
@@ -5711,15 +5819,22 @@ function Oportunidades({
   const selectedOportunidades = filtered.filter((oportunidade) => selectedIds.includes(oportunidade.id))
   const resumoByTipo = new Map(resumo.map((item) => [item.tipo, item]))
   const workBatches = [
-    { tipo: 'cliente_risco_180', title: 'Reativar carteira parada', detail: 'Clientes com alto risco de perda e sem compra recente.' },
     { tipo: 'sem_vendedor', title: 'Distribuir sem responsavel', detail: 'Clientes sem vendedor atual para redistribuir em lote.' },
-    { tipo: 'recompra_90', title: 'Recompra por ciclo', detail: 'Clientes com janela provavel para nova compra.' },
-    { tipo: 'rodobens', title: 'Converter lista externa', detail: 'Leads externos prontos para primeira abordagem.' },
-  ].map((batch) => ({ ...batch, resumo: resumoByTipo.get(batch.tipo) })).filter((batch) => batch.resumo)
+    { tipo: 'lane:service', title: 'Service geral', detail: 'Todas as oportunidades ligadas a service.' },
+    { tipo: 'lane:pneus', title: 'Pneu geral', detail: 'Todas as oportunidades ligadas a pneus.' },
+  ].map((batch) => {
+    if (batch.tipo === 'lane:pneus') {
+      return { ...batch, lane: 'pneus' as CommercialLane, resumo: { ativas: opportunityLaneCounts.pneus, total: opportunityLaneCounts.pneus } }
+    }
+    if (batch.tipo === 'lane:service') {
+      return { ...batch, lane: 'service' as CommercialLane, resumo: { ativas: opportunityLaneCounts.service, total: opportunityLaneCounts.service } }
+    }
+    return { ...batch, lane: undefined, resumo: resumoByTipo.get(batch.tipo) }
+  }).filter((batch) => batch.resumo)
 
   useEffect(() => {
     setSelectedIds([])
-  }, [filter, page, tipoFilter])
+  }, [filter, page, tipoFilter, commercialLane])
 
   function startDealEdit(deal: OportunidadePipeline) {
     setEditingDealId(deal.id)
@@ -5785,7 +5900,7 @@ function Oportunidades({
       <div className="panel-header">
         <div>
           <h2>Motor de oportunidades</h2>
-          <p>{total} oportunidades na fila cacheada, com paginacao e bloqueio de duplicidade de tarefa.</p>
+          <p>{total} oportunidades na fila cacheada, com tarefa de contato automatica e carencia contra repeticao.</p>
         </div>
         <div className="panel-actions">
           {canRefresh && (
@@ -5810,7 +5925,7 @@ function Oportunidades({
             </button>
           )}
           <div className="segmented">
-            <button className={filter === 'ativas' ? 'active' : ''} type="button" onClick={() => onFilterChange('ativas')}>Ativas</button>
+            <button className={filter === 'ativas' ? 'active' : ''} type="button" onClick={() => onFilterChange('ativas')}>Na fila</button>
             <button className={filter === 'bloqueadas' ? 'active' : ''} type="button" onClick={() => onFilterChange('bloqueadas')}>Bloqueadas</button>
             <button className={filter === 'todas' ? 'active' : ''} type="button" onClick={() => onFilterChange('todas')}>Todas</button>
           </div>
@@ -5826,6 +5941,23 @@ function Oportunidades({
             ))}
           </select>
         </label>
+      </div>
+      <div className="commercial-lane-strip opportunity-lane-strip">
+        {commercialLaneOptions.map((lane) => (
+          <button
+            className={commercialLane === lane.id ? 'commercial-lane-card active' : 'commercial-lane-card'}
+            type="button"
+            key={lane.id}
+            onClick={() => {
+              setCommercialLane(lane.id)
+              setSelectedIds([])
+            }}
+          >
+            <span>{lane.label}</span>
+            <strong>{opportunityLaneCounts[lane.id]}</strong>
+            <small>{lane.id === 'pneus' ? 'Recompra, cotacao e pneus sem service.' : lane.id === 'service' ? 'Retorno, preventiva e service sem pneu.' : 'Todas as oportunidades.'}</small>
+          </button>
+        ))}
       </div>
       <div className="pipeline-overview">
         <div className="pipeline-summary-card">
@@ -5847,7 +5979,7 @@ function Oportunidades({
       {pipelineAberto.length === 0 && totalAtivas > 0 && (
         <div className="readiness warn">
           <strong>Pipeline real vazio com oportunidades ativas.</strong>
-          <span>Selecione oportunidades priorizadas e crie deals para transformar a fila cacheada em funil comercial acompanhavel.</span>
+          <span>Selecione oportunidades priorizadas e leve para o funil quando existir uma negociacao real para acompanhar.</span>
           <button className="button primary compact-button" type="button" onClick={() => setSelectedIds(selectableIds.slice(0, 10))}>
             Selecionar primeiras oportunidades
           </button>
@@ -5924,12 +6056,18 @@ function Oportunidades({
       <div className="work-batch-grid">
         {workBatches.map((batch) => (
           <button
-            className={tipoFilter === batch.tipo ? 'work-batch-card active' : 'work-batch-card'}
+            className={(batch.lane ? commercialLane === batch.lane : tipoFilter === batch.tipo) ? 'work-batch-card active' : 'work-batch-card'}
             key={batch.tipo}
             type="button"
             onClick={() => {
               onFilterChange('ativas')
-              onTipoFilterChange(batch.tipo)
+              if (batch.lane) {
+                setCommercialLane(batch.lane)
+                onTipoFilterChange('todos')
+              } else {
+                setCommercialLane('todos')
+                onTipoFilterChange(batch.tipo)
+              }
             }}
           >
             <span>
@@ -6044,23 +6182,23 @@ function Oportunidades({
                 created += 1
               }
               setSelectedIds([])
-              setError(`${created} deals criados no pipeline real.`)
+              setError(`${created} oportunidades levadas para o funil.`)
             } catch (exception) {
-              setError(exception instanceof Error ? exception.message : 'Nao foi possivel criar deals em lote.')
+              setError(exception instanceof Error ? exception.message : 'Nao foi possivel levar as oportunidades para o funil.')
             } finally {
               setIsCreatingPipelineBatch(false)
             }
           }}
         >
-          {isCreatingPipelineBatch ? 'Criando deals...' : 'Criar deals'}
+          {isCreatingPipelineBatch ? 'Criando...' : 'Levar para funil'}
         </button>
         <span className="status-pill">{selectedIds.length} selecionados</span>
       </div>
       <div className="opportunity-summary-strip">
         <div className="opportunity-summary-card">
           <strong>{totalAtivas || total}</strong>
-          <span>Ativas</span>
-          <small>{totalBloqueadas} bloqueadas/com tarefa</small>
+          <span>Na fila</span>
+          <small>{totalComTarefa} com contato agendado · {totalBloqueadas} bloqueadas</small>
         </div>
         {topResumo.map((item) => (
           <button
@@ -6071,7 +6209,7 @@ function Oportunidades({
           >
             <strong>{item.ativas}</strong>
             <span>{opportunityTypeLabel(item.tipo)}</span>
-            <small>{item.total} totais · prioridade {Math.round(item.prioridadeMaxima)}</small>
+            <small>{item.total} totais · {item.comTarefa} com tarefa · prioridade {Math.round(item.prioridadeMaxima)}</small>
           </button>
         ))}
       </div>
@@ -6104,17 +6242,17 @@ function Oportunidades({
               />
             </span>
             <span><strong>{oportunidade.clienteNome}</strong></span>
-            <span>{oportunidade.tipo}</span>
+            <span>{opportunityTypeLabel(oportunidade.tipo)}</span>
             <span>{oportunidade.motivo}</span>
             <span>{oportunidade.proximaAcao}</span>
             <span className="score">{oportunidade.prioridade}</span>
             <span>
               {oportunidade.tarefaExistente ? (
-                <span className="status-pill">tarefa existente</span>
+                <span className="status-pill">contato agendado</span>
               ) : oportunidade.bloqueada ? (
                 <span className="status-pill">bloqueada</span>
               ) : createdTasks.includes(oportunidade.id) ? (
-                <span className="status-pill">tarefa criada</span>
+                <span className="status-pill">contato agendado</span>
               ) : (
                 <span className="row-actions">
                   <button
@@ -6126,11 +6264,11 @@ function Oportunidades({
                         await onCreateTask(oportunidade)
                         setCreatedTasks((current) => [...current, oportunidade.id])
                       } catch (exception) {
-                        setError(exception instanceof Error ? exception.message : 'Nao foi possivel criar a tarefa.')
+                        setError(exception instanceof Error ? exception.message : 'Nao foi possivel agendar o contato.')
                       }
                     }}
                   >
-                    Tarefa
+                    Agendar contato
                   </button>
                   <button
                     className="button"
@@ -6142,11 +6280,11 @@ function Oportunidades({
                         await onCreatePipeline(oportunidade)
                         setCreatedPipeline((current) => [...current, oportunidade.id])
                       } catch (exception) {
-                        setError(exception instanceof Error ? exception.message : 'Nao foi possivel criar o deal.')
+                        setError(exception instanceof Error ? exception.message : 'Nao foi possivel levar para o funil.')
                       }
                     }}
                   >
-                    {createdPipeline.includes(oportunidade.id) ? 'Deal criado' : 'Deal'}
+                    {createdPipeline.includes(oportunidade.id) ? 'No funil' : 'Levar ao funil'}
                   </button>
                 </span>
               )}
@@ -6772,8 +6910,8 @@ function Tarefas({
     <section className="panel wide">
       <div className="panel-header">
         <div>
-          <h2>Proximas acoes</h2>
-          <p>Tarefas vindas de retornos, orcamentos, importacoes e oportunidades automaticas.</p>
+          <h2>Tarefas</h2>
+          <p>Lista de contatos e follow-ups que o vendedor precisa executar.</p>
         </div>
         <div className="toolbar-actions">
           <label className="mini-select">
@@ -7525,11 +7663,13 @@ function FichaCliente({
       </div>
 
       {formError && <div className="alert">{formError}</div>}
-      <div className="next-action-card">
-        <span>
-          <strong>Proxima melhor acao</strong>
+      <div className="next-action-card client-contact-card">
+        <div>
+          <span className="next-action-label">Na mao para o contato</span>
+          <strong>{cliente.whatsapp || cliente.telefone || 'Contato nao informado'}</strong>
           <small>{bestNextAction(cliente)}</small>
-        </span>
+        </div>
+        <CommercialContactHints cliente={cliente} />
       </div>
       {commercialAlerts.length > 0 && (
         <div className="client-alerts">
@@ -7542,7 +7682,7 @@ function FichaCliente({
         </div>
       )}
       <div className="quick-actions">
-        <a className={!whatsUrl ? 'button disabled' : 'button'} href={whatsUrl} target="_blank" rel="noreferrer">
+        <a className={!whatsUrl ? 'button primary disabled' : 'button primary'} href={whatsUrl} target="_blank" rel="noreferrer">
           <MessageCircle size={16} /> WhatsApp
         </a>
         <button
@@ -7564,6 +7704,11 @@ function FichaCliente({
         <button className="button" type="button" onClick={onOpenFullProfile}>
           <ClipboardList size={16} /> Ficha completa
         </button>
+      </div>
+
+      <details className="support-details client-admin-details">
+        <summary>Cadastro e excecoes</summary>
+        <div className="quick-actions compact">
         <button className="button" type="button" onClick={() => {
           setEditForm({
             telefone: cliente.telefone ?? '',
@@ -7593,7 +7738,8 @@ function FichaCliente({
         >
           Nao contatar
         </button>
-      </div>
+        </div>
+      </details>
 
       {showEditForm && (
         <form
@@ -7707,6 +7853,8 @@ function FichaCliente({
         </form>
       )}
 
+      <details className="support-details client-history-details">
+        <summary>Historico e dados do cliente</summary>
       <div className="summary-box">
         <strong>Resumo inteligente</strong>
         <p>{smartSummary(cliente, interacoes)}</p>
@@ -7801,6 +7949,7 @@ function FichaCliente({
           </div>
         ))}
       </div>
+      </details>
     </aside>
   )
 }
@@ -7972,6 +8121,7 @@ function OrcamentoEditor({
       prazoExecucao.trim() ? `Prazo de execucao: ${prazoExecucao.trim()}.` : '',
     ].filter(Boolean).join('\n')
     const finalObservation = [observacao.trim(), operationalTerms, originNote].filter(Boolean).join('\n\n')
+    const followupDate = previsaoFechamento || addDays(new Date().toISOString().slice(0, 10), 2)
     try {
       const created = await onCreate({
         clienteId: cliente.id,
@@ -7984,7 +8134,7 @@ function OrcamentoEditor({
         aprovacaoMotivo: needsApproval ? approvalWarnings.join(' ') : undefined,
         enviadoPor: shouldSend ? currentUser.id : undefined,
         enviadoEm: shouldSend ? new Date().toISOString() : undefined,
-        proximoFollowupEm: shouldSend ? new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10) : previsaoFechamento || undefined,
+        proximoFollowupEm: shouldSend ? followupDate : previsaoFechamento || undefined,
         prazoEntrega: prazoEntrega.trim() || undefined,
         prazoExecucao: prazoExecucao.trim() || undefined,
         observacao: finalObservation,
@@ -7998,13 +8148,13 @@ function OrcamentoEditor({
         vendedorId: cliente.vendedorId ?? currentUser.id,
         titulo: shouldSend ? 'Follow-up de proposta enviada' : 'Follow-up da proposta',
         descricao: `${shouldSend ? 'Confirmar recebimento da proposta' : 'Retornar proposta'} ${created.id.slice(0, 8)} de ${money(created.valorTotal)}.`,
-        dataVencimento: previsaoFechamento || new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10),
+        dataVencimento: followupDate,
         prioridade: needsApproval ? 90 : 80,
         origem: shouldSend ? 'orcamento:envio' : 'orcamento:followup',
       })
       if (shouldSend && waUrl) window.open(waUrl, '_blank', 'noopener,noreferrer')
       setFeedback(
-        `Proposta ${created.id.slice(0, 8)} ${shouldSend ? 'criada, marcada como enviada e com follow-up programado' : 'salva com follow-up programado'} para ${dateLabel(previsaoFechamento || new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10))}. Total: ${money(created.valorTotal)}.`,
+        `Proposta ${created.id.slice(0, 8)} ${shouldSend ? 'criada, marcada como enviada e com follow-up programado' : 'salva com follow-up programado'} para ${dateLabel(followupDate)}. Total: ${money(created.valorTotal)}.`,
       )
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Nao foi possivel criar a proposta.')
@@ -12453,6 +12603,7 @@ function Cliente360({
   veiculos,
   tarefas,
   campanhaEnvios,
+  oportunidades,
   contatoRecomendado,
   patioAtendimentos,
   patioItens,
@@ -12476,6 +12627,7 @@ function Cliente360({
   veiculos: ClienteVeiculoResumo[]
   tarefas: Tarefa[]
   campanhaEnvios: CampanhaEnvio[]
+  oportunidades: Oportunidade[]
   contatoRecomendado?: ClienteContatoRecomendado
   patioAtendimentos: PatioAtendimentoResumo[]
   patioItens: PatioAtendimentoItemResumo[]
@@ -12540,6 +12692,9 @@ function Cliente360({
   const clienteOrcamentos = orcamentos.filter((orcamento) => orcamento.clienteId === cliente.id)
   const clienteTarefas = tarefas.filter((tarefa) => tarefa.clienteId === cliente.id)
   const clienteCampanhas = campanhaEnvios.filter((envio) => envio.clienteId === cliente.id)
+  const clienteOportunidades = oportunidades
+    .filter((oportunidade) => oportunidade.clienteId === cliente.id)
+    .sort((a, b) => b.prioridade - a.prioridade)
   const sellers = Array.from(new Set([
     ...clienteVendas.map((venda) => venda.vendedorNome).filter(Boolean),
     ...clienteServicos.map((servico) => servico.vendedorNome).filter(Boolean),
@@ -12590,6 +12745,9 @@ function Cliente360({
     .slice()
     .sort((a, b) => a.dataVencimento.localeCompare(b.dataVencimento))
     .slice(0, 5)
+  const contactSignals = clienteOportunidades
+    .filter((oportunidade) => !oportunidade.bloqueada)
+    .slice(0, 1)
   const latestInteraction = recentContactHistory[0]
   const latestCampaign = [...clienteCampanhas].sort((a, b) =>
     (b.dataAberturaWhatsapp ?? b.dataMarcadoEnviado ?? '').localeCompare(a.dataAberturaWhatsapp ?? a.dataMarcadoEnviado ?? ''),
@@ -12644,6 +12802,12 @@ function Cliente360({
         detail: `${envio.campanhaNome ?? 'Campanha'} - ${campaignStatusLabel(envio.status)}`,
         action: 'Responder o cliente e registrar o proximo passo.',
       })),
+    ...contactSignals.map((oportunidade) => ({
+      tone: oportunidade.tipo === 'service_risco_visitas' ? 'danger' : 'warn',
+      label: opportunityTypeLabel(oportunidade.tipo),
+      detail: oportunidade.motivo,
+      action: oportunidade.proximaAcao,
+    })),
     cliente.status === 'Reativar' ? {
       tone: 'warn',
       label: 'Cliente para reativar',
@@ -12933,6 +13097,8 @@ function Cliente360({
             {isEditingClient ? 'Fechar cadastro' : 'Editar cadastro'}
           </button>
         </div>
+        <details className="support-details client360-support-details">
+          <summary>Dados de apoio do cliente</summary>
         <section className="client360-command-center">
           <article className={`client360-routine-card ${primaryRoutineReason.tone}`}>
             <span className="next-action-label">{guidanceEyebrow}</span>
@@ -13024,6 +13190,7 @@ function Cliente360({
           <Info label="Total historico" value={money(cliente.totalComprado + cliente.totalServicos)} />
           <Info label="Ultima proposta" value={ultimoOrcamento ? `${money(ultimoOrcamento.valorTotal)} · ${ultimoOrcamento.status}` : 'Sem historico'} />
         </div>
+        </details>
         {clientFeedback && <div className="readiness ok">{clientFeedback}</div>}
         {isEditingClient && (
           <div className="client360-edit-grid">
@@ -13292,8 +13459,8 @@ function Cliente360({
               <small>{dateLabel(savedContactNextAction.date)}</small>
             </div>
           )}
-          <div className="client360-recent-history">
-            <strong>Historico de atendimento</strong>
+          <details className="support-details client360-recent-history">
+            <summary>Historico de atendimento</summary>
             {recentContactHistory.map((interacao) => (
               <div className="contact-history-card" key={interacao.id}>
                 <div>
@@ -13310,7 +13477,7 @@ function Cliente360({
               </div>
             ))}
             {clienteInteracoes.length === 0 && <div className="empty-state compact">Nenhum atendimento registrado ainda.</div>}
-          </div>
+          </details>
         </div>
         <div className="panel">
           <div className="panel-header">
@@ -13327,6 +13494,22 @@ function Cliente360({
             <div className="status-row"><span>Proxima recompra</span><strong>{dateLabel(proximaRecompra)}</strong></div>
             <div className="status-row"><span>Tarefas abertas</span><strong>{tarefasAbertas.length}</strong></div>
           </div>
+          {contactSignals.length > 0 && (
+            <div className="client360-contact-signals">
+              <strong>Sinais para este contato</strong>
+              <OpportunityContactHints oportunidades={contactSignals} />
+              {contactSignals.map((oportunidade) => (
+                <div className="contact-history-card" key={oportunidade.id}>
+                  <div>
+                    <span className="status-pill">{opportunityTypeLabel(oportunidade.tipo)}</span>
+                    <strong>{oportunidade.proximaAcao}</strong>
+                    <small>Prioridade {oportunidade.prioridade}</small>
+                  </div>
+                  <p>{oportunidade.motivo}</p>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="client360-history-quote">
             <div>
               <strong>Proposta sugerida pelo historico</strong>
@@ -13381,6 +13564,8 @@ function Cliente360({
         </div>
       </section>
 
+      <details className="support-details client360-history-tools">
+        <summary>Filtros e numeros do historico</summary>
       <section className="panel wide">
         <div className="panel-header">
           <div>
@@ -13438,6 +13623,7 @@ function Cliente360({
         <Metric icon={UserRound} label="Vendedores historicos" value={sellers.length.toString()} tone="blue" />
         <Metric icon={BarChart3} label="Ticket medio" value={money(ticketMedio)} tone="amber" />
       </div>
+      </details>
 
       <div className="client360-tabs">
         <button className={activeTab === 'resumo' ? 'active' : ''} type="button" onClick={() => setActiveTab('resumo')}>Resumo</button>
@@ -14520,7 +14706,7 @@ function Importacoes({
       const postProcessResumo = result.postProcess?.adiado
         ? ` Fechamento comercial adiado: os dados foram importados, mas o recalculo geral precisa ser reprocessado depois. Motivo: ${result.postProcess.erro ?? 'tempo limite'}.`
         : result.postProcess
-          ? ` Pos-processamento: ${result.postProcess.clientes_atualizados ?? 0} clientes recalculados, ${result.postProcess.oportunidades_geradas ?? 0} oportunidades e ${result.postProcess.tarefas_followup?.tarefas_followup_total ?? 0} follow-ups sincronizados.`
+          ? ` Pos-processamento: ${result.postProcess.clientes_atualizados ?? 0} clientes recalculados, ${result.postProcess.oportunidades_geradas ?? 0} oportunidades, ${result.postProcess.tarefas_followup?.tarefas_followup_total ?? 0} follow-ups e ${result.postProcess.patio_vinculos?.atendimentos_atualizados ?? 0} vinculos do Patio ajustados.`
           : ''
       setReferenceImportResult(
         `Importacao concluida: ${result.clientes} clientes, ${result.veiculos} veiculos, ${result.ordens} ordens, ${result.vendas.created + result.servicos.created} itens.${catalogoResumo}${postProcessResumo}`,
@@ -15515,6 +15701,7 @@ function Campanhas({
     },
     { pendente: 0, enviado: 0, respondeu: 0, nao_respondeu: 0, comprar_depois: 0, virou_orcamento: 0, ganhou: 0, perdido: 0, nao_contatar: 0 },
   )
+  const campaignReturnCount = campaignCounts.respondeu + campaignCounts.comprar_depois + campaignCounts.virou_orcamento
   const filteredClientes = campanhaClientes.filter((cliente) => statusFilter === 'todos' || (statuses[cliente.id] ?? 'pendente') === statusFilter)
   const selectableCampaignIds = filteredClientes.filter((cliente) => !campaignContactReadiness(cliente, elegibilidade[cliente.id], numberFromInput(campaignWindowDays) || 7).blocked).map((cliente) => cliente.id)
   const allCampaignRowsSelected = selectableCampaignIds.length > 0 && selectableCampaignIds.every((id) => selectedCampaignClientIds.includes(id))
@@ -15652,6 +15839,31 @@ function Campanhas({
     setActiveCampanhaId('')
     setPage(1)
     setStatusFilter('todos')
+  }
+
+  function startCommercialLaneCampaign(lane: Exclude<CommercialLane, 'todos'>) {
+    setActiveCampanhaId('')
+    setSegmentoId('selecionados')
+    setStatusFilter('todos')
+    setPage(1)
+    setCampaignTab('publico')
+
+    if (lane === 'pneus') {
+      setPublicoFiltros({ frenteComercial: 'pneus', somenteComWhatsapp: true, diasSemCompraMin: 60 })
+      setSaveName('Campanha de pneus')
+      setCampaignObjective('Reativar compradores de pneus por medida, marca ou ciclo de recompra.')
+      setMensagemModelo(
+        'Bom dia, {primeiro_nome}. Aqui e {nome_vendedor}, da Capital Truck Center. Estou passando para ver se precisa cotar pneus ou reposicao para sua frota.',
+      )
+      return
+    }
+
+    setPublicoFiltros({ frenteComercial: 'service', somenteComWhatsapp: true, diasSemContatoMin: 45 })
+    setSaveName('Campanha de service')
+    setCampaignObjective('Retomar clientes de alinhamento, balanceamento, geometria e servicos de patio.')
+    setMensagemModelo(
+      'Bom dia, {primeiro_nome}. Aqui e {nome_vendedor}, da Capital Service. Estou passando para ver se precisa agendar alinhamento, balanceamento ou algum servico preventivo.',
+    )
   }
 
   function applySavedCampaign(campanhaId: string) {
@@ -15984,9 +16196,8 @@ function Campanhas({
     const whatsappWindow = window.open('about:blank', '_blank')
     if (whatsappWindow) whatsappWindow.opener = null
 
-    let copiedImage = false
     if (campaignImage) {
-      copiedImage = await copyCampaignImageToClipboard(campaignImage)
+      const copiedImage = await copyCampaignImageToClipboard(campaignImage)
       setCampaignClipboardMessage(
         copiedImage
           ? 'Imagem copiada. No WhatsApp, use Ctrl+V e Enter para anexar.'
@@ -16038,7 +16249,7 @@ function Campanhas({
       <div className="panel-header">
         <div>
           <h2>Campanhas</h2>
-          <p>Construa o publico, escreva a mensagem e acompanhe respostas no mesmo lugar. {total} clientes no publico atual.</p>
+          <p>Escolha a fila, envie WhatsApp e registre o resultado sem misturar Pneu e Service. {total} clientes no publico atual.</p>
         </div>
         <div className="toolbar-actions">
           <label className="mini-select">
@@ -16056,10 +16267,24 @@ function Campanhas({
       <section className="mobile-campaign-quick">
         <div className="mobile-campaign-quick-header">
           <span>
-            <strong>Envio rapido</strong>
-            <small>{activeCampanhaId ? 'Campanha salva pronta para WhatsApp' : 'Use o texto atual ou escolha uma campanha salva'}</small>
+            <strong>Trabalho de agora</strong>
+            <small>{activeCampanhaId ? `Campanha aberta: ${saveName || activeCampanhaId.slice(0, 8)}` : 'Escolha a frente, revise o texto e trabalhe a fila'}</small>
           </span>
           <b>{campaignPageReadyCount}</b>
+        </div>
+        <div className="mobile-campaign-kpis" aria-label="Resumo rapido da campanha">
+          <span>
+            <strong>{campaignCounts.pendente}</strong>
+            <small>Pendentes</small>
+          </span>
+          <span>
+            <strong>{campaignCounts.enviado}</strong>
+            <small>Aguardando</small>
+          </span>
+          <span>
+            <strong>{campaignReturnCount}</strong>
+            <small>Com retorno</small>
+          </span>
         </div>
         <label className="mobile-campaign-select">
           Campanha
@@ -16073,6 +16298,7 @@ function Campanhas({
         {nextClient ? (
           <div className="mobile-campaign-next">
             <span>
+              <small>Proximo contato sugerido</small>
               <strong>{nextClient.nome}</strong>
               <small>{nextClient.cidade || 'Cidade nao informada'} / {nextClient.uf || '--'} Â· {nextClient.whatsapp || 'sem WhatsApp'}</small>
             </span>
@@ -16089,9 +16315,10 @@ function Campanhas({
           <div className="empty-state compact">Nenhum contato pendente elegivel nessa campanha.</div>
         )}
         <div className="mobile-campaign-actions">
-          <button className="button" type="button" onClick={() => setCampaignTab('publico')}>Ajustar publico</button>
-          <button className="button" type="button" onClick={() => setCampaignTab('mensagem')}>Editar texto</button>
-          <button className="button" type="button" onClick={() => setCampaignTab('execucao')}>Ver fila</button>
+          <button className="button" type="button" onClick={() => setCampaignTab('publico')}>Publico</button>
+          <button className="button" type="button" onClick={() => setCampaignTab('mensagem')}>Texto</button>
+          <button className="button" type="button" onClick={() => setCampaignTab('execucao')}>Fila</button>
+          <button className="button" type="button" onClick={() => setCampaignTab('resultado')}>Retornos</button>
         </div>
       </section>
       <div className="campaign-workflow-tabs">
@@ -16134,6 +16361,11 @@ function Campanhas({
           )}
         </div>
       </div>
+      <details className="campaign-support-drawer">
+        <summary>
+          <span>Campanhas salvas e modelos</span>
+          <small>{activeCampanhaId ? `Aberta agora: ${saveName || activeCampanhaId.slice(0, 8)}` : 'Opcional: use para continuar uma campanha ja criada.'}</small>
+        </summary>
       <section className="campaign-saved-strip">
         <div>
           <strong>Campanhas salvas</strong>
@@ -16169,6 +16401,42 @@ function Campanhas({
               Excluir campanha
             </button>
           )}
+        </div>
+      </section>
+      </details>
+      <section className="campaign-builder-stage campaign-objective-stage">
+        <div className="campaign-stage-header">
+          <span>Separe a frente comercial</span>
+          <small>Comece por Pneu ou Service para nao misturar contatos, mensagem e criterio de publico.</small>
+        </div>
+        <div className="commercial-lane-strip campaign-lane-strip">
+          <button
+            className={publicoFiltros.frenteComercial === 'pneus' ? 'commercial-lane-card active' : 'commercial-lane-card'}
+            type="button"
+            onClick={() => startCommercialLaneCampaign('pneus')}
+          >
+            <span>Pneu</span>
+            <strong>Recompra</strong>
+            <small>Medida, marca, estoque, cotacao e clientes que compraram pneus.</small>
+          </button>
+          <button
+            className={publicoFiltros.frenteComercial === 'service' ? 'commercial-lane-card active' : 'commercial-lane-card'}
+            type="button"
+            onClick={() => startCommercialLaneCampaign('service')}
+          >
+            <span>Service</span>
+            <strong>Oficina</strong>
+            <small>Alinhamento, balanceamento, geometria, montagem e manutencao.</small>
+          </button>
+          <button
+            className={!publicoFiltros.frenteComercial || publicoFiltros.frenteComercial === 'todos' ? 'commercial-lane-card active' : 'commercial-lane-card'}
+            type="button"
+            onClick={() => updatePublicoFiltro('frenteComercial', 'todos')}
+          >
+            <span>Geral</span>
+            <strong>Todos</strong>
+            <small>Use quando a campanha nao deve separar Pneu e Service.</small>
+          </button>
         </div>
       </section>
       <section className="campaign-builder-stage campaign-objective-stage">
@@ -16580,6 +16848,17 @@ function Campanhas({
               <small>Para reativacao, recompra por medida, marca, produto ou servico.</small>
             </div>
             <div className="campaign-filter-grid">
+              <label>
+                Frente comercial
+                <select
+                  value={publicoFiltros.frenteComercial ?? 'todos'}
+                  onChange={(event) => updatePublicoFiltro('frenteComercial', event.target.value as CampanhaPublicoFiltros['frenteComercial'])}
+                >
+                  <option value="todos">Geral</option>
+                  <option value="pneus">Pneu</option>
+                  <option value="service">Service</option>
+                </select>
+              </label>
               <label>
                 Produto, servico, marca ou termo comprado
                 <input value={publicoFiltros.produtoTerm ?? ''} onChange={(event) => updatePublicoFiltro('produtoTerm', event.target.value)} placeholder="Ex.: 295/80, Michelin, alinhamento" />
@@ -17010,6 +17289,7 @@ function campaignSummary(status: CampanhaEnvioStatus, mensagem: string) {
 function campaignAudienceFilterLabels(filtros: CampanhaPublicoFiltros, query: string) {
   const labels: string[] = []
   if (query.trim()) labels.push(`Busca: ${query.trim()}`)
+  if (filtros.frenteComercial && filtros.frenteComercial !== 'todos') labels.push(`Frente: ${commercialLaneLabel(filtros.frenteComercial)}`)
   if (filtros.produtoTerm?.trim()) labels.push(`Produto/servico: ${filtros.produtoTerm.trim()}`)
   if (filtros.medidaTerm?.trim()) labels.push(`Medida: ${filtros.medidaTerm.trim()}`)
   if (filtros.cidade?.trim()) labels.push(`Cidade: ${filtros.cidade.trim()}`)
@@ -18756,12 +19036,40 @@ function Relatorios({
   const propostasVencidasForecast = forecastVendedor.reduce((total, row) => total + row.vencidas, 0)
   const ganhoMesTotal = forecastVendedor.reduce((total, row) => total + row.ganhoMes, 0)
   const previstoVsRealizado = forecastTotal > 0 ? Math.round((ganhoMesTotal / forecastTotal) * 100) : 0
+  const clientesById = new Map(clientes.map((cliente) => [cliente.id, cliente]))
   const medidas = rankingMedidas.length > 0
     ? rankingMedidas.map((item) => ({ label: item.label, count: item.itens }))
     : rankBy(vendasItens, (venda) => venda.medida ?? venda.produtoNome)
   const servicos = rankingServicos.length > 0
     ? rankingServicos.map((item) => ({ label: item.label, count: item.itens }))
     : rankBy(servicosItens, (servico) => servico.servicoNome)
+  const serviceDates = servicosItens
+    .map((servico) => parseDateSafe(servico.dataServico))
+    .filter((date): date is Date => Boolean(date))
+  const latestServiceDate = serviceDates.length > 0
+    ? new Date(Math.max(...serviceDates.map((date) => date.getTime())))
+    : new Date()
+  const serviceCurrentYear = latestServiceDate.getFullYear()
+  const servicePreviousYear = serviceCurrentYear - 1
+  const servicePeriodEnd = `${String(latestServiceDate.getDate()).padStart(2, '0')}/${String(latestServiceDate.getMonth() + 1).padStart(2, '0')}`
+  const currentYearServices = servicosItens.filter((servico) => isSameYtdPeriod(servico.dataServico, serviceCurrentYear, latestServiceDate))
+  const previousYearServices = servicosItens.filter((servico) => isSameYtdPeriod(servico.dataServico, servicePreviousYear, latestServiceDate))
+  const serviceRecoveryRows = buildServiceRecoveryRows({
+    clientesById,
+    currentServices: currentYearServices,
+    previousServices: previousYearServices,
+  })
+  const serviceGroupRows = buildServiceGroupTrendRows(currentYearServices, previousYearServices)
+  const servicePlateRows = buildServicePlateLossRows({
+    clientesById,
+    currentServices: currentYearServices,
+    previousServices: previousYearServices,
+  })
+  const serviceRecoveryTotalLoss = serviceRecoveryRows
+    .filter((row) => row.difValor < 0)
+    .reduce((total, row) => total + Math.abs(row.difValor), 0)
+  const serviceLostClients = serviceRecoveryRows.filter((row) => row.valorAnterior > 0 && row.valorAtual === 0).length
+  const topServiceRecovery = serviceRecoveryRows[0]
   const metasBySeller = new Map(metasVendedores.map((meta) => [meta.vendedorId, meta]))
   const openQuoteStatuses: Orcamento['status'][] = ['aberto', 'aguardando_aprovacao', 'enviado', 'negociando']
   const openForecastQuotes = orcamentos.filter((orcamento) => openQuoteStatuses.includes(orcamento.status))
@@ -19257,6 +19565,32 @@ function Relatorios({
     }
   }
 
+  async function createServiceRecoveryTask(row: ServiceRecoveryRow) {
+    setManagementTaskCreatingId(`service-${row.clienteId}`)
+    setManagementAlertFeedback('')
+    try {
+      await onCreateTask({
+        clienteId: row.clienteId,
+        vendedorId: clientesById.get(row.clienteId)?.vendedorId,
+        titulo: `Recuperar Service - ${row.principalQueda}`,
+        descricao: [
+          `${row.status}: queda de ${money(Math.abs(row.difValor))} no comparativo ${servicePreviousYear} x ${serviceCurrentYear}.`,
+          `Pedidos: ${row.pedidosAnterior} -> ${row.pedidosAtual}. Placas: ${row.placasAnterior} -> ${row.placasAtual}.`,
+          `Abordar motivo da queda e oferecer retorno para ${row.principalQueda}.`,
+        ].join('\n'),
+        dataVencimento: new Date().toISOString().slice(0, 10),
+        prioridade: row.prioridade,
+        origem: 'gestao:recuperacao_service',
+      })
+      setManagementTaskCreatedIds((current) => [...current, `service-${row.clienteId}`])
+      setManagementAlertFeedback('Tarefa criada para recuperacao Service.')
+    } catch (exception) {
+      setManagementAlertFeedback(exception instanceof Error ? exception.message : 'Nao foi possivel criar tarefa de recuperacao Service.')
+    } finally {
+      setManagementTaskCreatingId('')
+    }
+  }
+
   async function markManagementQuoteLost(alert: ManagementAlertRow) {
     if (!alert.orcamento) return
     const motivoPerda = managementLossReasons[alert.id]?.trim()
@@ -19381,6 +19715,118 @@ function Relatorios({
             {forecastByProduct.length === 0 && <div className="empty-state compact">Sem itens cotados em propostas abertas.</div>}
           </div>
         </div>
+      </section>
+
+      <section className="panel wide service-recovery-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Recuperacao Service</h2>
+            <p>Uma fila curta de clientes para retomar agora, baseada na queda contra {servicePreviousYear} ate {servicePeriodEnd}.</p>
+          </div>
+          <ClipboardList size={18} />
+        </div>
+
+        <div className="service-recovery-summary">
+          <Info label="Ligar primeiro" value={serviceRecoveryRows.slice(0, 6).length.toString()} />
+          <Info label="Perda estimada" value={money(serviceRecoveryTotalLoss)} />
+          <Info label="Sem service no ano" value={serviceLostClients.toString()} />
+        </div>
+
+        {topServiceRecovery && (
+          <article className="service-focus-card">
+            <div>
+              <span className="next-action-label">Comece por aqui</span>
+              <h3>{topServiceRecovery.clienteNome}</h3>
+              <p>{topServiceRecovery.status} em {topServiceRecovery.principalQueda}</p>
+              <small>
+                Queda de {money(Math.abs(topServiceRecovery.difValor))}. Pedidos: {topServiceRecovery.pedidosAnterior} para {topServiceRecovery.pedidosAtual}. Placas: {topServiceRecovery.placasAnterior} para {topServiceRecovery.placasAtual}.
+              </small>
+            </div>
+            <div className="inline-actions">
+              <button className="button" type="button" onClick={() => onOpenClient(topServiceRecovery.clienteId)}>Abrir ficha</button>
+              <button
+                className="button primary"
+                type="button"
+                disabled={managementTaskCreatingId === `service-${topServiceRecovery.clienteId}` || managementTaskCreatedIds.includes(`service-${topServiceRecovery.clienteId}`)}
+                onClick={() => void createServiceRecoveryTask(topServiceRecovery)}
+              >
+                {managementTaskCreatedIds.includes(`service-${topServiceRecovery.clienteId}`) ? 'Tarefa criada' : managementTaskCreatingId === `service-${topServiceRecovery.clienteId}` ? 'Criando...' : 'Criar tarefa'}
+              </button>
+            </div>
+          </article>
+        )}
+
+        <div className="service-action-list">
+          <div className="section-subheader">
+            <div>
+              <h3>Fila limpa</h3>
+              <p>Seis contatos com maior impacto. O resto fica fora do caminho.</p>
+            </div>
+          </div>
+          {serviceRecoveryRows.slice(0, 6).map((row) => {
+            const taskKey = `service-${row.clienteId}`
+            return (
+              <article className="service-action-card" key={row.clienteId}>
+                <div>
+                  <strong>{row.clienteNome}</strong>
+                  <small>{row.vendedorNome}{row.whatsapp ? ` - ${row.whatsapp}` : ''}</small>
+                </div>
+                <div>
+                  <span className={row.status === 'Perdido em service' ? 'status-pill danger' : 'status-pill warn'}>{row.status}</span>
+                  <small>{row.principalQueda} - {row.pedidosAnterior} para {row.pedidosAtual} pedidos</small>
+                </div>
+                <strong>{money(Math.abs(row.difValor))}</strong>
+                <div className="inline-actions">
+                  <button className="button" type="button" onClick={() => onOpenClient(row.clienteId)}>Ficha</button>
+                  <button
+                    className="button primary"
+                    type="button"
+                    disabled={managementTaskCreatingId === taskKey || managementTaskCreatedIds.includes(taskKey)}
+                    onClick={() => void createServiceRecoveryTask(row)}
+                  >
+                    {managementTaskCreatedIds.includes(taskKey) ? 'Criada' : managementTaskCreatingId === taskKey ? '...' : 'Tarefa'}
+                  </button>
+                </div>
+              </article>
+            )
+          })}
+          {serviceRecoveryRows.length === 0 && <div className="empty-state compact">Sem perdas de Service detectadas no periodo comparado.</div>}
+        </div>
+
+        <details className="service-diagnostics">
+          <summary>Diagnostico</summary>
+          <div className="service-diagnostics-grid">
+            <div>
+              <h3>Queda por grupo</h3>
+              <div className="status-list">
+                {serviceGroupRows.slice(0, 4).map((row) => (
+                  <div className="status-row" key={row.grupo}>
+                    <span>
+                      <strong>{row.grupo}</strong>
+                      <small>{Math.round(row.qtdAnterior)} para {Math.round(row.qtdAtual)} servicos</small>
+                    </span>
+                    <strong className={row.difValor < 0 ? 'negative-value' : 'positive-value'}>{money(row.difValor)}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h3>Frota sumida</h3>
+              <div className="status-list">
+                {servicePlateRows.slice(0, 4).map((row) => (
+                  <button className="status-row clickable" type="button" key={row.id} onClick={() => onOpenClient(row.clienteId)}>
+                    <span>
+                      <strong>{row.placa}</strong>
+                      <small>{row.clienteNome}</small>
+                    </span>
+                    <strong>{money(Math.abs(row.difValor))}</strong>
+                  </button>
+                ))}
+                {servicePlateRows.length === 0 && <div className="empty-state compact">Sem placas em queda.</div>}
+              </div>
+            </div>
+          </div>
+        </details>
       </section>
 
       <section className="panel wide">
@@ -19980,6 +20426,228 @@ function rankBy<T>(items: T[], getLabel: (item: T) => string) {
   return [...counts.entries()]
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count)
+}
+
+function parseDateSafe(value?: string) {
+  if (!value) return undefined
+  const date = new Date(`${value.slice(0, 10)}T00:00:00`)
+  return Number.isNaN(date.getTime()) ? undefined : date
+}
+
+function isSameYtdPeriod(value: string, year: number, latestReference: Date) {
+  const date = parseDateSafe(value)
+  if (!date || date.getFullYear() !== year) return false
+  const dateMonth = date.getMonth()
+  const dateDay = date.getDate()
+  const maxMonth = latestReference.getMonth()
+  const maxDay = latestReference.getDate()
+  return dateMonth < maxMonth || (dateMonth === maxMonth && dateDay <= maxDay)
+}
+
+type ServiceTrendBucket = {
+  quantidade: number
+  valor: number
+  pedidos: Set<string>
+  placas: Set<string>
+  grupos: Map<string, number>
+  ultimaData?: string
+}
+
+type ServiceRecoveryRow = {
+  clienteId: string
+  clienteNome: string
+  vendedorNome: string
+  whatsapp?: string
+  status: 'Perdido em service' | 'Reduziu service'
+  prioridade: number
+  qtdAnterior: number
+  qtdAtual: number
+  difQtd: number
+  valorAnterior: number
+  valorAtual: number
+  difValor: number
+  pedidosAnterior: number
+  pedidosAtual: number
+  placasAnterior: number
+  placasAtual: number
+  difAlinhamento: number
+  difBalanceamento: number
+  principalQueda: string
+  ultimaData?: string
+}
+
+function emptyServiceTrendBucket(): ServiceTrendBucket {
+  return {
+    quantidade: 0,
+    valor: 0,
+    pedidos: new Set<string>(),
+    placas: new Set<string>(),
+    grupos: new Map<string, number>(),
+  }
+}
+
+function serviceGroupLabel(servico: ServicoItem) {
+  const text = `${servico.servicoCodigo ?? ''} ${servico.servicoNome} ${servico.observacao ?? ''}`.toLowerCase()
+  if (/balance|balanc/.test(text)) return 'Balanceamento'
+  if (/alinh|geometr|set back|caster|cambag/.test(text)) return 'Alinhamento'
+  if (/troca de pneu|montag|rodizio|desmont/.test(text)) return 'Montagem e pneus'
+  if (/bucha|terminal|tirante|suspens|direc/.test(text)) return 'Suspensao e direcao'
+  return 'Servicos diversos'
+}
+
+function addServiceToBucket(bucket: ServiceTrendBucket, servico: ServicoItem) {
+  const quantidade = Number(servico.quantidade ?? 0)
+  const valor = Number(servico.valorTotal ?? 0)
+  const grupo = serviceGroupLabel(servico)
+  bucket.quantidade += quantidade
+  bucket.valor += valor
+  bucket.grupos.set(grupo, (bucket.grupos.get(grupo) ?? 0) + valor)
+  if (servico.pedido) bucket.pedidos.add(servico.pedido)
+  if (servico.placa) bucket.placas.add(servico.placa)
+  if (!bucket.ultimaData || servico.dataServico > bucket.ultimaData) bucket.ultimaData = servico.dataServico
+}
+
+function groupServicesByClient(items: ServicoItem[]) {
+  const buckets = new Map<string, ServiceTrendBucket>()
+  for (const servico of items) {
+    const bucket = buckets.get(servico.clienteId) ?? emptyServiceTrendBucket()
+    addServiceToBucket(bucket, servico)
+    buckets.set(servico.clienteId, bucket)
+  }
+  return buckets
+}
+
+function buildServiceRecoveryRows({
+  clientesById,
+  currentServices,
+  previousServices,
+}: {
+  clientesById: Map<string, Cliente>
+  currentServices: ServicoItem[]
+  previousServices: ServicoItem[]
+}): ServiceRecoveryRow[] {
+  const currentByClient = groupServicesByClient(currentServices)
+  const previousByClient = groupServicesByClient(previousServices)
+
+  return [...previousByClient.entries()]
+    .map(([clienteId, previous]) => {
+      const current = currentByClient.get(clienteId) ?? emptyServiceTrendBucket()
+      const cliente = clientesById.get(clienteId)
+      const difValor = current.valor - previous.valor
+      const difQtd = current.quantidade - previous.quantidade
+      const groupDiffs = [...previous.grupos.entries()]
+        .map(([grupo, valorAnterior]) => ({
+          grupo,
+          difValor: (current.grupos.get(grupo) ?? 0) - valorAnterior,
+        }))
+        .sort((a, b) => a.difValor - b.difValor)
+      const principalQueda = groupDiffs[0]?.grupo ?? 'Service'
+      const lossRatio = previous.valor > 0 ? Math.abs(Math.min(difValor, 0)) / previous.valor : 0
+      const prioridade = Math.round(Math.min(98, 45 + lossRatio * 35 + previous.pedidos.size * 2 + previous.placas.size))
+
+      return {
+        clienteId,
+        clienteNome: cliente?.nome ?? 'Cliente',
+        vendedorNome: cliente?.vendedorNome ?? cliente?.vendedorHistoricoNome ?? 'Sem vendedor',
+        whatsapp: cliente?.whatsapp,
+        status: current.valor <= 0 ? 'Perdido em service' as const : 'Reduziu service' as const,
+        prioridade,
+        qtdAnterior: previous.quantidade,
+        qtdAtual: current.quantidade,
+        difQtd,
+        valorAnterior: previous.valor,
+        valorAtual: current.valor,
+        difValor,
+        pedidosAnterior: previous.pedidos.size,
+        pedidosAtual: current.pedidos.size,
+        placasAnterior: previous.placas.size,
+        placasAtual: current.placas.size,
+        difAlinhamento: (current.grupos.get('Alinhamento') ?? 0) - (previous.grupos.get('Alinhamento') ?? 0),
+        difBalanceamento: (current.grupos.get('Balanceamento') ?? 0) - (previous.grupos.get('Balanceamento') ?? 0),
+        principalQueda,
+        ultimaData: current.ultimaData ?? previous.ultimaData,
+      }
+    })
+    .filter((row) => row.valorAnterior > 0 && row.difValor < 0)
+    .sort((a, b) => a.difValor - b.difValor)
+    .slice(0, 20)
+}
+
+function buildServiceGroupTrendRows(currentServices: ServicoItem[], previousServices: ServicoItem[]) {
+  const groups = new Map<string, { grupo: string; qtdAnterior: number; qtdAtual: number; valorAnterior: number; valorAtual: number }>()
+  const ensure = (grupo: string) => {
+    const current = groups.get(grupo) ?? { grupo, qtdAnterior: 0, qtdAtual: 0, valorAnterior: 0, valorAtual: 0 }
+    groups.set(grupo, current)
+    return current
+  }
+  previousServices.forEach((servico) => {
+    const row = ensure(serviceGroupLabel(servico))
+    row.qtdAnterior += Number(servico.quantidade ?? 0)
+    row.valorAnterior += Number(servico.valorTotal ?? 0)
+  })
+  currentServices.forEach((servico) => {
+    const row = ensure(serviceGroupLabel(servico))
+    row.qtdAtual += Number(servico.quantidade ?? 0)
+    row.valorAtual += Number(servico.valorTotal ?? 0)
+  })
+  return [...groups.values()]
+    .map((row) => ({
+      ...row,
+      difQtd: row.qtdAtual - row.qtdAnterior,
+      difValor: row.valorAtual - row.valorAnterior,
+      variacao: row.valorAnterior > 0 ? Math.round(((row.valorAtual - row.valorAnterior) / row.valorAnterior) * 100) : 0,
+    }))
+    .sort((a, b) => a.difValor - b.difValor)
+}
+
+function buildServicePlateLossRows({
+  clientesById,
+  currentServices,
+  previousServices,
+}: {
+  clientesById: Map<string, Cliente>
+  currentServices: ServicoItem[]
+  previousServices: ServicoItem[]
+}) {
+  type PlateBucket = { clienteId: string; placa: string; qtd: number; valor: number; grupos: Map<string, number> }
+  const keyFor = (servico: ServicoItem) => `${servico.clienteId}:${servico.placa?.trim().toUpperCase()}`
+  const add = (map: Map<string, PlateBucket>, servico: ServicoItem) => {
+    const placa = servico.placa?.trim().toUpperCase()
+    if (!placa) return
+    const key = keyFor(servico)
+    const bucket = map.get(key) ?? { clienteId: servico.clienteId, placa, qtd: 0, valor: 0, grupos: new Map<string, number>() }
+    const grupo = serviceGroupLabel(servico)
+    bucket.qtd += Number(servico.quantidade ?? 0)
+    bucket.valor += Number(servico.valorTotal ?? 0)
+    bucket.grupos.set(grupo, (bucket.grupos.get(grupo) ?? 0) + Number(servico.valorTotal ?? 0))
+    map.set(key, bucket)
+  }
+  const previous = new Map<string, PlateBucket>()
+  const current = new Map<string, PlateBucket>()
+  previousServices.forEach((servico) => add(previous, servico))
+  currentServices.forEach((servico) => add(current, servico))
+
+  return [...previous.entries()]
+    .map(([key, previousBucket]) => {
+      const currentBucket = current.get(key)
+      const cliente = clientesById.get(previousBucket.clienteId)
+      return {
+        id: key,
+        clienteId: previousBucket.clienteId,
+        clienteNome: cliente?.nome ?? 'Cliente',
+        placa: previousBucket.placa,
+        qtdAnterior: previousBucket.qtd,
+        qtdAtual: currentBucket?.qtd ?? 0,
+        difQtd: (currentBucket?.qtd ?? 0) - previousBucket.qtd,
+        valorAnterior: previousBucket.valor,
+        valorAtual: currentBucket?.valor ?? 0,
+        difValor: (currentBucket?.valor ?? 0) - previousBucket.valor,
+        principalQueda: [...previousBucket.grupos.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'Service',
+      }
+    })
+    .filter((row) => row.difQtd < 0 || row.difValor < 0)
+    .sort((a, b) => a.difValor - b.difValor)
+    .slice(0, 12)
 }
 
 function VendedoresCarteira({

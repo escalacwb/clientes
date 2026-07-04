@@ -171,7 +171,294 @@ begin
 end;
 $$;
 
-create or replace function public.finalizar_importacao_diaria()
+create or replace function public.aplicar_vinculos_patio_por_importacao(
+  p_importacao_id uuid default null,
+  p_data_inicio date default null,
+  p_data_fim date default null,
+  p_dry_run boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_data_inicio date;
+  v_data_fim date;
+  v_candidatos integer := 0;
+  v_atendimentos_seguros integer := 0;
+  v_atendimentos_atualizar integer := 0;
+  v_atendimentos_atualizados integer := 0;
+  v_itens_atualizados integer := 0;
+  v_veiculos_atualizados integer := 0;
+  v_conflitos_ambiguos integer := 0;
+  v_conflitos_registrados integer := 0;
+  v_auditorias_registradas integer := 0;
+begin
+  if auth.uid() is not null and not public.current_user_is_admin() then
+    raise exception 'Apenas administradores podem aplicar vinculos do Patio por importacao.';
+  end if;
+
+  if p_importacao_id is not null then
+    select
+      min(data_ref),
+      max(data_ref) + 1
+    into v_data_inicio, v_data_fim
+    from (
+      select data_venda as data_ref
+      from public.vendas_itens
+      where importacao_id = p_importacao_id
+      union all
+      select data_servico as data_ref
+      from public.servicos_itens
+      where importacao_id = p_importacao_id
+    ) datas;
+  end if;
+
+  v_data_inicio := coalesce(p_data_inicio, v_data_inicio, current_date - 180);
+  v_data_fim := coalesce(p_data_fim, v_data_fim, current_date + 1);
+
+  drop table if exists pg_temp.tmp_patio_vinculo_importacao;
+
+  create temporary table tmp_patio_vinculo_importacao on commit drop as
+  with base as (
+    select
+      pc.patio_execucao_id,
+      pc.erp_cliente_id,
+      pc.erp_cliente_nome,
+      pc.pedido,
+      pc.nota,
+      pc.data_erp,
+      pc.data_patio,
+      pc.diferenca_dias,
+      pc.placa,
+      pc.erp_km,
+      pc.patio_km,
+      pc.diferenca_km,
+      pa.cliente_id as cliente_atual_id,
+      c_atual.nome as cliente_atual_nome,
+      pa.veiculo_id,
+      pa.patio_cliente_id as patio_cliente_origem_id,
+      pa.patio_veiculo_id,
+      pa.cliente_nome_snapshot
+    from public.listar_pedidos_consolidados(v_data_inicio, v_data_fim) pc
+    join public.patio_atendimentos pa on pa.patio_execucao_id = pc.patio_execucao_id
+    left join public.clientes c_atual on c_atual.id = pa.cliente_id
+    where pc.origem_consolidado = 'erp_com_patio'
+      and pc.match_status = 'match_placa_km_data_30d'
+      and pc.erp_cliente_id is not null
+      and pc.patio_execucao_id is not null
+      and pc.diferenca_km = 0
+  )
+  select
+    patio_execucao_id,
+    count(*)::integer as linhas_match,
+    count(distinct erp_cliente_id)::integer as clientes_erp_distintos,
+    (array_agg(distinct erp_cliente_id))[1] as cliente_erp_id,
+    (array_agg(distinct erp_cliente_nome))[1] as cliente_erp_nome,
+    (array_agg(distinct cliente_atual_id) filter (where cliente_atual_id is not null))[1] as cliente_atual_id,
+    (array_agg(distinct cliente_atual_nome) filter (where cliente_atual_nome is not null))[1] as cliente_atual_nome,
+    (array_agg(distinct veiculo_id) filter (where veiculo_id is not null))[1] as veiculo_id,
+    (array_agg(distinct patio_cliente_origem_id) filter (where patio_cliente_origem_id is not null))[1] as patio_cliente_id,
+    (array_agg(distinct patio_veiculo_id) filter (where patio_veiculo_id is not null))[1] as patio_veiculo_id,
+    (array_agg(distinct cliente_nome_snapshot) filter (where cliente_nome_snapshot is not null))[1] as cliente_nome_snapshot,
+    array_remove(array_agg(distinct erp_cliente_nome order by erp_cliente_nome), null) as clientes_erp_nomes,
+    array_remove(array_agg(distinct pedido order by pedido), '') as pedidos,
+    array_remove(array_agg(distinct nota order by nota), '') as notas,
+    min(diferenca_dias)::integer as menor_diferenca_dias,
+    max(diferenca_dias)::integer as maior_diferenca_dias,
+    max(diferenca_km)::integer as maior_diferenca_km,
+    jsonb_agg(
+      jsonb_build_object(
+        'erp_cliente_id', erp_cliente_id,
+        'erp_cliente_nome', erp_cliente_nome,
+        'pedido', nullif(pedido, ''),
+        'nota', nullif(nota, ''),
+        'data_erp', data_erp,
+        'data_patio', data_patio,
+        'diferenca_dias', diferenca_dias,
+        'placa', placa,
+        'erp_km', erp_km,
+        'patio_km', patio_km
+      )
+      order by data_erp, pedido, nota, erp_cliente_nome
+    ) as evidencias
+  from base
+  group by patio_execucao_id;
+
+  select
+    count(*)::integer,
+    count(*) filter (where clientes_erp_distintos = 1)::integer,
+    count(*) filter (where clientes_erp_distintos = 1 and cliente_atual_id is distinct from cliente_erp_id)::integer,
+    count(*) filter (where clientes_erp_distintos > 1)::integer
+  into v_candidatos, v_atendimentos_seguros, v_atendimentos_atualizar, v_conflitos_ambiguos
+  from tmp_patio_vinculo_importacao;
+
+  if not p_dry_run then
+    insert into public.crm_patio_conflitos (
+      tipo,
+      severidade,
+      cliente_id,
+      veiculo_id,
+      patio_cliente_id,
+      patio_veiculo_id,
+      resumo,
+      dados,
+      status,
+      resolvido_em
+    )
+    select
+      'vinculo_patio_erp_aplicado',
+      'baixa',
+      t.cliente_erp_id,
+      t.veiculo_id,
+      t.patio_cliente_id,
+      t.patio_veiculo_id,
+      'Vinculo do atendimento do Patio ajustado pelo cliente do ERP/importacao.',
+      jsonb_build_object(
+        'regra', 'placa_km_exato_data_30d',
+        'importacao_id', p_importacao_id,
+        'data_inicio', v_data_inicio,
+        'data_fim', v_data_fim,
+        'patio_execucao_id', t.patio_execucao_id,
+        'cliente_anterior_id', t.cliente_atual_id,
+        'cliente_anterior_nome', coalesce(t.cliente_atual_nome, t.cliente_nome_snapshot),
+        'cliente_erp_id', t.cliente_erp_id,
+        'cliente_erp_nome', t.cliente_erp_nome,
+        'pedidos', to_jsonb(t.pedidos),
+        'notas', to_jsonb(t.notas),
+        'menor_diferenca_dias', t.menor_diferenca_dias,
+        'maior_diferenca_dias', t.maior_diferenca_dias,
+        'maior_diferenca_km', t.maior_diferenca_km,
+        'evidencias', t.evidencias
+      ),
+      'resolvido',
+      now()
+    from tmp_patio_vinculo_importacao t
+    where t.clientes_erp_distintos = 1
+      and t.cliente_atual_id is distinct from t.cliente_erp_id
+      and not exists (
+        select 1
+        from public.crm_patio_conflitos c
+        where c.tipo = 'vinculo_patio_erp_aplicado'
+          and c.dados->>'patio_execucao_id' = t.patio_execucao_id::text
+          and c.dados->>'cliente_erp_id' = t.cliente_erp_id::text
+      );
+
+    get diagnostics v_auditorias_registradas = row_count;
+
+    insert into public.crm_patio_conflitos (
+      tipo,
+      severidade,
+      cliente_id,
+      veiculo_id,
+      patio_cliente_id,
+      patio_veiculo_id,
+      resumo,
+      dados,
+      status
+    )
+    select
+      'vinculo_patio_erp_ambiguo',
+      'alta',
+      null,
+      t.veiculo_id,
+      t.patio_cliente_id,
+      t.patio_veiculo_id,
+      'Atendimento do Patio cruzou com mais de um cliente do ERP pela regra placa+KM+data.',
+      jsonb_build_object(
+        'regra', 'placa_km_exato_data_30d',
+        'importacao_id', p_importacao_id,
+        'data_inicio', v_data_inicio,
+        'data_fim', v_data_fim,
+        'patio_execucao_id', t.patio_execucao_id,
+        'clientes_erp_nomes', to_jsonb(t.clientes_erp_nomes),
+        'pedidos', to_jsonb(t.pedidos),
+        'notas', to_jsonb(t.notas),
+        'menor_diferenca_dias', t.menor_diferenca_dias,
+        'maior_diferenca_dias', t.maior_diferenca_dias,
+        'maior_diferenca_km', t.maior_diferenca_km,
+        'evidencias', t.evidencias
+      ),
+      'aberto'
+    from tmp_patio_vinculo_importacao t
+    where t.clientes_erp_distintos > 1
+      and not exists (
+        select 1
+        from public.crm_patio_conflitos c
+        where c.tipo = 'vinculo_patio_erp_ambiguo'
+          and c.status = 'aberto'
+          and c.dados->>'patio_execucao_id' = t.patio_execucao_id::text
+      );
+
+    get diagnostics v_conflitos_registrados = row_count;
+
+    update public.patio_atendimentos pa
+    set
+      cliente_id = t.cliente_erp_id,
+      sincronizado_em = now()
+    from tmp_patio_vinculo_importacao t
+    where t.clientes_erp_distintos = 1
+      and pa.patio_execucao_id = t.patio_execucao_id
+      and pa.cliente_id is distinct from t.cliente_erp_id;
+
+    get diagnostics v_atendimentos_atualizados = row_count;
+
+    update public.patio_atendimento_itens pai
+    set
+      cliente_id = t.cliente_erp_id,
+      sincronizado_em = now()
+    from tmp_patio_vinculo_importacao t
+    where t.clientes_erp_distintos = 1
+      and pai.patio_execucao_id = t.patio_execucao_id
+      and pai.cliente_id is distinct from t.cliente_erp_id;
+
+    get diagnostics v_itens_atualizados = row_count;
+
+    with veiculos_seguros as (
+      select
+        patio_veiculo_id,
+        (array_agg(distinct cliente_erp_id))[1] as cliente_erp_id
+      from tmp_patio_vinculo_importacao
+      where clientes_erp_distintos = 1
+        and patio_veiculo_id is not null
+      group by patio_veiculo_id
+      having count(distinct cliente_erp_id) = 1
+    )
+    update public.patio_veiculos_snapshot pvs
+    set
+      cliente_id = v.cliente_erp_id,
+      match_tipo = 'erp_importacao_placa_km_data',
+      match_score = greatest(pvs.match_score, 120),
+      sincronizado_em = now()
+    from veiculos_seguros v
+    where pvs.patio_veiculo_id = v.patio_veiculo_id
+      and pvs.cliente_id is distinct from v.cliente_erp_id;
+
+    get diagnostics v_veiculos_atualizados = row_count;
+  end if;
+
+  return jsonb_build_object(
+    'importacao_id', p_importacao_id,
+    'data_inicio', v_data_inicio,
+    'data_fim', v_data_fim,
+    'dry_run', p_dry_run,
+    'candidatos_placa_km_data', v_candidatos,
+    'atendimentos_seguros', v_atendimentos_seguros,
+    'atendimentos_atualizar', v_atendimentos_atualizar,
+    'atendimentos_atualizados', v_atendimentos_atualizados,
+    'itens_atualizados', v_itens_atualizados,
+    'veiculos_atualizados', v_veiculos_atualizados,
+    'conflitos_ambiguos', v_conflitos_ambiguos,
+    'conflitos_registrados', v_conflitos_registrados,
+    'auditorias_registradas', v_auditorias_registradas
+  );
+end;
+$$;
+
+drop function if exists public.finalizar_importacao_diaria();
+
+create or replace function public.finalizar_importacao_diaria(p_importacao_id uuid default null)
 returns jsonb
 language plpgsql
 security definer
@@ -181,19 +468,25 @@ declare
   clientes_atualizados integer;
   oportunidades_geradas integer;
   tarefas_followup jsonb;
+  patio_vinculos jsonb;
 begin
   if auth.uid() is not null and not public.current_user_is_admin() then
     raise exception 'Apenas administradores podem finalizar importacoes.';
   end if;
 
   clientes_atualizados := public.refresh_clientes_comercial_stats();
+  patio_vinculos := public.aplicar_vinculos_patio_por_importacao(p_importacao_id);
   oportunidades_geradas := public.refresh_oportunidades_cache();
   tarefas_followup := public.criar_tarefas_followup_automaticas();
 
   return jsonb_build_object(
     'clientes_atualizados', clientes_atualizados,
     'oportunidades_geradas', oportunidades_geradas,
-    'tarefas_followup', tarefas_followup
+    'tarefas_followup', tarefas_followup,
+    'patio_vinculos', patio_vinculos
   );
 end;
 $$;
+
+grant execute on function public.aplicar_vinculos_patio_por_importacao(uuid, date, date, boolean) to authenticated, service_role;
+grant execute on function public.finalizar_importacao_diaria(uuid) to authenticated, service_role;

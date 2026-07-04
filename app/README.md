@@ -27,6 +27,12 @@ npm run build
 npm run check
 ```
 
+## Operacao e auditoria
+
+- Manual passo a passo do CRM: [`docs/MANUAL_USO_CRM.md`](docs/MANUAL_USO_CRM.md)
+- Auditoria de falhas do CRM: [`docs/AUDITORIA_FALHAS_CRM_2026-07-03.md`](docs/AUDITORIA_FALHAS_CRM_2026-07-03.md)
+- Sincronizacao Patio -> CRM: [`docs/SINCRONIZACAO_PATIO_CRM.md`](docs/SINCRONIZACAO_PATIO_CRM.md)
+
 ## Planilha inicial
 
 Analisar abas e cabecalhos:

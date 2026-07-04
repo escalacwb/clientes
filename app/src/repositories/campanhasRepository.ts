@@ -17,6 +17,7 @@ export type CampanhaSegmento = {
 }
 
 export type CampanhaPublicoFiltros = {
+  frenteComercial?: 'todos' | 'pneus' | 'service'
   cidade?: string
   uf?: string
   vendedorId?: string
@@ -721,6 +722,10 @@ async function resolveCampaignClienteIds(filtros?: CampanhaPublicoFiltros, baseC
   const sets: Set<string>[] = []
   if (baseClienteIds) sets.push(new Set(baseClienteIds))
 
+  if (filtros?.frenteComercial && filtros.frenteComercial !== 'todos') {
+    const ids = await findClientesByFrenteComercial(filtros.frenteComercial)
+    if (ids) sets.push(new Set(ids))
+  }
   if (filtros?.produtoTerm?.trim()) sets.push(new Set(await findClientesByProdutoOuServico(filtros.produtoTerm)))
   if (filtros?.medidaTerm?.trim()) sets.push(new Set(await findClientesByProdutoOuServico(filtros.medidaTerm)))
   if (filtros && hasVehicleFilter(filtros)) sets.push(new Set(await findClientesByVeiculoOuKm(filtros)))
@@ -728,6 +733,29 @@ async function resolveCampaignClienteIds(filtros?: CampanhaPublicoFiltros, baseC
   if (sets.length === 0) return undefined
   if (sets.some((set) => set.size === 0)) return []
   return Array.from(sets[0]).filter((id) => sets.every((set) => set.has(id)))
+}
+
+async function findClientesByFrenteComercial(frente: 'pneus' | 'service'): Promise<string[] | undefined> {
+  const supabase = await getSupabase()
+  if (!supabase) return undefined
+
+  if (frente === 'pneus') {
+    return collectCampaignClienteIds((from, to) =>
+      supabase
+        .from('vendas_itens')
+        .select('cliente_id')
+        .or('produto_nome.ilike.%pneu%,produto_nome.ilike.%michelin%,produto_nome.ilike.%bf%,produto_nome.ilike.%goodrich%,medida.ilike.%R22%,medida.ilike.%R%,marca.ilike.%michelin%,marca.ilike.%goodrich%')
+        .range(from, to),
+    )
+  }
+
+  return collectCampaignClienteIds((from, to) =>
+    supabase
+      .from('servicos_itens')
+      .select('cliente_id')
+      .or('servico_nome.ilike.%alinh%,servico_nome.ilike.%balanc%,servico_nome.ilike.%geometr%,servico_nome.ilike.%cambag%,servico_nome.ilike.%caster%,servico_nome.ilike.%montag%,servico_nome.ilike.%rodizio%,servico_nome.ilike.%bucha%,servico_nome.ilike.%terminal%,servico_nome.ilike.%mao de obra%')
+      .range(from, to),
+  )
 }
 
 function hasVehicleFilter(filtros?: CampanhaPublicoFiltros) {

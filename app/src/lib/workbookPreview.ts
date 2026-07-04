@@ -1,5 +1,9 @@
 type WorkbookRow = Record<string, string | number>
 
+const MAX_WORKBOOK_FILE_BYTES = 10 * 1024 * 1024
+const MAX_WORKBOOK_SHEETS = 12
+const MAX_WORKBOOK_ROWS_PER_SHEET = 6000
+
 export type WorkbookSheetPreview = {
   sheetName: string
   role: 'clientes' | 'vendas' | 'servicos' | 'resumo' | 'outros'
@@ -28,9 +32,16 @@ export async function previewWorkbookFiles(files: FileList | File[]): Promise<Wo
 }
 
 async function previewWorkbookFile(file: File): Promise<WorkbookImportPreview> {
+  if (file.size > MAX_WORKBOOK_FILE_BYTES) {
+    throw new Error(`Arquivo ${file.name} excede 10 MB. Divida a planilha antes de importar.`)
+  }
+
   const xlsx = await import('xlsx')
   const buffer = await file.arrayBuffer()
   const workbook = xlsx.read(buffer, { type: 'array', cellDates: true })
+  if (workbook.SheetNames.length > MAX_WORKBOOK_SHEETS) {
+    throw new Error(`Arquivo ${file.name} tem ${workbook.SheetNames.length} abas. Limite: ${MAX_WORKBOOK_SHEETS}.`)
+  }
 
   const sheets = workbook.SheetNames.map((sheetName) => {
     const rows = xlsx.utils.sheet_to_json<Array<string | number | Date>>(workbook.Sheets[sheetName], {
@@ -38,6 +49,9 @@ async function previewWorkbookFile(file: File): Promise<WorkbookImportPreview> {
       defval: '',
       raw: false,
     })
+    if (rows.length > MAX_WORKBOOK_ROWS_PER_SHEET) {
+      throw new Error(`Aba ${sheetName} tem ${rows.length} linhas. Limite: ${MAX_WORKBOOK_ROWS_PER_SHEET}.`)
+    }
     return buildSheetPreview(sheetName, rows)
   })
   const allClientKeys = sheets.flatMap((sheet) => sheet.clientKeys)

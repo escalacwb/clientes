@@ -12,6 +12,9 @@ const workbookPath = path.resolve(process.argv[2] ?? '../sell_out_final_com_vend
 const limitArg = process.argv.find((arg) => arg.startsWith('--limit='))
 const limit = limitArg ? Number(limitArg.split('=')[1]) : undefined
 const batchSize = Number(process.argv.find((arg) => arg.startsWith('--batch='))?.split('=')[1] ?? 500)
+const defaultCommercialVendorName = 'Mateus Silva'
+const defaultCommercialVendorEmail = 'mateus.silva@capitaltruck.local'
+const defaultCommercialVendorKey = normalizeVendorName(defaultCommercialVendorName)
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -43,7 +46,7 @@ const servicos = dedupeItems(readSheet('Serviços por cliente').map(mapServico))
 console.log(`Amostra preparada: ${clientes.length} clientes, ${vendas.length} vendas, ${servicos.length} servicos.`)
 
 const importacao = await insertImportacao()
-const vendedores = await upsertVendedores(clientes, vendas, servicos)
+const vendedores = await upsertVendedores()
 const clienteIndex = await upsertClientes(clientes, vendedores)
 const vendasResult = await upsertVendas(vendas, clienteIndex, importacao.id)
 const servicosResult = await upsertServicos(servicos, clienteIndex, importacao.id)
@@ -98,21 +101,10 @@ async function updateImportacao(id, patch) {
   if (error) throw error
 }
 
-async function upsertVendedores(clienteRows, vendaRows, servicoRows) {
-  const nomes = new Set([
-    ...clienteRows.map((item) => item.vendedor_nome),
-    ...vendaRows.map((item) => item.vendedor_nome),
-    ...servicoRows.map((item) => item.vendedor_nome),
-  ].map(normalizeVendorName).filter(Boolean))
-
+async function upsertVendedores() {
   const payload = [
     { nome: 'Administracao Capital', email: 'admin@capitaltruck.local', role: 'admin', ativo: true },
-    ...Array.from(nomes).map((nome) => ({
-      nome,
-      email: `${slug(nome)}@capitaltruck.local`,
-      role: 'vendedor',
-      ativo: true,
-    })),
+    { nome: defaultCommercialVendorName, email: defaultCommercialVendorEmail, role: 'vendedor', ativo: true },
   ]
 
   for (const batch of chunks(payload, batchSize)) {
@@ -123,7 +115,12 @@ async function upsertVendedores(clienteRows, vendaRows, servicoRows) {
   const { data, error } = await supabase.from('users').select('id,nome,email,role')
   if (error) throw error
 
-  return new Map(data.map((user) => [normalizeVendorName(user.nome), user.id]))
+  const defaultVendor = data.find((user) => normalizeVendorName(user.nome) === defaultCommercialVendorKey)
+  if (!defaultVendor) {
+    throw new Error(`Usuario comercial padrao nao encontrado: ${defaultCommercialVendorName}`)
+  }
+
+  return new Map([[defaultCommercialVendorKey, defaultVendor.id]])
 }
 
 async function upsertClientes(clienteRows, vendedores) {
@@ -143,7 +140,7 @@ async function upsertClientes(clienteRows, vendedores) {
       email: cliente.email || null,
       endereco: cliente.endereco || null,
       bairro: cliente.bairro || null,
-      vendedor_id: vendedores.get(normalizeVendorName(cliente.vendedor_nome)) ?? null,
+      vendedor_id: vendedores.get(defaultCommercialVendorKey) ?? null,
       status_comercial: inferStatus(cliente),
       origem: cliente.origem || 'base inicial',
       origem_base: cliente.origem_base || 'desconhecida',
@@ -203,7 +200,7 @@ async function upsertVendas(vendaRows, clienteIndex, importacaoId) {
     quantidade: venda.quantidade ?? 0,
     valor_unitario: venda.valor_unitario ?? 0,
     valor_total: venda.valor_total ?? 0,
-    vendedor_nome: normalizeVendorName(venda.vendedor_nome) || null,
+    vendedor_nome: defaultCommercialVendorName,
     unidade: venda.unidade || null,
     importacao_id: importacaoId,
     chave_unica: venda.chave_unica,
@@ -231,7 +228,7 @@ async function upsertServicos(servicoRows, clienteIndex, importacaoId) {
     valor_unitario: servico.valor_unitario ?? 0,
     valor_total: servico.valor_total ?? 0,
     observacao: servico.observacao || null,
-    vendedor_nome: normalizeVendorName(servico.vendedor_nome) || null,
+    vendedor_nome: defaultCommercialVendorName,
     unidade: servico.unidade || null,
     importacao_id: importacaoId,
     chave_unica: servico.chave_unica,
@@ -356,10 +353,6 @@ function normalizeVendorName(value) {
     .replace(/\([^)]*\)/g, '')
     .replace(/\s+/g, ' ')
     .trim()
-}
-
-function slug(value) {
-  return normalizeKey(value).replace(/[^a-z0-9]+/g, '.') || 'vendedor'
 }
 
 function normalizeKey(value) {

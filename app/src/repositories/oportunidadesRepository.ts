@@ -21,6 +21,7 @@ export type OportunidadeResumo = {
   total: number
   ativas: number
   bloqueadas: number
+  comTarefa: number
   prioridadeMedia: number
   prioridadeMaxima: number
 }
@@ -30,6 +31,7 @@ type OportunidadeResumoRow = {
   total: number
   ativas: number
   bloqueadas: number
+  com_tarefa?: number
   prioridade_media: number
   prioridade_maxima: number
 }
@@ -54,7 +56,7 @@ export async function listOportunidades(clientes: Cliente[], orcamentos: Orcamen
     motivo: row.motivo,
     proximaAcao: row.proxima_acao,
     prioridade: row.prioridade,
-    bloqueada: row.bloqueada || Boolean(row.tarefa_existente),
+    bloqueada: row.bloqueada,
     tarefaExistente: Boolean(row.tarefa_existente),
   }))
 }
@@ -79,10 +81,8 @@ export async function listOportunidadesPage(input: {
     .order('prioridade', { ascending: false })
     .range(from, to)
 
-  if (input.filter === 'ativas') query = query.eq('bloqueada', false).eq('tarefa_existente', false)
-  if (input.filter === 'bloqueadas') {
-    query = query.or('bloqueada.eq.true,tarefa_existente.eq.true')
-  }
+  if (input.filter === 'ativas') query = query.eq('bloqueada', false)
+  if (input.filter === 'bloqueadas') query = query.eq('bloqueada', true)
   if (input.tipo && input.tipo !== 'todos') query = query.eq('tipo', input.tipo)
   if (input.vendedorId) query = query.eq('vendedor_id', input.vendedorId)
 
@@ -117,6 +117,7 @@ export async function listOportunidadesResumo(vendedorId?: string): Promise<Opor
       total: 0,
       ativas: 0,
       bloqueadas: 0,
+      comTarefa: 0,
       prioridadeMedia: 0,
       prioridadeMaxima: 0,
     }
@@ -127,12 +128,30 @@ export async function listOportunidadesResumo(vendedorId?: string): Promise<Opor
       total: current.total + total,
       ativas: current.ativas + Number(row.ativas ?? 0),
       bloqueadas: current.bloqueadas + Number(row.bloqueadas ?? 0),
+      comTarefa: current.comTarefa + Number(row.com_tarefa ?? 0),
       prioridadeMedia: current.total + total ? Math.round(((current.prioridadeMedia * current.total) + (priority * total)) / (current.total + total)) : 0,
       prioridadeMaxima: Math.max(current.prioridadeMaxima, Number(row.prioridade_maxima ?? 0)),
     })
   })
 
   return [...grouped.values()].sort((a, b) => b.ativas - a.ativas || b.prioridadeMaxima - a.prioridadeMaxima)
+}
+
+export async function listClienteOportunidades(clienteId: string): Promise<Oportunidade[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('oportunidades_cache')
+    .select('*')
+    .eq('cliente_id', clienteId)
+    .order('bloqueada', { ascending: true })
+    .order('tarefa_existente', { ascending: true })
+    .order('prioridade', { ascending: false })
+
+  if (error) throw error
+
+  return (data as OportunidadeRow[] | null ?? []).map(mapOportunidade)
 }
 
 export async function refreshOportunidadesCache(): Promise<number> {
@@ -164,7 +183,7 @@ function mapOportunidade(row: OportunidadeRow): Oportunidade {
     motivo: row.motivo,
     proximaAcao: row.proxima_acao,
     prioridade: row.prioridade,
-    bloqueada: row.bloqueada || Boolean(row.tarefa_existente),
+    bloqueada: row.bloqueada,
     tarefaExistente: Boolean(row.tarefa_existente),
   }
 }

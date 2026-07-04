@@ -13,6 +13,8 @@ dist-ssr
 exports
 local-audit-*
 *.local
+secrets/
+*.dpapi.json
 
 # Editor directories and files
 .vscode/*

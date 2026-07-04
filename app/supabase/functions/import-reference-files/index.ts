@@ -1,5 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.46.1'
 
+const defaultCommercialVendorName = 'Mateus Silva'
+const defaultCommercialVendorKey = normalizeVendor(defaultCommercialVendorName)
+
 type ReferenceKind =
   | 'carrosatendidos'
   | 'listaclientessistema'
@@ -196,7 +199,7 @@ Deno.serve(async (request) => {
     const vendas = await upsertVendas(service, movimentosComVeiculo.filter((item) => item.tipo === 'produto'), clienteIndex, veiculoIndex, ordemIndex, importacao.id)
     const servicos = await upsertServicos(service, movimentosComVeiculo.filter((item) => item.tipo === 'servico'), clienteIndex, veiculoIndex, ordemIndex, importacao.id)
     const catalogo = await upsertCatalogo(service, [...parsed.precosProdutos, ...parsed.precosServicos], arquivos)
-    const postProcess = await tentarFinalizarImportacaoDiaria(service)
+    const postProcess = await tentarFinalizarImportacaoDiaria(service, importacao.id)
 
     await service
       .from('importacoes')
@@ -253,15 +256,15 @@ async function assertAdmin(token: string, service: ReturnType<typeof createClien
   if (!data?.ativo || data.role !== 'admin') throw new HttpError('Apenas administradores podem importar arquivos.', 403)
 }
 
-async function finalizarImportacaoDiaria(service: ReturnType<typeof createClient>) {
-  const { data, error } = await service.rpc('finalizar_importacao_diaria')
+async function finalizarImportacaoDiaria(service: ReturnType<typeof createClient>, importacaoId?: string) {
+  const { data, error } = await service.rpc('finalizar_importacao_diaria', importacaoId ? { p_importacao_id: importacaoId } : {})
   if (error) throw error
-  return data as { clientes_atualizados?: number; oportunidades_geradas?: number }
+  return data as { clientes_atualizados?: number; oportunidades_geradas?: number; patio_vinculos?: Record<string, unknown> }
 }
 
-async function tentarFinalizarImportacaoDiaria(service: ReturnType<typeof createClient>) {
+async function tentarFinalizarImportacaoDiaria(service: ReturnType<typeof createClient>, importacaoId?: string) {
   try {
-    return await finalizarImportacaoDiaria(service)
+    return await finalizarImportacaoDiaria(service, importacaoId)
   } catch (error) {
     const errorInfo = normalizeError(error)
     console.error('import-reference-files postprocess skipped', JSON.stringify(errorInfo))
@@ -649,6 +652,10 @@ async function fetchAppUsers(service: ReturnType<typeof createClient>) {
 }
 
 async function upsertClientes(service: ReturnType<typeof createClient>, rows: ClienteRow[], appUsers: Map<string, string>) {
+  const defaultVendorId = appUsers.get(defaultCommercialVendorKey)
+  if (!defaultVendorId) {
+    throw new Error(`Usuario comercial padrao nao encontrado: ${defaultCommercialVendorName}`)
+  }
   const payload = dedupe(rows, (row) => row.codigo_erp).map((cliente) => {
     const vendedor = splitVendor(cliente.vendedor_nome)
     return {
@@ -662,7 +669,7 @@ async function upsertClientes(service: ReturnType<typeof createClient>, rows: Cl
       telefone_principal: cliente.telefone_principal || null,
       whatsapp_principal: cliente.telefone_principal || null,
       email: cliente.email || cliente.email_comercial || null,
-      vendedor_id: appUsers.get(normalizeVendor(vendedor.nome)) ?? null,
+      vendedor_id: defaultVendorId,
       vendedor_codigo_erp: vendedor.codigo || null,
       vendedor_nome_erp: vendedor.nome || null,
       canal_venda: cliente.canal_venda || null,
@@ -720,7 +727,7 @@ async function upsertOrdens(service: ReturnType<typeof createClient>, rows: Movi
       nota: row.nota || null,
       pedido: row.pedido || null,
       cfop: row.cfop || null,
-      vendedor_nome: normalizeVendor(row.vendedor_nome) || null,
+      vendedor_nome: defaultCommercialVendorName,
       unidade: row.unidade || null,
       total_pedido: row.total_pedido || 0,
       placa_extraida: row.veiculo_ref?.placa || row.placa || null,
@@ -764,7 +771,7 @@ async function upsertItens(service: ReturnType<typeof createClient>, table: 'ven
       quantidade: row.quantidade || 0,
       valor_unitario: row.valor_unitario || 0,
       valor_total: row.valor_total || 0,
-      vendedor_nome: normalizeVendor(row.vendedor_nome) || null,
+      vendedor_nome: defaultCommercialVendorName,
       unidade: row.unidade || null,
       lote_serie: row.lote_serie || null,
       cfop: row.cfop || null,
@@ -907,13 +914,13 @@ function parseVehicleNote(value: string) {
   const raw = text(value)
   if (!raw) return null
   const upper = raw.toUpperCase().replace(/\s+/g, ' ').trim()
-  const kmMatch = upper.match(/\bKMS?\s*[:\/-]?\s*([0-9][0-9.\s]{0,14})/)
+  const kmMatch = upper.match(/\bKMS?\s*[:/-]?\s*([0-9][0-9.\s]{0,14})/)
   const km = kmMatch ? Number(kmMatch[1].replace(/\D/g, '')) : null
   const plateMatch = upper.match(/\bPLACA\s+([A-Z]{3})\s*-?\s*([0-9][A-Z0-9][0-9]{2}|[0-9]{4})\b/) || upper.match(/\b([A-Z]{3})\s*-?\s*([0-9][A-Z0-9][0-9]{2}|[0-9]{4})\b/)
   const placa = plateMatch ? normalizePlate(`${plateMatch[1]}${plateMatch[2]}`) : ''
   const veiculo_descricao = upper
     .replace(/\bPLACA\b/g, ' ')
-    .replace(/\bKMS?\s*[:\/-]?\s*[0-9][0-9.\s]{0,14}/g, ' ')
+    .replace(/\bKMS?\s*[:/-]?\s*[0-9][0-9.\s]{0,14}/g, ' ')
     .replace(/[./-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -934,7 +941,7 @@ function isVehicleNoteRow(cells: string[]) {
   const raw = cells.join(' ')
   const normalized = normalize(raw)
   if (!raw || normalized.includes('fazenda') || normalized.includes('total')) return false
-  return /\bPLACA\b/i.test(raw) || /\bKMS?\s*[:\/-]?\s*\d/i.test(raw)
+  return /\bPLACA\b/i.test(raw) || /\bKMS?\s*[:/-]?\s*\d/i.test(raw)
 }
 
 function addUnique<T>(map: Map<string, T[]>, key: string, value: T) {

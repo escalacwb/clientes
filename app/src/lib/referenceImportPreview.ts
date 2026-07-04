@@ -44,6 +44,9 @@ const expectedFiles: Array<{ kind: ReferenceFileKind; label: string; required: b
   { kind: 'precoservicos', label: 'Preco servicos', required: false, aliases: ['precoservicos', 'precosservicos', 'listaeprecoservicos', 'listaeprecoservicos', 'listaprecoservicos'] },
 ]
 
+const MAX_REFERENCE_FILE_BYTES = 15 * 1024 * 1024
+const MAX_REFERENCE_ROWS = 30000
+
 export async function previewReferenceImportFiles(files: FileList | File[]): Promise<ReferenceImportPreview> {
   const fileArray = Array.from(files)
   const recognized = new Map<ReferenceFileKind, File[]>()
@@ -63,7 +66,24 @@ export async function previewReferenceImportFiles(files: FileList | File[]): Pro
     if (files.length === 0) return emptyPreview(spec)
 
     const filePreviews: ReferenceFilePreview[] = await Promise.all(files.map(async (file): Promise<ReferenceFilePreview> => {
+      if (file.size > MAX_REFERENCE_FILE_BYTES) {
+        return {
+          ...emptyPreview(spec),
+          fileName: file.name,
+          status: 'invalid',
+          avisos: [`Arquivo excede 15 MB. Divida o relatorio antes de importar.`],
+        }
+      }
       const rows = readHtmlRows(await readLatin1(file))
+      if (rows.length > MAX_REFERENCE_ROWS) {
+        return {
+          ...emptyPreview(spec),
+          fileName: file.name,
+          status: 'invalid',
+          totalRows: rows.length,
+          avisos: [`Arquivo tem ${rows.length} linhas. Limite: ${MAX_REFERENCE_ROWS}.`],
+        }
+      }
       if (!matchesExpectedContent(spec.kind, rows)) {
         return invalidPreview(spec, file.name, rows)
       }
@@ -341,7 +361,7 @@ function readHtmlRows(content: string) {
 function isVehicleNoteRow(cells: string[]) {
   if (cells.length > 4) return false
   const raw = cells.join(' ')
-  return /\bPLACA\b/i.test(raw) || /\bKMS?\s*[:\/-]?\s*\d/i.test(raw)
+  return /\bPLACA\b/i.test(raw) || /\bKMS?\s*[:/-]?\s*\d/i.test(raw)
 }
 
 function extractPlate(value: string) {
@@ -352,7 +372,7 @@ function extractPlate(value: string) {
 }
 
 function extractKm(value: string) {
-  const match = value.toUpperCase().match(/\bKMS?\s*[:\/-]?\s*([0-9][0-9.\s]{0,14})/)
+  const match = value.toUpperCase().match(/\bKMS?\s*[:/-]?\s*([0-9][0-9.\s]{0,14})/)
   return match ? Number(match[1].replace(/\D/g, '')) : 0
 }
 

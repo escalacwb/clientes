@@ -1,199 +1,153 @@
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
-import process from 'node:process'
-import pg from 'pg'
+import postgres from 'npm:postgres@3.4.7'
 
-loadEnvFile('.env')
-loadEnvFile('.env.local')
+type Sql = ReturnType<typeof postgres>
+type JsonRecord = Record<string, unknown>
+type SqlParam = string | number | boolean | null
+type SqlJsonParam = Parameters<Sql['json']>[0]
 
-const options = parseArgs(process.argv.slice(2))
-const crmDbUrl = process.env.SUPABASE_DB_DIRECT_URL || process.env.SUPABASE_DB_URL
-const patioDbUrl =
-  process.env.PATIO_DB_URL ||
-  process.env.PATIO_DATABASE_URL ||
-  loadEnvValue(path.resolve('..', '..', 'controle-patio', '.env'), ['DB_URL', 'DATABASE_URL']) ||
-  loadEnvValue(path.resolve('..', '..', 'controle-patio-backup-20260601-095959', '.env'), ['DB_URL', 'DATABASE_URL'])
+type SyncOptions = {
+  incremental: boolean
+  lookbackMs: number
+  refreshOportunidades: boolean
+}
+
+type SyncState = {
+  lastCursorAt: string | null
+  lastCursorId: number | null
+}
+
 const ACTIVE_PATIO_STATUS = "status is distinct from 'finalizado'"
-let crm
-let patio
+const LOCK_ID = 2026070301
 
-await main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error)
-  process.exitCode = 1
-})
-
-async function main() {
-  if (options.help) {
-    printHelp()
-    return
-  }
-
-  validateEnv()
-
-  if (options.watch) {
-    await runWatch()
-    return
-  }
-
-  await runSyncOnce({ mode: 'once' })
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-sync-secret',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-async function runWatch() {
-  console.log(JSON.stringify({
-    event: 'patio_crm_sync_watch_started',
-    intervalMs: options.intervalMs,
-    crm: connectionLabel(crmDbUrl),
-    patio: connectionLabel(patioDbUrl),
-  }))
+Deno.serve(async (request) => {
+  if (request.method === 'OPTIONS') return json({ ok: true })
+  if (request.method !== 'POST') return json({ error: 'Metodo nao permitido.' }, 405)
 
-  let stopRequested = false
-  let failures = 0
-  process.once('SIGINT', () => {
-    stopRequested = true
-    console.log(JSON.stringify({ event: 'patio_crm_sync_stop_requested', signal: 'SIGINT' }))
-  })
-  process.once('SIGTERM', () => {
-    stopRequested = true
-    console.log(JSON.stringify({ event: 'patio_crm_sync_stop_requested', signal: 'SIGTERM' }))
-  })
-
-  while (!stopRequested) {
-    const startedAt = Date.now()
-    try {
-      await runSyncOnce({ mode: 'watch' })
-      failures = 0
-    } catch (error) {
-      failures += 1
-      console.error(JSON.stringify({
-        event: 'patio_crm_sync_failed',
-        failures,
-        message: error instanceof Error ? error.message : String(error),
-      }))
-
-      if (options.maxFailures > 0 && failures >= options.maxFailures) {
-        throw new Error(`Sincronizacao interrompida apos ${failures} falhas consecutivas.`)
-      }
-    }
-
-    const elapsed = Date.now() - startedAt
-    const waitMs = Math.max(1000, options.intervalMs - elapsed)
-    if (!stopRequested) await sleep(waitMs)
-  }
-}
-
-async function runSyncOnce({ mode }) {
-  const startedAt = new Date()
-  let runId = null
+  let crm: Sql | null = null
+  let patio: Sql | null = null
+  let runId: string | null = null
   let lockAcquired = false
 
-  crm = new pg.Client({
-    connectionString: crmDbUrl,
-    ssl: { rejectUnauthorized: false },
-    application_name: 'crm-patio-sync',
-  })
-  patio = new pg.Client({
-    connectionString: patioDbUrl,
-    ssl: { rejectUnauthorized: false },
-    application_name: 'crm-patio-sync',
-  })
-
   try {
-    await patio.connect()
-    await patio.query('set default_transaction_read_only = on')
-    await crm.connect()
-    await ensureSyncRunTable()
+    assertSyncSecret(request)
 
-    lockAcquired = await acquireSyncLock()
+    const body = await request.json().catch(() => ({}))
+    const options = parseOptions(body)
+    const startedAt = new Date()
+
+    crm = createSql(requiredEnv('CRM_DB_URL'))
+    patio = createSql(requiredEnv('PATIO_DB_URL'))
+
+    await patio.unsafe('set default_transaction_read_only = on')
+    await ensureSyncTables(crm)
+
+    lockAcquired = await acquireSyncLock(crm)
     if (!lockAcquired) {
-      const summary = { skipped: true, reason: 'sync_already_running' }
-      console.log(JSON.stringify({ ok: true, ...summary }))
-      return summary
+      return json({ ok: true, skipped: true, reason: 'sync_already_running' })
     }
 
-    const runMode = options.incremental ? `${mode}:incremental` : `${mode}:full`
-    runId = await createSyncRun({ mode: runMode, startedAt })
+    const mode = options.incremental ? 'edge:incremental' : 'edge:full'
+    runId = await createSyncRun(crm, { mode, startedAt, options })
+    const summary = await runSync({ crm, patio, options, mode, startedAt })
 
-    const syncState = await loadSyncState()
-    const crmClientes = await loadCrmClientes()
-    const crmVeiculos = await loadCrmVeiculos()
-    const existingClienteMap = await loadExistingPatioClienteMap()
-    const existingVeiculoMap = await loadExistingPatioVeiculoMap()
-    const patioClientes = await loadPatioClientes(syncState)
-    const patioVeiculos = await loadPatioVeiculos(syncState)
-    const changedClienteMap = buildClienteMap(patioClientes, crmClientes)
-    const clienteMap = mergeMaps(existingClienteMap, changedClienteMap)
-    const changedVeiculoMap = buildVeiculoMap(patioVeiculos, crmVeiculos, clienteMap)
-    const veiculoMap = mergeMaps(existingVeiculoMap, changedVeiculoMap)
-
-    await upsertPatioClientes(patioClientes, clienteMap)
-    await updateSyncState('clientes', patioClientes, ['data_atualizacao_contato'])
-    await upsertPatioVeiculos(patioVeiculos, clienteMap, veiculoMap)
-    await updateSyncState('veiculos', patioVeiculos, ['data_atualizacao_contato'])
-    const patioFuncionariosCount = await upsertPatioFuncionarios()
-    const patioBoxesCount = await upsertPatioBoxes()
-    const patioAtendimentosCount = await upsertPatioAtendimentos(clienteMap, veiculoMap, syncState)
-    const patioAtendimentoItensCount = await upsertPatioAtendimentoItens(clienteMap, veiculoMap, syncState)
-    const patioContatosCount = await upsertPatioContatos(patioClientes, patioVeiculos, clienteMap)
-    const oportunidadesAtualizadas = options.refreshOportunidades ? await refreshOportunidades() : null
-
-    const summary = {
-      ok: true,
-      mode: runMode,
-      sync_strategy: options.incremental ? 'incremental' : 'full',
-      started_at: startedAt.toISOString(),
-      finished_at: new Date().toISOString(),
-      patio_clientes: patioClientes.length,
-      patio_clientes_vinculados: patioClientes.filter((row) => clienteMap.get(Number(row.id))?.clienteId).length,
-      patio_veiculos: patioVeiculos.length,
-      patio_veiculos_vinculados: patioVeiculos.filter((row) => veiculoMap.get(Number(row.id))?.veiculoId).length,
-      patio_funcionarios: patioFuncionariosCount,
-      patio_boxes: patioBoxesCount,
-      patio_atendimentos: patioAtendimentosCount,
-      patio_atendimento_itens: patioAtendimentoItensCount,
-      patio_contatos: patioContatosCount,
-      oportunidades_atualizadas: oportunidadesAtualizadas,
-    }
-
-    if (runId) await finishSyncRun(runId, 'ok', summary)
-    console.log(JSON.stringify(summary, null, options.watch ? 0 : 2))
-    return summary
+    await finishSyncRun(crm, runId, 'ok', summary)
+    return json(summary)
   } catch (error) {
-    if (runId) {
-      await finishSyncRun(runId, 'erro', {}, error).catch(() => undefined)
+    const status = error instanceof HttpError ? error.status : 500
+    if (crm && runId) {
+      await finishSyncRun(crm, runId, 'erro', {}, error).catch(() => undefined)
     }
-    throw error
+    console.error(error)
+    return json({ ok: false, error: error instanceof Error ? error.message : String(error) }, status)
   } finally {
-    if (lockAcquired && crm) await releaseSyncLock().catch(() => undefined)
-    await patio.end().catch(() => undefined)
-    await crm.end().catch(() => undefined)
-    patio = undefined
-    crm = undefined
+    if (crm && lockAcquired) await releaseSyncLock(crm).catch(() => undefined)
+    await patio?.end({ timeout: 5 }).catch(() => undefined)
+    await crm?.end({ timeout: 5 }).catch(() => undefined)
+  }
+})
+
+async function runSync({
+  crm,
+  patio,
+  options,
+  mode,
+  startedAt,
+}: {
+  crm: Sql
+  patio: Sql
+  options: SyncOptions
+  mode: string
+  startedAt: Date
+}) {
+  const syncState = await loadSyncState(crm)
+  const crmClientes = await loadCrmClientes(crm)
+  const crmVeiculos = await loadCrmVeiculos(crm)
+  const existingClienteMap = await loadExistingPatioClienteMap(crm)
+  const existingVeiculoMap = await loadExistingPatioVeiculoMap(crm)
+  const patioClientes = await loadPatioClientes(patio, syncState, options)
+  const patioVeiculos = await loadPatioVeiculos(patio, syncState, options)
+  const changedClienteMap = buildClienteMap(patioClientes, crmClientes)
+  const clienteMap = mergeMaps(existingClienteMap, changedClienteMap)
+  const changedVeiculoMap = buildVeiculoMap(patioVeiculos, crmVeiculos, clienteMap)
+  const veiculoMap = mergeMaps(existingVeiculoMap, changedVeiculoMap)
+
+  await upsertPatioClientes(crm, patioClientes, clienteMap)
+  await updateSyncState(crm, 'clientes', patioClientes, ['data_atualizacao_contato'])
+  await upsertPatioVeiculos(crm, patioVeiculos, clienteMap, veiculoMap)
+  await updateSyncState(crm, 'veiculos', patioVeiculos, ['data_atualizacao_contato'])
+
+  const patioFuncionariosCount = await upsertPatioFuncionarios(crm, patio)
+  const patioBoxesCount = await upsertPatioBoxes(crm, patio)
+  const patioAtendimentosCount = await upsertPatioAtendimentos(crm, patio, clienteMap, veiculoMap, syncState, options)
+  const patioAtendimentoItensCount = await upsertPatioAtendimentoItens(crm, patio, clienteMap, veiculoMap, syncState, options)
+  const patioContatosCount = await upsertPatioContatos(crm, patioClientes, patioVeiculos, clienteMap)
+  const oportunidadesAtualizadas = options.refreshOportunidades ? await refreshOportunidades(crm) : null
+
+  return {
+    ok: true,
+    mode,
+    sync_strategy: options.incremental ? 'incremental' : 'full',
+    started_at: startedAt.toISOString(),
+    finished_at: new Date().toISOString(),
+    patio_clientes: patioClientes.length,
+    patio_clientes_vinculados: patioClientes.filter((row) => clienteMap.get(Number(row.id))?.clienteId).length,
+    patio_veiculos: patioVeiculos.length,
+    patio_veiculos_vinculados: patioVeiculos.filter((row) => veiculoMap.get(Number(row.id))?.veiculoId).length,
+    patio_funcionarios: patioFuncionariosCount,
+    patio_boxes: patioBoxesCount,
+    patio_atendimentos: patioAtendimentosCount,
+    patio_atendimento_itens: patioAtendimentoItensCount,
+    patio_contatos: patioContatosCount,
+    oportunidades_atualizadas: oportunidadesAtualizadas,
   }
 }
 
-async function loadCrmClientes() {
-  const { rows } = await crm.query(`
+async function loadCrmClientes(crm: Sql) {
+  return await crm.unsafe(`
     select id, codigo_erp, nome, cidade, uf
     from public.clientes
     where excluido_em is null
-  `)
-  return rows
+  `) as JsonRecord[]
 }
 
-async function loadCrmVeiculos() {
-  const { rows } = await crm.query(`
+async function loadCrmVeiculos(crm: Sql) {
+  return await crm.unsafe(`
     select id, cliente_id, placa, chassi, descricao
     from public.veiculos
-  `)
-  return rows
+  `) as JsonRecord[]
 }
 
-async function loadExistingPatioClienteMap() {
-  const { rows } = await crm.query(`
+async function loadExistingPatioClienteMap(crm: Sql) {
+  const rows = await crm.unsafe(`
     select patio_cliente_id, cliente_id, match_tipo, match_score
     from public.patio_clientes_snapshot
-  `)
+  `) as JsonRecord[]
   return new Map(rows.map((row) => [Number(row.patio_cliente_id), {
     clienteId: row.cliente_id,
     matchTipo: row.match_tipo,
@@ -201,11 +155,11 @@ async function loadExistingPatioClienteMap() {
   }]))
 }
 
-async function loadExistingPatioVeiculoMap() {
-  const { rows } = await crm.query(`
+async function loadExistingPatioVeiculoMap(crm: Sql) {
+  const rows = await crm.unsafe(`
     select patio_veiculo_id, cliente_id, veiculo_id, match_tipo, match_score
     from public.patio_veiculos_snapshot
-  `)
+  `) as JsonRecord[]
   return new Map(rows.map((row) => [Number(row.patio_veiculo_id), {
     clienteId: row.cliente_id,
     veiculoId: row.veiculo_id,
@@ -214,11 +168,11 @@ async function loadExistingPatioVeiculoMap() {
   }]))
 }
 
-async function loadPatioClientes(syncState) {
-  const filter = sourceFilter(syncState, 'clientes', {
+async function loadPatioClientes(patio: Sql, syncState: Map<string, SyncState>, options: SyncOptions) {
+  const filter = sourceFilter(syncState, 'clientes', options, {
     timestampExpressions: ['data_atualizacao_contato'],
   })
-  const { rows } = await patio.query(`
+  return await patio.unsafe(`
     select
       id,
       nome_empresa,
@@ -235,15 +189,14 @@ async function loadPatioClientes(syncState) {
       data_atualizacao_contato
     from public.clientes
     ${filter.clause}
-  `, filter.params)
-  return rows
+  `, filter.params) as JsonRecord[]
 }
 
-async function loadPatioVeiculos(syncState) {
-  const filter = sourceFilter(syncState, 'veiculos', {
+async function loadPatioVeiculos(patio: Sql, syncState: Map<string, SyncState>, options: SyncOptions) {
+  const filter = sourceFilter(syncState, 'veiculos', options, {
     timestampExpressions: ['data_atualizacao_contato'],
   })
-  const { rows } = await patio.query(`
+  return await patio.unsafe(`
     select
       id,
       placa,
@@ -258,13 +211,12 @@ async function loadPatioVeiculos(syncState) {
       data_atualizacao_contato
     from public.veiculos
     ${filter.clause}
-  `, filter.params)
-  return rows
+  `, filter.params) as JsonRecord[]
 }
 
-function buildClienteMap(patioClientes, crmClientes) {
-  const byCodigo = new Map()
-  const byNome = new Map()
+function buildClienteMap(patioClientes: JsonRecord[], crmClientes: JsonRecord[]) {
+  const byCodigo = new Map<string, JsonRecord>()
+  const byNome = new Map<string, JsonRecord>()
 
   crmClientes.forEach((cliente) => {
     if (cliente.codigo_erp) byCodigo.set(String(cliente.codigo_erp).trim(), cliente)
@@ -272,7 +224,7 @@ function buildClienteMap(patioClientes, crmClientes) {
     if (nome && !byNome.has(nome)) byNome.set(nome, cliente)
   })
 
-  const map = new Map()
+  const map = new Map<number, JsonRecord>()
   patioClientes.forEach((patioCliente) => {
     const codigo = patioCliente.codigo_antigo == null ? '' : String(patioCliente.codigo_antigo).trim()
     const nome = normalize(patioCliente.nome_empresa)
@@ -288,14 +240,18 @@ function buildClienteMap(patioClientes, crmClientes) {
   return map
 }
 
-function buildVeiculoMap(patioVeiculos, crmVeiculos, clienteMap) {
-  const byPlaca = new Map()
+function buildVeiculoMap(
+  patioVeiculos: JsonRecord[],
+  crmVeiculos: JsonRecord[],
+  clienteMap: Map<number, JsonRecord>,
+) {
+  const byPlaca = new Map<string, JsonRecord>()
   crmVeiculos.forEach((veiculo) => {
     const placa = normalizePlate(veiculo.placa)
     if (placa) byPlaca.set(placa, veiculo)
   })
 
-  const map = new Map()
+  const map = new Map<number, JsonRecord>()
   patioVeiculos.forEach((patioVeiculo) => {
     const placa = normalizePlate(patioVeiculo.placa)
     const veiculo = placa ? byPlaca.get(placa) : undefined
@@ -310,11 +266,11 @@ function buildVeiculoMap(patioVeiculos, crmVeiculos, clienteMap) {
   return map
 }
 
-function mergeMaps(base, overrides) {
+function mergeMaps(base: Map<number, JsonRecord>, overrides: Map<number, JsonRecord>) {
   return new Map([...base.entries(), ...overrides.entries()])
 }
 
-async function upsertPatioClientes(rows, clienteMap) {
+async function upsertPatioClientes(crm: Sql, rows: JsonRecord[], clienteMap: Map<number, JsonRecord>) {
   const sql = `
     with payload as (
       select *
@@ -391,10 +347,15 @@ async function upsertPatioClientes(rows, clienteMap) {
     }
   })
 
-  await runJsonBatches(sql, payload)
+  await runJsonBatches(crm, sql, payload)
 }
 
-async function upsertPatioVeiculos(rows, clienteMap, veiculoMap) {
+async function upsertPatioVeiculos(
+  crm: Sql,
+  rows: JsonRecord[],
+  clienteMap: Map<number, JsonRecord>,
+  veiculoMap: Map<number, JsonRecord>,
+) {
   const sql = `
     with payload as (
       select *
@@ -469,15 +430,15 @@ async function upsertPatioVeiculos(rows, clienteMap, veiculoMap) {
     }
   })
 
-  await runJsonBatches(sql, payload)
+  await runJsonBatches(crm, sql, payload)
 }
 
-async function upsertPatioFuncionarios() {
-  const { rows } = await patio.query(`
+async function upsertPatioFuncionarios(crm: Sql, patio: Sql) {
+  const rows = await patio.unsafe(`
     select *
     from public.funcionarios
     where id > 0
-  `)
+  `) as JsonRecord[]
 
   const sql = `
     with payload as (
@@ -508,16 +469,16 @@ async function upsertPatioFuncionarios() {
     raw_data: row,
   }))
 
-  await runJsonBatches(sql, payload)
+  await runJsonBatches(crm, sql, payload)
   return rows.length
 }
 
-async function upsertPatioBoxes() {
-  const { rows } = await patio.query(`
+async function upsertPatioBoxes(crm: Sql, patio: Sql) {
+  const rows = await patio.unsafe(`
     select *
     from public.boxes
     where id > 0
-  `)
+  `) as JsonRecord[]
 
   const sql = `
     with payload as (
@@ -551,17 +512,24 @@ async function upsertPatioBoxes() {
     raw_data: row,
   }))
 
-  await runJsonBatches(sql, payload)
+  await runJsonBatches(crm, sql, payload)
   return rows.length
 }
 
-async function upsertPatioAtendimentos(clienteMap, veiculoMap, syncState) {
-  const filter = sourceFilter(syncState, 'execucao_servico', {
+async function upsertPatioAtendimentos(
+  crm: Sql,
+  patio: Sql,
+  clienteMap: Map<number, JsonRecord>,
+  veiculoMap: Map<number, JsonRecord>,
+  syncState: Map<string, SyncState>,
+  options: SyncOptions,
+) {
+  const filter = sourceFilter(syncState, 'execucao_servico', options, {
     timestampExpressions: ['e.inicio_execucao', 'e.fim_execucao', 'e.data_feedback'],
     idExpression: 'e.id',
     activeExpression: `e.${ACTIVE_PATIO_STATUS}`,
   })
-  const { rows } = await patio.query(`
+  const rows = await patio.unsafe(`
     select
       e.id,
       e.veiculo_id,
@@ -583,7 +551,7 @@ async function upsertPatioAtendimentos(clienteMap, veiculoMap, syncState) {
     left join public.veiculos v on v.id = e.veiculo_id
     left join public.clientes c on c.id = v.cliente_id
     ${filter.clause}
-  `, filter.params)
+  `, filter.params) as JsonRecord[]
 
   const sql = `
     with payload as (
@@ -670,17 +638,24 @@ async function upsertPatioAtendimentos(clienteMap, veiculoMap, syncState) {
     }
   })
 
-  await runJsonBatches(sql, payload)
-  await updateSyncState('execucao_servico', rows, ['inicio_execucao', 'fim_execucao', 'data_feedback'])
+  await runJsonBatches(crm, sql, payload)
+  await updateSyncState(crm, 'execucao_servico', rows, ['inicio_execucao', 'fim_execucao', 'data_feedback'])
   return rows.length
 }
 
-async function upsertPatioAtendimentoItens(clienteMap, veiculoMap, syncState) {
+async function upsertPatioAtendimentoItens(
+  crm: Sql,
+  patio: Sql,
+  clienteMap: Map<number, JsonRecord>,
+  veiculoMap: Map<number, JsonRecord>,
+  syncState: Map<string, SyncState>,
+  options: SyncOptions,
+) {
   const serviceTables = [
     ['borracharia', 'servicos_solicitados_borracharia'],
     ['alinhamento', 'servicos_solicitados_alinhamento'],
     ['manutencao', 'servicos_solicitados_manutencao'],
-  ]
+  ] as const
 
   const sql = `
     with payload as (
@@ -742,19 +717,19 @@ async function upsertPatioAtendimentoItens(clienteMap, veiculoMap, syncState) {
 
   let total = 0
   for (const [area, table] of serviceTables) {
-    const filter = sourceFilter(syncState, table, {
+    const filter = sourceFilter(syncState, table, options, {
       timestampExpressions: ['s.data_solicitacao', 's.data_atualizacao'],
       idExpression: 's.id',
       activeExpression: `s.${ACTIVE_PATIO_STATUS}`,
     })
-    const { rows } = await patio.query(`
+    const rows = await patio.unsafe(`
       select
         s.*,
         v.cliente_id as patio_cliente_id
       from public.${table} s
       left join public.veiculos v on v.id = s.veiculo_id
       ${filter.clause}
-    `, filter.params)
+    `, filter.params) as JsonRecord[]
 
     const payload = rows.map((row) => {
       const vehicleMatch = veiculoMap.get(Number(row.veiculo_id)) ?? {}
@@ -782,15 +757,20 @@ async function upsertPatioAtendimentoItens(clienteMap, veiculoMap, syncState) {
       }
     })
 
-    await runJsonBatches(sql, payload)
-    await updateSyncState(table, rows, ['data_solicitacao', 'data_atualizacao'])
+    await runJsonBatches(crm, sql, payload)
+    await updateSyncState(crm, table, rows, ['data_solicitacao', 'data_atualizacao'])
     total += rows.length
   }
 
   return total
 }
 
-async function upsertPatioContatos(patioClientes, patioVeiculos, clienteMap) {
+async function upsertPatioContatos(
+  crm: Sql,
+  patioClientes: JsonRecord[],
+  patioVeiculos: JsonRecord[],
+  clienteMap: Map<number, JsonRecord>,
+) {
   const sql = `
     with payload as (
       select *
@@ -891,62 +871,78 @@ async function upsertPatioContatos(patioClientes, patioVeiculos, clienteMap) {
     })
   }
 
-  await runJsonBatches(sql, payload)
+  await runJsonBatches(crm, sql, payload)
   return payload.length
 }
 
-async function refreshOportunidades() {
-  const { rows } = await crm.query('select public.refresh_oportunidades_cache() as total')
+async function refreshOportunidades(crm: Sql) {
+  const rows = await crm.unsafe('select public.refresh_oportunidades_cache() as total') as JsonRecord[]
   return rows[0]?.total ?? null
 }
 
-function hasContact(value) {
-  return Boolean(String(value ?? '').replace(/\D/g, '').length >= 8)
+async function ensureSyncTables(crm: Sql) {
+  await crm.unsafe(`
+    create table if not exists public.crm_patio_sync_runs (
+      id uuid primary key default gen_random_uuid(),
+      started_at timestamptz not null default now(),
+      finished_at timestamptz,
+      status text not null default 'running' check (status in ('running', 'ok', 'erro')),
+      mode text not null default 'edge',
+      interval_ms integer,
+      host text,
+      pid integer,
+      crm_database text,
+      patio_database text,
+      summary jsonb not null default '{}'::jsonb,
+      error_message text
+    )
+  `)
+  await crm.unsafe(`
+    create index if not exists crm_patio_sync_runs_started_idx
+    on public.crm_patio_sync_runs(started_at desc)
+  `)
+  await crm.unsafe(`
+    create table if not exists public.crm_patio_sync_state (
+      source_key text primary key,
+      last_cursor_at timestamptz,
+      last_cursor_id bigint,
+      updated_at timestamptz not null default now()
+    )
+  `)
 }
 
-function normalizePlate(value) {
-  return String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
-}
-
-function normalize(value) {
-  return String(value ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^A-Z0-9]+/gi, ' ')
-    .trim()
-    .toUpperCase()
-}
-
-async function runJsonBatches(sql, rows, size = 2000) {
-  for (let index = 0; index < rows.length; index += size) {
-    const batch = rows.slice(index, index + size)
-    if (batch.length > 0) await crm.query(sql, [JSON.stringify(batch)])
-  }
-}
-
-async function loadSyncState() {
-  const { rows } = await crm.query(`
+async function loadSyncState(crm: Sql) {
+  const rows = await crm.unsafe(`
     select source_key, last_cursor_at, last_cursor_id
     from public.crm_patio_sync_state
-  `)
-  return new Map(rows.map((row) => [row.source_key, {
-    lastCursorAt: row.last_cursor_at,
+  `) as JsonRecord[]
+  return new Map<string, SyncState>(rows.map((row) => [String(row.source_key), {
+    lastCursorAt: row.last_cursor_at ? String(row.last_cursor_at) : null,
     lastCursorId: row.last_cursor_id == null ? null : Number(row.last_cursor_id),
   }]))
 }
 
-function sourceFilter(syncState, sourceKey, {
-  timestampExpressions = [],
-  idExpression = 'id',
-  activeExpression = '',
-} = {}) {
-  if (!options.incremental) return { clause: '', params: [] }
+function sourceFilter(
+  syncState: Map<string, SyncState>,
+  sourceKey: string,
+  options: SyncOptions,
+  {
+    timestampExpressions = [],
+    idExpression = 'id',
+    activeExpression = '',
+  }: {
+    timestampExpressions?: string[]
+    idExpression?: string
+    activeExpression?: string
+  } = {},
+) {
+  if (!options.incremental) return { clause: '', params: [] as SqlParam[] }
 
   const state = syncState.get(sourceKey)
-  if (!state?.lastCursorAt && !state?.lastCursorId) return { clause: '', params: [] }
+  if (!state?.lastCursorAt && !state?.lastCursorId) return { clause: '', params: [] as SqlParam[] }
 
-  const params = []
-  const conditions = []
+  const params: SqlParam[] = []
+  const conditions: string[] = []
 
   if (state.lastCursorId) {
     params.push(state.lastCursorId)
@@ -954,7 +950,7 @@ function sourceFilter(syncState, sourceKey, {
   }
 
   if (state.lastCursorAt && timestampExpressions.length > 0) {
-    params.push(withLookback(state.lastCursorAt))
+    params.push(withLookback(state.lastCursorAt, options.lookbackMs))
     conditions.push(`(${timestampExpressions.map((expression) => `${expression} >= $${params.length}`).join(' or ')})`)
   }
 
@@ -962,16 +958,16 @@ function sourceFilter(syncState, sourceKey, {
     conditions.push(`(${activeExpression})`)
   }
 
-  if (conditions.length === 0) return { clause: '', params: [] }
+  if (conditions.length === 0) return { clause: '', params: [] as SqlParam[] }
   return { clause: `where ${conditions.join(' or ')}`, params }
 }
 
-async function updateSyncState(sourceKey, rows, timestampFields) {
+async function updateSyncState(crm: Sql, sourceKey: string, rows: JsonRecord[], timestampFields: string[]) {
   const lastCursorId = maxNumeric(rows.map((row) => row.id))
   const lastCursorAt = maxDate(rows.flatMap((row) => timestampFields.map((field) => row[field])))
   if (!lastCursorId && !lastCursorAt) return
 
-  await crm.query(`
+  await crm.unsafe(`
     insert into public.crm_patio_sync_state (source_key, last_cursor_at, last_cursor_id, updated_at)
     values ($1, $2, $3, now())
     on conflict (source_key) do update set
@@ -987,112 +983,27 @@ async function updateSyncState(sourceKey, rows, timestampFields) {
   `, [sourceKey, lastCursorAt, lastCursorId])
 }
 
-function maxNumeric(values) {
-  return values.reduce((max, value) => {
-    const number = Number(value)
-    return Number.isFinite(number) && number > max ? number : max
-  }, 0) || null
-}
-
-function maxDate(values) {
-  let max = null
-  for (const value of values) {
-    if (!value) continue
-    const date = new Date(value)
-    if (Number.isNaN(date.getTime())) continue
-    if (!max || date > max) max = date
-  }
-  return max ? max.toISOString() : null
-}
-
-function withLookback(value) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Date(date.getTime() - options.lookbackMs).toISOString()
-}
-
-function loadEnvFile(fileName) {
-  const envPath = path.resolve(fileName)
-  if (!fs.existsSync(envPath)) return
-  const lines = fs.readFileSync(envPath, 'utf8').split(/\r?\n/)
-  lines.forEach((line) => {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) return
-    const separator = trimmed.indexOf('=')
-    if (separator === -1) return
-
-    const key = trimmed.slice(0, separator).trim()
-    const value = trimmed.slice(separator + 1).trim().replace(/^['"]|['"]$/g, '')
-    if (!process.env[key]) process.env[key] = value
-  })
-}
-
-function loadEnvValue(envPath, keys) {
-  if (!fs.existsSync(envPath)) return undefined
-  const values = new Map()
-  const lines = fs.readFileSync(envPath, 'utf8').split(/\r?\n/)
-  lines.forEach((line) => {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) return
-    const separator = trimmed.indexOf('=')
-    if (separator === -1) return
-    values.set(trimmed.slice(0, separator).trim(), trimmed.slice(separator + 1).trim().replace(/^['"]|['"]$/g, ''))
-  })
-  return keys.map((key) => values.get(key)).find(Boolean)
-}
-
-async function ensureSyncRunTable() {
-  await crm.query(`
-    create table if not exists public.crm_patio_sync_runs (
-      id uuid primary key default gen_random_uuid(),
-      started_at timestamptz not null default now(),
-      finished_at timestamptz,
-      status text not null default 'running' check (status in ('running', 'ok', 'erro')),
-      mode text not null default 'once',
-      interval_ms integer,
-      host text,
-      pid integer,
-      crm_database text,
-      patio_database text,
-      summary jsonb not null default '{}'::jsonb,
-      error_message text
-    )
-  `)
-  await crm.query(`
-    create index if not exists crm_patio_sync_runs_started_idx
-    on public.crm_patio_sync_runs(started_at desc)
-  `)
-  await crm.query(`
-    create table if not exists public.crm_patio_sync_state (
-      source_key text primary key,
-      last_cursor_at timestamptz,
-      last_cursor_id bigint,
-      updated_at timestamptz not null default now()
-    )
-  `)
-}
-
-async function createSyncRun({ mode, startedAt }) {
-  const { rows } = await crm.query(`
+async function createSyncRun(
+  crm: Sql,
+  { mode, startedAt, options }: { mode: string; startedAt: Date; options: SyncOptions },
+) {
+  const rows = await crm.unsafe(`
     insert into public.crm_patio_sync_runs (
       started_at, status, mode, interval_ms, host, pid, crm_database, patio_database
     )
-    values ($1, 'running', $2, $3, $4, $5, $6, $7)
+    values ($1, 'running', $2, null, 'supabase-edge', null, $3, $4)
     returning id
   `, [
     startedAt.toISOString(),
     mode,
-    options.watch ? options.intervalMs : null,
-    os.hostname(),
-    process.pid,
-    connectionLabel(crmDbUrl),
-    connectionLabel(patioDbUrl),
-  ])
-  return rows[0]?.id ?? null
+    connectionLabel(requiredEnv('CRM_DB_URL')),
+    connectionLabel(requiredEnv('PATIO_DB_URL')),
+  ]) as JsonRecord[]
+  return rows[0]?.id as string
 }
 
-async function finishSyncRun(runId, status, summary, error) {
-  await crm.query(`
+async function finishSyncRun(crm: Sql, runId: string, status: 'ok' | 'erro', summary: unknown, error?: unknown) {
+  await crm.unsafe(`
     update public.crm_patio_sync_runs
     set finished_at = now(),
         status = $2,
@@ -1102,68 +1013,108 @@ async function finishSyncRun(runId, status, summary, error) {
   `, [
     runId,
     status,
-    JSON.stringify(summary ?? {}),
+    crm.json((summary ?? {}) as SqlJsonParam),
     error instanceof Error ? error.message : error ? String(error) : null,
   ])
 }
 
-async function acquireSyncLock() {
-  const { rows } = await crm.query('select pg_try_advisory_lock(2026070301) as locked')
+async function acquireSyncLock(crm: Sql) {
+  const rows = await crm.unsafe('select pg_try_advisory_lock($1) as locked', [LOCK_ID]) as JsonRecord[]
   return rows[0]?.locked === true
 }
 
-async function releaseSyncLock() {
-  await crm.query('select pg_advisory_unlock(2026070301)')
+async function releaseSyncLock(crm: Sql) {
+  await crm.unsafe('select pg_advisory_unlock($1)', [LOCK_ID])
 }
 
-function validateEnv() {
-  if (!crmDbUrl) {
-    throw new Error('SUPABASE_DB_DIRECT_URL ou SUPABASE_DB_URL nao configurada no CRM.')
-  }
-
-  if (!patioDbUrl) {
-    throw new Error('PATIO_DB_URL nao configurada e .env do controle-patio nao encontrado.')
+async function runJsonBatches(crm: Sql, sql: string, rows: unknown[], size = 2000) {
+  for (let index = 0; index < rows.length; index += size) {
+    const batch = rows.slice(index, index + size)
+    if (batch.length > 0) await crm.unsafe(sql, [crm.json(batch as SqlJsonParam)])
   }
 }
 
-function parseArgs(args) {
-  const parsed = {
-    help: false,
-    watch: false,
-    incremental: process.env.PATIO_CRM_SYNC_MODE === 'incremental',
-    intervalMs: Number(process.env.PATIO_CRM_SYNC_INTERVAL_MS || 5 * 60 * 1000),
-    lookbackMs: Number(process.env.PATIO_CRM_SYNC_LOOKBACK_MS || 10 * 60 * 1000),
-    maxFailures: Number(process.env.PATIO_CRM_SYNC_MAX_FAILURES || 0),
-    refreshOportunidades: process.env.PATIO_CRM_SYNC_REFRESH_OPORTUNIDADES !== 'false',
-  }
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index]
-    if (arg === '--help' || arg === '-h') parsed.help = true
-    if (arg === '--watch') parsed.watch = true
-    if (arg === '--once') parsed.watch = false
-    if (arg === '--incremental') parsed.incremental = true
-    if (arg === '--full') parsed.incremental = false
-    if (arg === '--no-refresh-oportunidades') parsed.refreshOportunidades = false
-    if (arg === '--interval-ms') parsed.intervalMs = positiveNumber(args[index += 1], parsed.intervalMs)
-    if (arg === '--interval-seconds') parsed.intervalMs = positiveNumber(args[index += 1], parsed.intervalMs / 1000) * 1000
-    if (arg === '--lookback-ms') parsed.lookbackMs = positiveNumber(args[index += 1], parsed.lookbackMs)
-    if (arg === '--lookback-seconds') parsed.lookbackMs = positiveNumber(args[index += 1], parsed.lookbackMs / 1000) * 1000
-    if (arg === '--max-failures') parsed.maxFailures = positiveNumber(args[index += 1], parsed.maxFailures)
-  }
-
-  parsed.intervalMs = Math.max(30_000, Math.round(parsed.intervalMs))
-  parsed.lookbackMs = Math.max(0, Math.round(parsed.lookbackMs))
-  parsed.maxFailures = Math.max(0, Math.round(parsed.maxFailures))
-  return parsed
+function createSql(connectionString: string) {
+  return postgres(connectionString, {
+    max: 1,
+    prepare: false,
+    idle_timeout: 5,
+    connect_timeout: 30,
+  })
 }
 
-function positiveNumber(value, fallback) {
+function parseOptions(body: JsonRecord): SyncOptions {
+  const mode = String(body.mode ?? Deno.env.get('PATIO_CRM_SYNC_MODE') ?? 'incremental')
+  return {
+    incremental: mode !== 'full',
+    lookbackMs: positiveNumber(body.lookbackMs, positiveNumber(Deno.env.get('PATIO_CRM_SYNC_LOOKBACK_MS'), 10 * 60 * 1000)),
+    refreshOportunidades: body.refreshOportunidades !== false && Deno.env.get('PATIO_CRM_SYNC_REFRESH_OPORTUNIDADES') !== 'false',
+  }
+}
+
+function assertSyncSecret(request: Request) {
+  const expected = requiredEnv('SYNC_PATIO_CRM_SECRET')
+  const auth = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '').trim()
+  const provided = request.headers.get('x-sync-secret')?.trim() || auth
+
+  if (!provided || provided !== expected) {
+    throw new HttpError('Chave de sincronizacao invalida.', 401)
+  }
+}
+
+function requiredEnv(name: string) {
+  const value = Deno.env.get(name)
+  if (!value) throw new Error(`${name} nao configurada na Edge Function.`)
+  return value
+}
+
+function hasContact(value: unknown) {
+  return Boolean(String(value ?? '').replace(/\D/g, '').length >= 8)
+}
+
+function normalizePlate(value: unknown) {
+  return String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+}
+
+function normalize(value: unknown) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Z0-9]+/gi, ' ')
+    .trim()
+    .toUpperCase()
+}
+
+function maxNumeric(values: unknown[]) {
+  return values.reduce<number>((max, value) => {
+    const number = Number(value)
+    return Number.isFinite(number) && number > max ? number : max
+  }, 0) || null
+}
+
+function maxDate(values: unknown[]) {
+  let max: Date | null = null
+  for (const value of values) {
+    if (!value) continue
+    const date = new Date(String(value))
+    if (Number.isNaN(date.getTime())) continue
+    if (!max || date > max) max = date
+  }
+  return max ? max.toISOString() : null
+}
+
+function withLookback(value: string, lookbackMs: number) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Date(date.getTime() - lookbackMs).toISOString()
+}
+
+function positiveNumber(value: unknown, fallback: number) {
   const parsed = Number(value)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
 }
 
-function connectionLabel(connectionString) {
+function connectionLabel(connectionString: string) {
   try {
     const url = new URL(connectionString)
     return `${url.hostname}/${url.pathname.replace(/^\//, '')}`
@@ -1172,37 +1123,21 @@ function connectionLabel(connectionString) {
   }
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json',
+    },
+  })
 }
 
-function printHelp() {
-  console.log(`
-Sincroniza o Supabase do Patio para as tabelas snapshot do CRM.
+class HttpError extends Error {
+  status: number
 
-Uso:
-  node scripts/sync-patio-to-crm.mjs
-  node scripts/sync-patio-to-crm.mjs --incremental
-  node scripts/sync-patio-to-crm.mjs --watch --interval-seconds 300
-
-Variaveis:
-  SUPABASE_DB_DIRECT_URL ou SUPABASE_DB_URL  Banco destino do CRM
-  PATIO_DB_URL ou PATIO_DATABASE_URL         Banco origem do Patio
-  PATIO_CRM_SYNC_MODE                        full ou incremental
-  PATIO_CRM_SYNC_INTERVAL_MS                Intervalo do modo watch
-  PATIO_CRM_SYNC_LOOKBACK_MS                Margem de seguranca do incremental
-  PATIO_CRM_SYNC_MAX_FAILURES               Falhas consecutivas antes de parar
-
-Opcoes:
-  --once                         Executa uma vez (padrao)
-  --watch                        Mantem sincronizando em loop
-  --full                         Reprocessa tabelas inteiras
-  --incremental                  Busca apenas novos/alterados desde o cursor
-  --interval-ms <ms>             Intervalo do loop
-  --interval-seconds <segundos>  Intervalo do loop
-  --lookback-ms <ms>             Rele uma margem antes do cursor
-  --lookback-seconds <segundos>  Rele uma margem antes do cursor
-  --max-failures <numero>        Para apos N falhas consecutivas; 0 nunca para
-  --no-refresh-oportunidades     Nao executa refresh_oportunidades_cache
-`)
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
 }

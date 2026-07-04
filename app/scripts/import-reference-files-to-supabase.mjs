@@ -19,6 +19,8 @@ const limit = limitArg ? Number(limitArg.split('=')[1]) : undefined
 const batchSize = Number(process.argv.find((arg) => arg.startsWith('--batch='))?.split('=')[1] ?? 500)
 const orderBatchSize = Number(process.argv.find((arg) => arg.startsWith('--order-batch='))?.split('=')[1] ?? Math.min(batchSize, 50))
 const dryRun = process.argv.includes('--dry-run')
+const defaultCommercialVendorName = 'Mateus Silva'
+const defaultCommercialVendorKey = normalizeVendor(defaultCommercialVendorName)
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -126,7 +128,7 @@ try {
   const servicosResult = await step('importando itens de servicos', () => upsertServicos(movimentosComVeiculo.filter((item) => item.tipo === 'servico'), clienteIndex, veiculoIndex, ordemIndex, importacao.id))
   const catalogoResult = await step('importando catalogo/precos', () => upsertCatalogo([...precosProdutos, ...precosServicos], arquivos))
 
-  const postProcessResult = await step('finalizando importacao e oportunidades', () => finalizarImportacaoDiaria())
+  const postProcessResult = await step('finalizando importacao e oportunidades', () => finalizarImportacaoDiaria(importacao.id))
   await updateImportacao(importacao.id, {
     total_linhas: clientesImportacao.length + carros.length + movimentos.length + precosProdutos.length + precosServicos.length,
     clientes_encontrados: clientesImportacao.length,
@@ -286,6 +288,10 @@ async function fetchAppUsers() {
 
 async function upsertClientes(rows, appUsers) {
   const deduped = dedupe(rows, (row) => row.codigo_erp || row.cpf_cnpj || normalizeKey(row.nome))
+  const defaultVendorId = appUsers.get(defaultCommercialVendorKey)
+  if (!defaultVendorId) {
+    throw new Error(`Usuario comercial padrao nao encontrado: ${defaultCommercialVendorName}`)
+  }
   const payload = deduped.map((cliente) => {
     const vendedor = splitVendor(cliente.vendedor_nome)
     return {
@@ -302,7 +308,7 @@ async function upsertClientes(rows, appUsers) {
       telefone_principal: cliente.telefone_principal || null,
       whatsapp_principal: cliente.telefone_principal || null,
       email: cliente.email || cliente.email_comercial || null,
-      vendedor_id: appUsers.get(normalizeVendor(vendedor.nome)) ?? null,
+      vendedor_id: defaultVendorId,
       vendedor_codigo_erp: vendedor.codigo || null,
       vendedor_nome_erp: vendedor.nome || null,
       canal_venda: cliente.canal_venda || null,
@@ -416,7 +422,7 @@ async function upsertOrdens(rows, clienteIndex, veiculoIndex, importacaoId) {
       nota: row.nota || null,
       pedido: row.pedido || null,
       cfop: row.cfop || null,
-      vendedor_nome: normalizeVendor(row.vendedor_nome) || null,
+      vendedor_nome: defaultCommercialVendorName,
       unidade: row.unidade || null,
       total_pedido: row.total_pedido || 0,
       placa_extraida: row.veiculo_ref?.placa || row.placa || null,
@@ -577,7 +583,7 @@ async function upsertVendas(rows, clienteIndex, veiculoIndex, ordemIndex, import
       quantidade: row.quantidade || 0,
       valor_unitario: row.valor_unitario || 0,
       valor_total: row.valor_total || 0,
-      vendedor_nome: normalizeVendor(row.vendedor_nome) || null,
+      vendedor_nome: defaultCommercialVendorName,
       unidade: row.unidade || null,
       lote_serie: row.lote_serie || null,
       cfop: row.cfop || null,
@@ -626,7 +632,7 @@ async function upsertServicos(rows, clienteIndex, veiculoIndex, ordemIndex, impo
       valor_total: row.valor_total || 0,
       placa: veiculoRef?.placa || null,
       observacao: veiculoRef ? `Veiculo vinculado por ${veiculoRef.match}` : null,
-      vendedor_nome: normalizeVendor(row.vendedor_nome) || null,
+      vendedor_nome: defaultCommercialVendorName,
       unidade: row.unidade || null,
       lote_serie: row.lote_serie || null,
       cfop: row.cfop || null,
@@ -730,8 +736,8 @@ function nullableNumber(value) {
   return Number(value)
 }
 
-async function finalizarImportacaoDiaria() {
-  const { data, error } = await supabase.rpc('finalizar_importacao_diaria')
+async function finalizarImportacaoDiaria(importacaoId) {
+  const { data, error } = await supabase.rpc('finalizar_importacao_diaria', importacaoId ? { p_importacao_id: importacaoId } : {})
   if (error) throw error
   return data
 }

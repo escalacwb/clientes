@@ -50,9 +50,26 @@ export type ReferenceImportResult = {
     clientes_atualizados?: number
     oportunidades_geradas?: number
     tarefas_followup?: FollowupAutomationResult
+    patio_vinculos?: PatioVinculosResult
   }
   movimentosComVeiculo: number
   movimentosSemVeiculo: number
+}
+
+export type PatioVinculosResult = {
+  importacao_id?: string | null
+  data_inicio?: string
+  data_fim?: string
+  dry_run?: boolean
+  candidatos_placa_km_data?: number
+  atendimentos_seguros?: number
+  atendimentos_atualizar?: number
+  atendimentos_atualizados?: number
+  itens_atualizados?: number
+  veiculos_atualizados?: number
+  conflitos_ambiguos?: number
+  conflitos_registrados?: number
+  auditorias_registradas?: number
 }
 
 export type FollowupAutomationResult = {

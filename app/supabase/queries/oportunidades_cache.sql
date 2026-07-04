@@ -40,6 +40,67 @@ on public.oportunidades_cache for all
 using (public.current_user_is_admin())
 with check (public.current_user_is_admin());
 
+create or replace function public.gerar_tarefas_oportunidades_contato()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  inserted_count integer;
+begin
+  if auth.uid() is not null and not public.current_user_is_admin() then
+    raise exception 'Apenas administradores podem gerar tarefas automaticas de oportunidades.';
+  end if;
+
+  insert into public.tarefas (
+    cliente_id,
+    vendedor_id,
+    titulo,
+    descricao,
+    data_vencimento,
+    status,
+    prioridade,
+    origem
+  )
+  select
+    oc.cliente_id,
+    coalesce(oc.vendedor_id, c.vendedor_id),
+    oc.proxima_acao,
+    concat(
+      oc.motivo,
+      E'\n\nGerada automaticamente pela fila de oportunidades. ',
+      'Se o contato for concluido e o cliente continuar sem voltar, a mesma regra respeita 30 dias de carencia antes de criar outra tarefa.'
+    ),
+    current_date,
+    'aberta',
+    oc.prioridade,
+    'oportunidade:' || oc.tipo
+  from public.oportunidades_cache oc
+  join public.clientes c on c.id = oc.cliente_id
+  where not oc.bloqueada
+    and oc.tipo <> 'sem_vendedor'
+    and coalesce(oc.vendedor_id, c.vendedor_id) is not null
+    and not exists (
+      select 1
+      from public.tarefas aberta
+      where aberta.cliente_id = oc.cliente_id
+        and aberta.status = 'aberta'
+        and aberta.origem = 'oportunidade:' || oc.tipo
+    )
+    and not exists (
+      select 1
+      from public.tarefas recente
+      where recente.cliente_id = oc.cliente_id
+        and recente.origem = 'oportunidade:' || oc.tipo
+        and coalesce(recente.concluida_em, recente.reagendada_em, recente.criado_em) >= now() - interval '30 days'
+    );
+
+  get diagnostics inserted_count = row_count;
+  return inserted_count;
+end;
+$$;
+
 create or replace function public.refresh_oportunidades_cache()
 returns integer
 language plpgsql
@@ -81,6 +142,19 @@ begin
   from public.oportunidades_clientes;
 
   get diagnostics inserted_count = row_count;
+
+  perform public.gerar_tarefas_oportunidades_contato();
+
+  update public.oportunidades_cache oc
+  set tarefa_existente = true
+  where exists (
+    select 1
+    from public.tarefas t
+    where t.cliente_id = oc.cliente_id
+      and t.status = 'aberta'
+      and t.origem = 'oportunidade:' || oc.tipo
+  );
+
   return inserted_count;
 end;
 $$;
@@ -120,8 +194,9 @@ select
   o.vendedor_id,
   o.tipo,
   count(*)::integer as total,
-  count(*) filter (where not o.bloqueada and not o.tarefa_existente)::integer as ativas,
-  count(*) filter (where o.bloqueada or o.tarefa_existente)::integer as bloqueadas,
+  count(*) filter (where not o.bloqueada)::integer as ativas,
+  count(*) filter (where o.bloqueada)::integer as bloqueadas,
+  count(*) filter (where o.tarefa_existente)::integer as com_tarefa,
   round(avg(o.prioridade), 1)::numeric(6, 1) as prioridade_media,
   max(o.prioridade)::integer as prioridade_maxima,
   max(o.gerado_em) as gerado_em
