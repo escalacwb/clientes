@@ -1643,6 +1643,7 @@ function App() {
   }, [clientes, session])
   const selectedClient =
     scopedClientes.find((cliente) => cliente.id === selectedClientId) ??
+    clientes.find((cliente) => cliente.id === selectedClientId) ??
     scopedClientes[0] ??
     clientes[0] ??
     emptyClient
@@ -3082,8 +3083,9 @@ function App() {
               setTarefasPage(1)
             }}
             onOpenClient={(clienteId) => {
-              setSelectedClientId(clienteId)
-              setView('cliente360')
+              void openClientFromCockpit(clienteId).catch((exception) => {
+                setModuleError('tarefas', exception instanceof Error ? exception.message : 'Nao foi possivel abrir a ficha do cliente.')
+              })
             }}
             onOpenBudgetEditor={(clienteId, originContext) => {
               void openQuoteForClient(clienteId, 'tarefas', originContext ?? { kind: 'tarefa', label: 'Fila de tarefas' })
