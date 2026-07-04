@@ -11003,7 +11003,15 @@ function RelatoriosCrm({
     janelaDias,
   }
   const total = rows.find((row) => row.fonte === 'total') ?? emptyTotal
-  const fonteRows = rows.filter((row) => row.fonte !== 'total')
+  const emptySource = (fonte: 'crm' | 'historico_patio', fonteLabel: string): PatioRevisaoEfetividadeResumo => ({
+    ...emptyTotal,
+    fonte,
+    fonteLabel,
+  })
+  const fonteRows = [
+    rows.find((row) => row.fonte === 'crm') ?? emptySource('crm', 'CRM atual'),
+    rows.find((row) => row.fonte === 'historico_patio') ?? emptySource('historico_patio', 'Historico patio'),
+  ]
   const baseFechada = total.retornaramJanela + total.semRetornoJanela
 
   return (
