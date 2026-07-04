@@ -702,6 +702,14 @@ create index if not exists interacoes_revisao_patio_idx
 on public.interacoes(tipo, patio_veiculo_id, data_interacao desc)
 where tipo = 'revisao_proativa';
 
+create index if not exists patio_atendimentos_revisao_retorno_idx
+on public.patio_atendimentos(patio_veiculo_id, inicio_execucao)
+where status = 'finalizado';
+
+create index if not exists patio_atendimentos_revisao_data_idx
+on public.patio_atendimentos(inicio_execucao)
+where status = 'finalizado';
+
 create or replace view public.vw_patio_revisao_resultados
 with (security_invoker = true) as
 with acoes as (
@@ -766,6 +774,153 @@ select
   30::integer as janela_dias
 from acoes a
 left join retornos retorno on retorno.patio_veiculo_id = a.patio_veiculo_id;
+
+create or replace function public.resumo_patio_revisao_efetividade(
+  p_dias_janela integer default 30
+)
+returns table (
+  fonte text,
+  fonte_label text,
+  contatos_total integer,
+  retornaram_janela integer,
+  sem_retorno_janela integer,
+  aguardando integer,
+  taxa_total numeric,
+  taxa_maturada numeric,
+  primeira_acao date,
+  ultima_acao date,
+  janela_dias integer
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with params as (
+    select greatest(1, least(coalesce(p_dias_janela, 30), 180))::integer as janela_dias
+  ),
+  crm_acoes as (
+    select
+      'crm'::text as fonte,
+      ('crm:' || i.id::text) as acao_id,
+      i.patio_veiculo_id,
+      i.cliente_id,
+      coalesce(i.vendedor_id, c.vendedor_id) as vendedor_id,
+      i.data_interacao::date as data_acao,
+      nullif(upper(regexp_replace(coalesce(i.placa, v.placa, pvs.placa, ''), '[^A-Z0-9]', '', 'g')), '') as placa_key
+    from public.interacoes i
+    join public.clientes c on c.id = i.cliente_id
+    left join public.patio_veiculos_snapshot pvs on pvs.patio_veiculo_id = i.patio_veiculo_id
+    left join public.veiculos v on v.id = pvs.veiculo_id
+    where i.tipo = 'revisao_proativa'
+      and c.excluido_em is null
+      and i.patio_veiculo_id is not null
+  ),
+  historico_patio_acoes as (
+    select
+      'historico_patio'::text as fonte,
+      ('patio:' || pvs.patio_veiculo_id::text || ':' || pvs.data_revisao_proativa::text) as acao_id,
+      pvs.patio_veiculo_id,
+      pvs.cliente_id,
+      c.vendedor_id,
+      pvs.data_revisao_proativa as data_acao,
+      nullif(upper(regexp_replace(coalesce(v.placa, pvs.placa, ''), '[^A-Z0-9]', '', 'g')), '') as placa_key
+    from public.patio_veiculos_snapshot pvs
+    join public.clientes c on c.id = pvs.cliente_id
+    left join public.veiculos v on v.id = pvs.veiculo_id
+    where pvs.data_revisao_proativa is not null
+      and c.excluido_em is null
+      and not exists (
+        select 1
+        from crm_acoes ca
+        where ca.patio_veiculo_id = pvs.patio_veiculo_id
+          and ca.data_acao = pvs.data_revisao_proativa
+      )
+  ),
+  acoes as (
+    select * from crm_acoes
+    union all
+    select * from historico_patio_acoes
+  ),
+  limites as (
+    select
+      min(data_acao) as inicio,
+      max(data_acao) as fim,
+      max(params.janela_dias) as janela_dias
+    from acoes
+    cross join params
+  ),
+  atendimentos as (
+    select
+      pa.patio_execucao_id,
+      pa.patio_veiculo_id,
+      nullif(upper(regexp_replace(coalesce(pa.placa_snapshot, ''), '[^A-Z0-9]', '', 'g')), '') as placa_key,
+      pa.inicio_execucao
+    from public.patio_atendimentos pa
+    join limites l on true
+    where pa.status = 'finalizado'
+      and l.inicio is not null
+      and pa.inicio_execucao >= (l.inicio + 1)::timestamptz
+      and pa.inicio_execucao < (l.fim + l.janela_dias + 1)::timestamptz
+  ),
+  retornos_id as (
+    select distinct a.acao_id
+    from acoes a
+    cross join params
+    join atendimentos pa on pa.patio_veiculo_id = a.patio_veiculo_id
+      and pa.inicio_execucao >= (a.data_acao + 1)::timestamptz
+      and pa.inicio_execucao < (a.data_acao + params.janela_dias + 1)::timestamptz
+  ),
+  retornos_placa as (
+    select distinct a.acao_id
+    from acoes a
+    cross join params
+    join atendimentos pa on a.placa_key is not null
+      and pa.placa_key = a.placa_key
+      and pa.inicio_execucao >= (a.data_acao + 1)::timestamptz
+      and pa.inicio_execucao < (a.data_acao + params.janela_dias + 1)::timestamptz
+  ),
+  resultados as (
+    select
+      a.fonte,
+      a.data_acao,
+      case
+        when ri.acao_id is not null or rp.acao_id is not null then 'retornou_janela'
+        when a.data_acao <= current_date - params.janela_dias then 'sem_retorno_janela'
+        else 'aguardando'
+      end as resultado,
+      params.janela_dias
+    from acoes a
+    cross join params
+    left join retornos_id ri on ri.acao_id = a.acao_id
+    left join retornos_placa rp on rp.acao_id = a.acao_id
+  ),
+  agregado as (
+    select
+      coalesce(fonte, 'total') as fonte,
+      case coalesce(fonte, 'total')
+        when 'crm' then 'CRM atual'
+        when 'historico_patio' then 'Historico patio'
+        else 'Total geral'
+      end as fonte_label,
+      count(*)::integer as contatos_total,
+      count(*) filter (where resultado = 'retornou_janela')::integer as retornaram_janela,
+      count(*) filter (where resultado = 'sem_retorno_janela')::integer as sem_retorno_janela,
+      count(*) filter (where resultado = 'aguardando')::integer as aguardando,
+      coalesce(round((count(*) filter (where resultado = 'retornou_janela'))::numeric * 100 / nullif(count(*), 0), 1), 0) as taxa_total,
+      coalesce(round((count(*) filter (where resultado = 'retornou_janela'))::numeric * 100 / nullif(count(*) filter (where resultado <> 'aguardando'), 0), 1), 0) as taxa_maturada,
+      min(data_acao) as primeira_acao,
+      max(data_acao) as ultima_acao,
+      max(janela_dias)::integer as janela_dias
+    from resultados
+    group by grouping sets ((fonte), ())
+  )
+  select *
+  from agregado
+  order by case fonte when 'total' then 0 when 'crm' then 1 else 2 end;
+$$;
+
+grant execute on function public.resumo_patio_revisao_efetividade(integer) to anon, authenticated, service_role;
 
 create or replace function public.listar_patio_revisao_proativa(
   p_km_min numeric default null,

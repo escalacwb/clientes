@@ -181,6 +181,20 @@ type PatioRevisaoResultadoRow = {
   janela_dias: number | null
 }
 
+type PatioRevisaoEfetividadeResumoRow = {
+  fonte: string
+  fonte_label: string
+  contatos_total: number | null
+  retornaram_janela: number | null
+  sem_retorno_janela: number | null
+  aguardando: number | null
+  taxa_total: number | string | null
+  taxa_maturada: number | string | null
+  primeira_acao: string | null
+  ultima_acao: string | null
+  janela_dias: number | null
+}
+
 export type PatioContatoExportacao = {
   tipo: 'Responsavel' | 'Motorista'
   sourceId: string
@@ -228,6 +242,20 @@ export type PatioRevisaoResultado = {
   retornoKm?: number
   resultado: PatioRevisaoResultadoStatus
   diasDesdeAcao: number
+  janelaDias: number
+}
+
+export type PatioRevisaoEfetividadeResumo = {
+  fonte: 'total' | 'crm' | 'historico_patio' | string
+  fonteLabel: string
+  contatosTotal: number
+  retornaramJanela: number
+  semRetornoJanela: number
+  aguardando: number
+  taxaTotal: number
+  taxaMaturada: number
+  primeiraAcao?: string
+  ultimaAcao?: string
   janelaDias: number
 }
 
@@ -795,6 +823,20 @@ export async function listPatioRevisaoResultados(input: {
   return (data as PatioRevisaoResultadoRow[] | null ?? []).map(mapPatioRevisaoResultado)
 }
 
+export async function listPatioRevisaoEfetividadeResumo(input: {
+  janelaDias?: number
+} = {}): Promise<PatioRevisaoEfetividadeResumo[]> {
+  const supabase = await getSupabase()
+  if (!supabase) return []
+
+  const { data, error } = await supabase.rpc('resumo_patio_revisao_efetividade', {
+    p_dias_janela: input.janelaDias ?? 30,
+  })
+
+  if (error) throw error
+  return (data as PatioRevisaoEfetividadeResumoRow[] | null ?? []).map(mapPatioRevisaoEfetividadeResumo)
+}
+
 function mapPatioRevisaoResultado(row: PatioRevisaoResultadoRow): PatioRevisaoResultado {
   return {
     patioVeiculoId: Number(row.patio_veiculo_id),
@@ -821,6 +863,22 @@ function normalizePatioRevisaoResultado(value: string | null | undefined): Patio
   if (value === 'sem_retorno_15d') return 'sem_retorno_janela'
   if (value === 'retornou_janela' || value === 'sem_retorno_janela' || value === 'aguardando') return value
   return 'aguardando'
+}
+
+function mapPatioRevisaoEfetividadeResumo(row: PatioRevisaoEfetividadeResumoRow): PatioRevisaoEfetividadeResumo {
+  return {
+    fonte: row.fonte,
+    fonteLabel: row.fonte_label,
+    contatosTotal: Number(row.contatos_total ?? 0),
+    retornaramJanela: Number(row.retornaram_janela ?? 0),
+    semRetornoJanela: Number(row.sem_retorno_janela ?? 0),
+    aguardando: Number(row.aguardando ?? 0),
+    taxaTotal: Number(row.taxa_total ?? 0),
+    taxaMaturada: Number(row.taxa_maturada ?? 0),
+    primeiraAcao: row.primeira_acao ?? undefined,
+    ultimaAcao: row.ultima_acao ?? undefined,
+    janelaDias: Number(row.janela_dias ?? 30),
+  }
 }
 
 export async function registerPatioEntrada(input: PatioEntradaInput): Promise<number> {

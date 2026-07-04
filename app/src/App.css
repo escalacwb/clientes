@@ -2408,6 +2408,10 @@ h3 {
   grid-template-columns: minmax(220px, 1.4fr) 105px 140px 105px 80px 82px;
 }
 
+.crm-revision-source-row {
+  grid-template-columns: minmax(220px, 1.4fr) 105px 105px 86px 105px 105px;
+}
+
 .seller-goals {
   grid-template-columns: minmax(180px, 1.1fr) 110px 82px 110px 90px 90px minmax(160px, 1fr) 82px;
 }
@@ -7849,6 +7853,7 @@ h3 {
   .table-row.campaign-inbox-row,
   .table-row.task,
   .table-row.catalog-row,
+  .table-row.crm-revision-source-row,
   .table-row.client360-sale,
   .table-row.client360-service,
   .table-row.client360-vehicle,

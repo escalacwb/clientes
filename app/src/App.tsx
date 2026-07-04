@@ -183,6 +183,7 @@ import {
   listPatioFilaItens,
   listPatioFilaPainel,
   listPatioFuncionarios,
+  listPatioRevisaoEfetividadeResumo,
   listPatioRevisaoProativa,
   listPatioRevisaoResultados,
   listPatioRelatorioServicos,
@@ -202,6 +203,7 @@ import {
   updatePatioVeiculoMediaKm,
   updatePatioVeiculoDados,
   type PatioContatoExportacao,
+  type PatioRevisaoEfetividadeResumo,
   type PatioRelatorioServico,
   type PatioRevisaoResultado,
 } from './repositories/patioRepository'
@@ -317,6 +319,7 @@ const navSectionsByMode: Record<AppMode, Array<{ title: string; items: Array<{ i
       title: 'Gestao',
       items: [
         { id: 'importacoes', label: 'Importacoes', icon: FileUp },
+        { id: 'relatorios-crm', label: 'Relatorios CRM', icon: BarChart3 },
         { id: 'relatorio-patio', label: 'Relatorio Patio', icon: BarChart3 },
         { id: 'patio-km-medio', label: 'KM medio placa', icon: Gauge },
         { id: 'patio-resultados', label: 'Resultados Patio', icon: Trophy },
@@ -342,7 +345,7 @@ const hiddenViewRedirects: Record<string, string> = {
   'campanhas-inbox': 'campanhas',
 }
 
-const adminOnlyViews = new Set(['importacoes', 'conflitos', 'mesclagem', 'relatorios', 'relatorio-patio', 'patio-km-medio', 'patio-resultados', 'vendedores', 'usuarios', 'auditoria'])
+const adminOnlyViews = new Set(['importacoes', 'conflitos', 'mesclagem', 'relatorios', 'relatorios-crm', 'relatorio-patio', 'patio-km-medio', 'patio-resultados', 'vendedores', 'usuarios', 'auditoria'])
 const sellerPrimaryViews = new Set(['cockpit', 'tarefas', 'clientes', 'campanhas', 'orcamentos', 'patio-feedback', 'patio-revisao'])
 const mobilePrimaryViews = new Set(['cockpit', 'tarefas', 'clientes', 'campanhas', 'orcamentos', 'patio-feedback', 'patio-revisao'])
 const mobileAllowedViews = new Set(['cockpit', 'tarefas', 'clientes', 'campanhas', 'orcamentos', 'patio-feedback', 'patio-revisao', 'cliente360', 'orcamento-editor', 'orcamento-detalhe'])
@@ -3657,6 +3660,9 @@ function App() {
             }}
           />
         )}
+        {session.role === 'admin' && view === 'relatorios-crm' && (
+          <RelatoriosCrm onLoadRevisaoEfetividade={listPatioRevisaoEfetividadeResumo} />
+        )}
         {session.role === 'admin' && view === 'relatorio-patio' && (
           <PatioRelatorioGestao onLoad={listPatioRelatorioServicos} />
         )}
@@ -3755,6 +3761,7 @@ function titleFor(view: string) {
     orcamentos: 'Propostas',
     catalogo: 'Catalogo e precos',
     relatorios: 'Relatorios gerenciais',
+    'relatorios-crm': 'Relatorios CRM',
     'relatorio-patio': 'Relatorio Patio',
     'patio-km-medio': 'KM medio por placa',
     'patio-resultados': 'Resultados Patio',
@@ -10952,6 +10959,128 @@ function PatioAnalisePneus({
       )}
     </section>
   )
+}
+
+function RelatoriosCrm({
+  onLoadRevisaoEfetividade,
+}: {
+  onLoadRevisaoEfetividade: (input?: { janelaDias?: number }) => Promise<PatioRevisaoEfetividadeResumo[]>
+}) {
+  const janelaDias = 30
+  const [rows, setRows] = useState<PatioRevisaoEfetividadeResumo[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let isMounted = true
+    setIsLoading(true)
+    setError('')
+    onLoadRevisaoEfetividade({ janelaDias })
+      .then((loaded) => {
+        if (isMounted) setRows(loaded)
+      })
+      .catch((exception) => {
+        if (isMounted) setError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar relatorios CRM.')
+      })
+      .finally(() => {
+        if (isMounted) setIsLoading(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [onLoadRevisaoEfetividade])
+
+  const emptyTotal: PatioRevisaoEfetividadeResumo = {
+    fonte: 'total',
+    fonteLabel: 'Total geral',
+    contatosTotal: 0,
+    retornaramJanela: 0,
+    semRetornoJanela: 0,
+    aguardando: 0,
+    taxaTotal: 0,
+    taxaMaturada: 0,
+    janelaDias,
+  }
+  const total = rows.find((row) => row.fonte === 'total') ?? emptyTotal
+  const fonteRows = rows.filter((row) => row.fonte !== 'total')
+  const baseFechada = total.retornaramJanela + total.semRetornoJanela
+
+  return (
+    <section className="page-section">
+      <div className="section-header">
+        <div>
+          <span>Gestao CRM</span>
+          <h2>Relatorios CRM</h2>
+          <p>Efetividade dos contatos de revisao proativa com retorno da placa em ate {janelaDias} dias.</p>
+        </div>
+        <button className="button" type="button" onClick={() => {
+          setIsLoading(true)
+          setError('')
+          onLoadRevisaoEfetividade({ janelaDias })
+            .then(setRows)
+            .catch((exception) => setError(exception instanceof Error ? exception.message : 'Nao foi possivel atualizar relatorios CRM.'))
+            .finally(() => setIsLoading(false))
+        }}>
+          {isLoading ? 'Atualizando...' : 'Atualizar'}
+        </button>
+      </div>
+
+      {error && <div className="alert">{error}</div>}
+
+      <div className="metrics-grid">
+        <Metric icon={MessageCircle} label="Contatados" value={numberLabel(total.contatosTotal)} tone="blue" />
+        <Metric icon={CheckCircle2} label={`Voltaram ${janelaDias}d`} value={numberLabel(total.retornaramJanela)} tone="green" />
+        <Metric icon={Trophy} label="% sobre total" value={percentLabel(total.taxaTotal)} tone="amber" />
+        <Metric icon={CalendarClock} label="Aguardando" value={numberLabel(total.aguardando)} tone="blue" />
+      </div>
+
+      <section className="panel">
+        <div className="panel-header compact-panel-header">
+          <div>
+            <h3>Revisao proativa</h3>
+            <p>{numberLabel(baseFechada)} contatos ja completaram a janela de {janelaDias} dias.</p>
+          </div>
+          <strong>{percentLabel(total.taxaMaturada)}</strong>
+        </div>
+        <div className="info-grid">
+          <Info label="Sem retorno" value={numberLabel(total.semRetornoJanela)} />
+          <Info label="Primeiro contato" value={total.primeiraAcao ? dateLabel(total.primeiraAcao) : '-'} />
+          <Info label="Ultimo contato" value={total.ultimaAcao ? dateLabel(total.ultimaAcao) : '-'} />
+          <Info label="Janela" value={`${janelaDias} dias`} />
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h3>Por fonte</h3>
+            <p>Separacao entre contatos marcados no CRM atual e historico ja trazido do patio.</p>
+          </div>
+        </div>
+        <div className="table">
+          {fonteRows.map((row) => (
+            <div className="table-row crm-revision-source-row" key={row.fonte}>
+              <span>
+                <strong>{row.fonteLabel}</strong>
+                <small>{row.primeiraAcao && row.ultimaAcao ? `${dateLabel(row.primeiraAcao)} ate ${dateLabel(row.ultimaAcao)}` : 'Sem periodo medido'}</small>
+              </span>
+              <span><small>Contatados</small><strong>{numberLabel(row.contatosTotal)}</strong></span>
+              <span><small>Voltaram</small><strong>{numberLabel(row.retornaramJanela)}</strong></span>
+              <span><small>% total</small><strong>{percentLabel(row.taxaTotal)}</strong></span>
+              <span><small>Aguardando</small><strong>{numberLabel(row.aguardando)}</strong></span>
+              <span><small>Sem retorno</small><strong>{numberLabel(row.semRetornoJanela)}</strong></span>
+            </div>
+          ))}
+          {!isLoading && fonteRows.length === 0 && <div className="empty-state">Sem contatos de revisao proativa medidos ainda.</div>}
+        </div>
+      </section>
+    </section>
+  )
+}
+
+function percentLabel(value: number) {
+  return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
 }
 
 function PatioRelatorioGestao({
