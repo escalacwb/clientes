@@ -5521,18 +5521,6 @@ h3 {
   padding-top: 12px;
 }
 
-.client360-contact-signals {
-  display: grid;
-  gap: 8px;
-  border-top: 1px solid #e1e8e3;
-  margin-top: 12px;
-  padding-top: 12px;
-}
-
-.client360-contact-signals > strong {
-  color: #173d38;
-}
-
 .client360-history-quote {
   display: grid;
   gap: 10px;

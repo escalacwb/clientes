@@ -13781,12 +13781,6 @@ function Cliente360({
             <div className="status-row"><span>Proxima recompra</span><strong>{dateLabel(proximaRecompra)}</strong></div>
             <div className="status-row"><span>Tarefas abertas</span><strong>{tarefasAbertas.length}</strong></div>
           </div>
-          {contactSignals.length > 0 && (
-            <div className="client360-contact-signals">
-              <strong>Sinais para este contato</strong>
-              <OpportunityContactHints oportunidades={contactSignals} />
-            </div>
-          )}
           <div className="client360-history-quote">
             <div>
               <strong>Proposta sugerida pelo historico</strong>
