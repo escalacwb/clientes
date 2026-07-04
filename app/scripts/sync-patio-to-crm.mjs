@@ -134,6 +134,7 @@ async function runSyncOnce({ mode }) {
     const patioBoxesCount = await upsertPatioBoxes()
     const patioAtendimentosCount = await upsertPatioAtendimentos(clienteMap, veiculoMap, syncState)
     const patioAtendimentoItensCount = await upsertPatioAtendimentoItens(clienteMap, veiculoMap, syncState)
+    const patioAtendimentosRemovidos = await reconcileMissingActivePatioAtendimentos()
     const patioContatosCount = await upsertPatioContatos(patioClientes, patioVeiculos, clienteMap)
     const oportunidadesAtualizadas = options.refreshOportunidades ? await refreshOportunidades() : null
 
@@ -151,6 +152,7 @@ async function runSyncOnce({ mode }) {
       patio_boxes: patioBoxesCount,
       patio_atendimentos: patioAtendimentosCount,
       patio_atendimento_itens: patioAtendimentoItensCount,
+      patio_atendimentos_removidos_origem: patioAtendimentosRemovidos,
       patio_contatos: patioContatosCount,
       oportunidades_atualizadas: oportunidadesAtualizadas,
     }
@@ -788,6 +790,54 @@ async function upsertPatioAtendimentoItens(clienteMap, veiculoMap, syncState) {
   }
 
   return total
+}
+
+async function reconcileMissingActivePatioAtendimentos() {
+  const { rows: activeRows } = await patio.query(`
+    select id
+    from public.execucao_servico
+    where ${ACTIVE_PATIO_STATUS}
+  `)
+
+  const activeIds = activeRows
+    .map((row) => Number(row.id))
+    .filter((id) => Number.isFinite(id))
+
+  const { rows } = await crm.query(`
+    with active_source as (
+      select value::bigint as patio_execucao_id
+      from jsonb_array_elements_text($1::jsonb)
+    ),
+    stale as (
+      select pa.patio_execucao_id
+      from public.patio_atendimentos pa
+      where pa.status is distinct from 'finalizado'
+        and pa.status is distinct from 'removido_origem'
+        and pa.patio_execucao_id < 1000000000
+        and coalesce(pa.raw_data->>'origem', 'patio') <> 'crm_patio'
+        and not exists (
+          select 1
+          from active_source s
+          where s.patio_execucao_id = pa.patio_execucao_id
+        )
+    )
+    update public.patio_atendimentos pa
+    set status = 'removido_origem',
+        box_id = null,
+        funcionario_id = null,
+        fim_execucao = coalesce(pa.fim_execucao, now()),
+        raw_data = coalesce(pa.raw_data, '{}'::jsonb) || jsonb_build_object(
+          'sync_status', 'removido_origem',
+          'status_anterior', pa.status,
+          'removido_origem_em', now()
+        ),
+        sincronizado_em = now()
+    from stale
+    where pa.patio_execucao_id = stale.patio_execucao_id
+    returning pa.patio_execucao_id
+  `, [JSON.stringify(activeIds)])
+
+  return rows.length
 }
 
 async function upsertPatioContatos(patioClientes, patioVeiculos, clienteMap) {
