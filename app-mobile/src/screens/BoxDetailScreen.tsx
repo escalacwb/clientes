@@ -5,6 +5,7 @@ import {
   SafeAreaView,
   ScrollView,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { RouteProp } from "@react-navigation/native";
@@ -17,6 +18,7 @@ import { Header } from "../components/Header";
 import { RootStackParamList } from "../navigation/types";
 import { theme } from "../theme";
 import { logEvent } from "../utils/logger";
+import { openWhatsApp } from "./crmHelpers";
 
 type ServiceItem = {
   area: string;
@@ -30,6 +32,56 @@ type ServiceItem = {
 type Props = {
   route: RouteProp<RootStackParamList, "BoxDetail">;
 };
+
+function buildBoxWhatsAppMessage(execucao: any, target: "motorista" | "responsavel") {
+  const name = target === "motorista" ? execucao?.nome_motorista : execucao?.responsavel_nome;
+  const greeting = name ? `Ola ${name},` : "Ola,";
+  const vehicle = [execucao?.placa, execucao?.modelo].filter(Boolean).join(" - ");
+  return `${greeting}
+
+Aqui e da Capital Truck Center. O veiculo ${vehicle || "em atendimento"} esta no Box ${execucao?.box_id || ""}.
+
+Qualquer novidade falamos por aqui.`;
+}
+
+function ContactLine({
+  label,
+  name,
+  phone,
+  message,
+}: {
+  label: string;
+  name?: string | null;
+  phone?: string | null;
+  message: string;
+}) {
+  const displayName = name || (phone ? "Abrir WhatsApp" : "N/A");
+
+  if (!phone) {
+    return (
+      <Text style={{ color: theme.colors.muted, marginTop: 2 }}>
+        {label}: {displayName}
+      </Text>
+    );
+  }
+
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", marginTop: 2 }}>
+      <Text style={{ color: theme.colors.muted }}>{label}: </Text>
+      <TouchableOpacity activeOpacity={0.8} onPress={() => openWhatsApp(phone || undefined, message)}>
+        <Text
+          style={{
+            color: theme.colors.primary,
+            fontWeight: "800",
+            textDecorationLine: "underline",
+          }}
+        >
+          {displayName}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 export function BoxDetailScreen({ route }: Props) {
   const { boxId } = route.params;
@@ -163,9 +215,18 @@ export function BoxDetailScreen({ route }: Props) {
             <Card>
               <Text style={{ fontWeight: "600" }}>{execucao.placa}</Text>
               <Text>{execucao.empresa}</Text>
-              <Text style={{ color: theme.colors.muted }}>
-                Motorista: {execucao.nome_motorista || "N/A"}
-              </Text>
+              <ContactLine
+                label="Motorista"
+                name={execucao.nome_motorista}
+                phone={execucao.contato_motorista}
+                message={buildBoxWhatsAppMessage(execucao, "motorista")}
+              />
+              <ContactLine
+                label="Responsavel"
+                name={execucao.responsavel_nome}
+                phone={execucao.contato_responsavel}
+                message={buildBoxWhatsAppMessage(execucao, "responsavel")}
+              />
               <Text>Funcionario: {execucao.funcionario || "N/A"}</Text>
               <Text style={{ color: theme.colors.muted }}>
                 KM entrada: {execucao.quilometragem || "N/A"}

@@ -485,11 +485,49 @@ as $$
           placa,
           cliente_nome as empresa,
           veiculo_descricao as modelo,
-          funcionario_nome as funcionario,
-          nome_motorista,
-          contato_motorista,
-          quilometragem
-        from execucao
+          e.funcionario_nome as funcionario,
+          e.nome_motorista,
+          e.contato_motorista,
+          contato.responsavel_nome,
+          contato.contato_responsavel,
+          contato.responsavel_tipo,
+          e.quilometragem
+        from execucao e
+        left join lateral (
+          select
+            contato_base.nome as responsavel_nome,
+            contato_base.whatsapp as contato_responsavel,
+            contato_base.tipo as responsavel_tipo
+          from (
+            select
+              nullif(c.responsavel_nome, '') as nome,
+              'cadastro' as tipo,
+              nullif(coalesce(c.whatsapp_principal, c.telefone_principal), '') as whatsapp,
+              0 as origem_ordem,
+              30 as prioridade,
+              c.atualizado_em
+            from public.clientes c
+            where c.id = e.cliente_id
+              and nullif(coalesce(c.whatsapp_principal, c.telefone_principal), '') is not null
+
+            union all
+
+            select
+              cc.nome,
+              coalesce(cc.tipo, 'cadastro') as tipo,
+              nullif(coalesce(cc.whatsapp, cc.telefone), '') as whatsapp,
+              1 as origem_ordem,
+              cc.prioridade,
+              cc.atualizado_em
+            from public.cliente_contatos cc
+            where cc.cliente_id = e.cliente_id
+              and cc.valido = true
+              and nullif(coalesce(cc.whatsapp, cc.telefone), '') is not null
+              and coalesce(cc.tipo, '') !~* 'motorista'
+          ) contato_base
+          order by contato_base.origem_ordem, contato_base.prioridade desc, contato_base.atualizado_em desc nulls last
+          limit 1
+        ) contato on true
       ) row
     ),
     'servicos', coalesce((select jsonb_agg(to_jsonb(servicos)) from servicos), '[]'::jsonb)
