@@ -199,6 +199,14 @@ const api = {
         );
       }
 
+      if (path === "/crm/feedback") {
+        return ok(await rpc<T>("mobile_feedback_pending", { p_limit: 100 }));
+      }
+
+      if (path === "/crm/revisao") {
+        return ok(await rpc<T>("mobile_revisao_pending", { p_limit: 100, p_offset: 0 }));
+      }
+
       const termExecucaoId = extractId(path, /^\/terms\/(\d+)$/);
       if (termExecucaoId !== null) {
         const data = await rpc<T>("mobile_term_data", { p_execucao_id: termExecucaoId });
@@ -320,6 +328,26 @@ const api = {
             p_obs_final: body.obs_final || "",
             p_servicos: body.servicos || [],
             p_usuario_id: await currentUserId(),
+          })
+        );
+      }
+
+      const feedbackDoneId = extractId(path, /^\/crm\/feedback\/(\d+)\/done$/);
+      if (feedbackDoneId !== null) {
+        return ok(
+          await rpc<T>("mobile_feedback_done", {
+            p_patio_execucao_id: feedbackDoneId,
+            p_observacao: body.observacao || "",
+          })
+        );
+      }
+
+      const revisaoDoneId = extractId(path, /^\/crm\/revisao\/(\d+)\/done$/);
+      if (revisaoDoneId !== null) {
+        return ok(
+          await rpc<T>("mobile_revisao_done", {
+            p_patio_veiculo_id: revisaoDoneId,
+            p_observacao: body.observacao || "",
           })
         );
       }
