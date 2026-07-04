@@ -14865,6 +14865,14 @@ function Importacoes({
 
     try {
       const selectedFiles = Array.from(files)
+      if (selectedFiles.every(isCatalogPriceFileName)) {
+        setReferenceFiles([])
+        setReferencePreview(null)
+        setCatalogPriceFiles(selectedFiles)
+        setCatalogPricePreview(await previewCatalogPriceFiles(selectedFiles))
+        setReferenceImportResult('Lista de precos reconhecida. Confira abaixo e clique em Importar catalogo.')
+        return
+      }
       setReferenceFiles(selectedFiles)
       setReferencePreview(await previewReferenceImportFiles(selectedFiles))
     } catch (exception) {
@@ -14942,24 +14950,6 @@ function Importacoes({
       setRegisteredFiles((current) => [...current, preview.arquivoNome])
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Nao foi possivel registrar a previa da importacao diaria.')
-    }
-  }
-
-  async function registerCatalogPricePreview(preview: ReferenceImportPreview) {
-    setError('')
-
-    try {
-      const created = await createImportacaoPreview({
-        tipo: 'catalogo-precos',
-        arquivoNome: preview.arquivoNome,
-        totalItens: preview.itensDetectados,
-        clientesEncontrados: 0,
-        conflitos: preview.avisos.length,
-      })
-      onAddImportacao(created)
-      setRegisteredFiles((current) => [...current, preview.arquivoNome])
-    } catch (exception) {
-      setError(exception instanceof Error ? exception.message : 'Nao foi possivel registrar a previa de catalogo.')
     }
   }
 
@@ -15278,19 +15268,11 @@ function Importacoes({
               </div>
               <button
                 className="button primary"
-                disabled={!catalogPricePreview.ready || registeredFiles.includes(catalogPricePreview.arquivoNome)}
-                onClick={() => registerCatalogPricePreview(catalogPricePreview)}
-                type="button"
-              >
-                {registeredFiles.includes(catalogPricePreview.arquivoNome) ? 'Previa registrada' : 'Registrar previa'}
-              </button>
-              <button
-                className="button"
                 disabled={!catalogPricePreview.ready || isImportingCatalogPrices}
                 onClick={runCatalogPriceImport}
                 type="button"
               >
-                {isImportingCatalogPrices ? 'Importando...' : 'Atualizar catalogo'}
+                {isImportingCatalogPrices ? 'Importando...' : 'Importar catalogo'}
               </button>
             </div>
             <div className={`readiness ${catalogPricePreview.ready ? 'ok' : 'danger'}`}>
@@ -15650,6 +15632,24 @@ function workbookRecommendations(preview: WorkbookImportPreview) {
   if (recommendations.length === 0) recommendations.push('Registrar a previa e seguir para confirmacao da importacao.')
 
   return recommendations
+}
+
+function isCatalogPriceFileName(file: File) {
+  const normalized = file.name
+    .replace(/\.[^.]+$/, '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+  return [
+    'precoprodutos',
+    'listaeprecoprodutos',
+    'listaprecoprodutos',
+    'precoservicos',
+    'precosservicos',
+    'listaeprecoservicos',
+    'listaprecoservicos',
+  ].some((alias) => normalized.includes(alias))
 }
 
 function Conflitos({
