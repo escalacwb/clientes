@@ -658,12 +658,20 @@ set search_path = public
 as $$
 declare
   v_execucao_id bigint;
-  v_payload jsonb;
-  v_venda record;
-  v_venda_atual record;
-  v_venda_aberta record;
+  v_payload jsonb := '[]'::jsonb;
   v_deve_perguntar boolean := false;
   v_motivo text := 'sem_venda_preparada';
+  v_visita_chave text;
+  v_placa text := '';
+  v_payload_omsys jsonb := '{}'::jsonb;
+  v_cliente_codigo text;
+  v_cliente_consumidor boolean := false;
+  v_venda_id text;
+  v_venda_aberta_id text;
+  v_venda_status text;
+  v_bloqueios jsonb := '[]'::jsonb;
+  v_avisos jsonb := '[]'::jsonb;
+  v_bloqueios_count integer := 0;
 begin
   select patio_execucao_id into v_execucao_id
   from public.patio_atendimentos
@@ -674,21 +682,44 @@ begin
     raise exception 'Box sem atendimento em andamento.';
   end if;
 
-  v_payload := (
-    select coalesce(jsonb_agg(jsonb_build_object(
+  select coalesce(jsonb_agg(jsonb_build_object(
       'id', pai.id,
-      'quantidade', coalesce(nullif(item->>'quantidade', '')::integer, pai.quantidade),
-      'observacao_execucao', item->>'observacao_execucao'
+      'quantidade', case
+        when coalesce(item->>'quantidade', '') ~ '^-?[0-9]+$' then greatest(0, (item->>'quantidade')::integer)
+        else pai.quantidade
+      end,
+      'observacao_execucao', coalesce(item->>'observacao_execucao', '')
     )), '[]'::jsonb)
-    from jsonb_array_elements(coalesce(p_servicos, '[]'::jsonb)) item
-    join public.patio_atendimento_itens pai
-      on pai.patio_execucao_id = v_execucao_id
-     and pai.id = nullif(item->>'id', '')::uuid
-  );
+  into v_payload
+  from jsonb_array_elements(coalesce(p_servicos, '[]'::jsonb)) item
+  join public.patio_atendimento_itens pai
+    on pai.patio_execucao_id = v_execucao_id
+   and pai.id = nullif(item->>'id', '')::uuid;
+
+  if jsonb_array_length(v_payload) = 0 then
+    select coalesce(jsonb_agg(jsonb_build_object(
+        'id', pai.id,
+        'quantidade', pai.quantidade,
+        'observacao_execucao', coalesce(pai.observacao_execucao, '')
+      )), '[]'::jsonb)
+    into v_payload
+    from public.patio_atendimento_itens pai
+    where pai.patio_execucao_id = v_execucao_id
+      and pai.status = 'em_andamento';
+  end if;
 
   perform public.finalizar_box_patio_crm(v_execucao_id, v_payload, p_obs_final);
 
-  select v.* into v_venda
+  select v.visita_chave,
+         coalesce(v.placa, ''),
+         coalesce(v.payload_omsys, '{}'::jsonb),
+         v.cliente_codigo_omsys::text,
+         coalesce(v.cliente_fallback_consumidor, false)
+  into v_visita_chave,
+       v_placa,
+       v_payload_omsys,
+       v_cliente_codigo,
+       v_cliente_consumidor
   from public.vw_patio_omsys_visitas_consolidadas v
   where exists (
     select 1
@@ -699,31 +730,41 @@ begin
   order by v.ultima_finalizacao desc
   limit 1;
 
-  if v_venda.visita_chave is not null then
-    select e.* into v_venda_atual
+  if v_visita_chave is not null then
+    select e.id::text,
+           e.status,
+           coalesce(to_jsonb(e.bloqueios), '[]'::jsonb),
+           coalesce(to_jsonb(e.avisos), '[]'::jsonb),
+           coalesce(cardinality(e.bloqueios), 0)
+    into v_venda_id,
+         v_venda_status,
+         v_bloqueios,
+         v_avisos,
+         v_bloqueios_count
     from public.patio_omsys_vendas_exportacoes e
-    where e.visita_chave = v_venda.visita_chave
+    where e.visita_chave = v_visita_chave
     limit 1;
 
-    select e.* into v_venda_aberta
+    select e.id::text
+    into v_venda_aberta_id
     from public.patio_omsys_vendas_exportacoes e
-    where e.placa = v_venda.placa
-      and e.visita_chave <> v_venda.visita_chave
+    where e.placa = v_placa
+      and e.visita_chave <> v_visita_chave
       and e.status in ('preparada', 'exportando')
     order by e.atualizado_em desc
     limit 1;
 
     v_deve_perguntar :=
-      v_venda_atual.id is not null
-      and v_venda_aberta.id is null
-      and v_venda_atual.status in ('pendente', 'preparada')
-      and coalesce(cardinality(v_venda_atual.bloqueios), 0) = 0;
+      v_venda_id is not null
+      and v_venda_aberta_id is null
+      and v_venda_status in ('pendente', 'preparada')
+      and v_bloqueios_count = 0;
 
     v_motivo := case
-      when v_venda_aberta.id is not null then 'venda_aberta_existente'
-      when v_venda_atual.id is null then 'venda_nao_entrou_na_fila'
-      when coalesce(cardinality(v_venda_atual.bloqueios), 0) > 0 then 'venda_bloqueada'
-      when v_venda_atual.status not in ('pendente', 'preparada') then 'status_sem_pergunta'
+      when v_venda_aberta_id is not null then 'venda_aberta_existente'
+      when v_venda_id is null then 'venda_nao_entrou_na_fila'
+      when v_bloqueios_count > 0 then 'venda_bloqueada'
+      when v_venda_status not in ('pendente', 'preparada') then 'status_sem_pergunta'
       else 'pode_abrir'
     end;
   end if;
@@ -734,18 +775,18 @@ begin
     'omsys_venda', jsonb_build_object(
       'deve_perguntar', v_deve_perguntar,
       'motivo', v_motivo,
-      'venda_id', case when v_venda_atual.id is not null then v_venda_atual.id::text else null end,
-      'venda_aberta_id', case when v_venda_aberta.id is not null then v_venda_aberta.id::text else null end,
-      'status', v_venda_atual.status,
-      'placa', coalesce(v_venda.placa, ''),
-      'km', coalesce(v_venda.payload_omsys->>'chassi', 'KM NÃO LANÇADO'),
-      'cliente_codigo', v_venda.cliente_codigo_omsys,
-      'cliente_consumidor', coalesce(v_venda.cliente_fallback_consumidor, false),
-      'itens', coalesce(jsonb_array_length(v_venda.payload_omsys->'itens'), 0),
-      'total', coalesce(v_venda.payload_omsys->>'total', '0'),
-      'url_sistema', v_venda.payload_omsys->>'url_sistema',
-      'bloqueios', coalesce(to_jsonb(v_venda_atual.bloqueios), '[]'::jsonb),
-      'avisos', coalesce(to_jsonb(v_venda_atual.avisos), '[]'::jsonb)
+      'venda_id', v_venda_id,
+      'venda_aberta_id', v_venda_aberta_id,
+      'status', v_venda_status,
+      'placa', v_placa,
+      'km', coalesce(v_payload_omsys->>'chassi', 'KM NAO LANCADO'),
+      'cliente_codigo', v_cliente_codigo,
+      'cliente_consumidor', v_cliente_consumidor,
+      'itens', coalesce(jsonb_array_length(coalesce(v_payload_omsys->'itens', '[]'::jsonb)), 0),
+      'total', coalesce(v_payload_omsys->>'total', '0'),
+      'url_sistema', v_payload_omsys->>'url_sistema',
+      'bloqueios', v_bloqueios,
+      'avisos', v_avisos
     )
   );
 end;

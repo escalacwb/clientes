@@ -35,6 +35,31 @@ revoke execute on function public.mobile_update_tipo_atendimento(text, text, tex
 revoke execute on function public.mobile_revert_visit(bigint, integer) from anon;
 revoke execute on function public.mobile_term_data(bigint) from anon;
 
+revoke execute on function public.mobile_clients_search(text) from public;
+revoke execute on function public.mobile_client_details(bigint) from public;
+revoke execute on function public.mobile_vehicle_by_plate(text) from public;
+revoke execute on function public.mobile_client_create(text, text) from public;
+revoke execute on function public.mobile_client_update(bigint, text, text) from public;
+revoke execute on function public.mobile_vehicle_create(text, text, text, integer, text, text, bigint) from public;
+revoke execute on function public.mobile_vehicle_update(bigint, text, integer, text, text) from public;
+revoke execute on function public.mobile_vehicle_company_update(bigint, text, bigint) from public;
+revoke execute on function public.mobile_services_register(bigint, integer, text, jsonb, bigint) from public;
+revoke execute on function public.mobile_pending_vehicles() from public;
+revoke execute on function public.mobile_pending_areas(bigint) from public;
+revoke execute on function public.mobile_funcionarios() from public;
+revoke execute on function public.mobile_boxes_available() from public;
+revoke execute on function public.mobile_assign(bigint, text, integer, bigint, bigint) from public;
+revoke execute on function public.mobile_queues() from public;
+revoke execute on function public.mobile_boxes_active() from public;
+revoke execute on function public.mobile_box_details(integer) from public;
+revoke execute on function public.mobile_add_box_service(integer, text, integer) from public;
+revoke execute on function public.mobile_unassign_box(integer) from public;
+revoke execute on function public.mobile_finalize_box(integer, text, jsonb, bigint) from public;
+revoke execute on function public.mobile_completed_services(date, date) from public;
+revoke execute on function public.mobile_update_tipo_atendimento(text, text, text) from public;
+revoke execute on function public.mobile_revert_visit(bigint, integer) from public;
+revoke execute on function public.mobile_term_data(bigint) from public;
+
 grant execute on function public.mobile_clients_search(text) to authenticated, service_role;
 grant execute on function public.mobile_client_details(bigint) to authenticated, service_role;
 grant execute on function public.mobile_vehicle_by_plate(text) to authenticated, service_role;
@@ -72,6 +97,18 @@ revoke execute on function public.reverter_visita_patio_crm(bigint) from anon;
 revoke execute on function public.listar_patio_revisao_proativa(numeric, integer, text, uuid, integer, integer) from anon;
 revoke execute on function public.listar_patio_revisao_resultados(text, integer, integer) from anon;
 revoke execute on function public.resumo_patio_revisao_efetividade(integer, date, date) from anon;
+
+revoke execute on function public.buscar_patio_veiculos(text, integer) from public;
+revoke execute on function public.corrigir_km_atendimento_patio_crm(bigint, integer) from public;
+revoke execute on function public.registrar_entrada_patio_crm(bigint, integer, text, text, jsonb, text) from public;
+revoke execute on function public.alocar_servicos_patio_crm(bigint, text, integer, bigint) from public;
+revoke execute on function public.adicionar_servico_box_patio_crm(bigint, text, text, integer) from public;
+revoke execute on function public.retirar_box_patio_crm(bigint) from public;
+revoke execute on function public.finalizar_box_patio_crm(bigint, jsonb, text) from public;
+revoke execute on function public.reverter_visita_patio_crm(bigint) from public;
+revoke execute on function public.listar_patio_revisao_proativa(numeric, integer, text, uuid, integer, integer) from public;
+revoke execute on function public.listar_patio_revisao_resultados(text, integer, integer) from public;
+revoke execute on function public.resumo_patio_revisao_efetividade(integer, date, date) from public;
 
 grant execute on function public.buscar_patio_veiculos(text, integer) to authenticated, service_role;
 grant execute on function public.corrigir_km_atendimento_patio_crm(bigint, integer) to authenticated, service_role;
