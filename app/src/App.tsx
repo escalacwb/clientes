@@ -13835,16 +13835,6 @@ function Cliente360({
             <div className="client360-contact-signals">
               <strong>Sinais para este contato</strong>
               <OpportunityContactHints oportunidades={contactSignals} />
-              {contactSignals.map((oportunidade) => (
-                <div className="contact-history-card" key={oportunidade.id}>
-                  <div>
-                    <span className="status-pill">{opportunityTypeLabel(oportunidade.tipo)}</span>
-                    <strong>{oportunidade.proximaAcao}</strong>
-                    <small>Prioridade {oportunidade.prioridade}</small>
-                  </div>
-                  <p>{oportunidade.motivo}</p>
-                </div>
-              ))}
             </div>
           )}
           <div className="client360-history-quote">
