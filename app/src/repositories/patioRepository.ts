@@ -760,17 +760,29 @@ export async function listPatioRelatorioServicos(input: {
 
   const endExclusive = new Date(`${input.endDate}T00:00:00`)
   endExclusive.setDate(endExclusive.getDate() + 1)
+  const pageSize = 1000
+  const rows: PatioRelatorioServicoRow[] = []
 
-  const { data, error } = await supabase
-    .from('vw_patio_relatorio_servicos')
-    .select('*')
-    .gte('fim_execucao', `${input.startDate}T00:00:00`)
-    .lt('fim_execucao', endExclusive.toISOString())
-    .order('fim_execucao', { ascending: false })
-    .limit(5000)
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from('vw_patio_relatorio_servicos')
+      .select('*')
+      .gte('fim_execucao', `${input.startDate}T00:00:00`)
+      .lt('fim_execucao', endExclusive.toISOString())
+      .order('fim_execucao', { ascending: false })
+      .range(from, from + pageSize - 1)
 
-  if (error) throw error
-  return (data as PatioRelatorioServicoRow[] | null ?? []).map((row) => ({
+    if (error) throw error
+    const batch = data as PatioRelatorioServicoRow[] | null
+    rows.push(...(batch ?? []))
+    if (!batch || batch.length < pageSize) break
+  }
+
+  return rows.map(mapPatioRelatorioServico)
+}
+
+function mapPatioRelatorioServico(row: PatioRelatorioServicoRow): PatioRelatorioServico {
+  return {
     id: row.id,
     patioExecucaoId: Number(row.patio_execucao_id),
     clienteNome: row.cliente_nome ?? undefined,
@@ -785,7 +797,7 @@ export async function listPatioRelatorioServicos(input: {
     fimExecucao: row.fim_execucao ?? undefined,
     duracaoMinutos: row.duracao_minutos ? Number(row.duracao_minutos) : undefined,
     quilometragem: row.quilometragem ?? undefined,
-  }))
+  }
 }
 
 export async function listPatioRevisaoResultados(input: {

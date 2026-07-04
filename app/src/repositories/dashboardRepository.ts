@@ -385,18 +385,42 @@ export async function listAtividadesDia(): Promise<AtividadeDiaResumo[]> {
   }))
 }
 
-export async function listServiceContatosEfetividade(limit = 80): Promise<ServiceContatoEfetividadeResumo[]> {
+export async function listServiceContatosEfetividade(limit?: number): Promise<ServiceContatoEfetividadeResumo[]> {
   const supabase = await getSupabase()
   if (!supabase) return []
 
-  const { data, error } = await supabase
-    .from('vw_service_contatos_efetividade')
-    .select('*')
-    .order('criado_em', { ascending: false })
-    .limit(limit)
+  if (limit) {
+    const { data, error } = await supabase
+      .from('vw_service_contatos_efetividade')
+      .select('*')
+      .order('criado_em', { ascending: false })
+      .limit(limit)
 
-  if (error) throw error
-  return (data as ServiceContatoEfetividadeRow[] | null ?? []).map((row) => ({
+    if (error) throw error
+    return (data as ServiceContatoEfetividadeRow[] | null ?? []).map(mapServiceContatoEfetividade)
+  }
+
+  const pageSize = 1000
+  const rows: ServiceContatoEfetividadeRow[] = []
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from('vw_service_contatos_efetividade')
+      .select('*')
+      .order('criado_em', { ascending: false })
+      .range(from, from + pageSize - 1)
+
+    if (error) throw error
+    const batch = data as ServiceContatoEfetividadeRow[] | null
+    rows.push(...(batch ?? []))
+    if (!batch || batch.length < pageSize) break
+  }
+
+  return rows.map(mapServiceContatoEfetividade)
+}
+
+function mapServiceContatoEfetividade(row: ServiceContatoEfetividadeRow): ServiceContatoEfetividadeResumo {
+  return {
     tarefaId: row.tarefa_id,
     clienteId: row.cliente_id,
     clienteNome: row.cliente_nome,
@@ -419,7 +443,7 @@ export async function listServiceContatosEfetividade(limit = 80): Promise<Servic
     visitasMediana: row.visitas_mediana == null ? undefined : Number(row.visitas_mediana),
     visitasRecentesNoAlerta: row.visitas_recentes_no_alerta == null ? undefined : Number(row.visitas_recentes_no_alerta),
     diasSemVisitaNoAlerta: row.dias_sem_visita_no_alerta == null ? undefined : Number(row.dias_sem_visita_no_alerta),
-  }))
+  }
 }
 
 export async function listTarefasSlaVendedor(): Promise<TarefaSlaVendedorResumo[]> {
