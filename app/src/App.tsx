@@ -11021,13 +11021,14 @@ function RelatoriosCrm({
     janelaDias,
   }
   const total = rows.find((row) => row.fonte === 'total') ?? emptyTotal
-  const emptySource = (fonte: 'crm', fonteLabel: string): PatioRevisaoEfetividadeResumo => ({
+  const emptySource = (fonte: 'crm' | 'historico_patio', fonteLabel: string): PatioRevisaoEfetividadeResumo => ({
     ...emptyTotal,
     fonte,
     fonteLabel,
   })
   const fonteRows = [
     rows.find((row) => row.fonte === 'crm') ?? emptySource('crm', 'CRM atual'),
+    rows.find((row) => row.fonte === 'historico_patio') ?? emptySource('historico_patio', 'Historico patio filtrado'),
   ]
   const baseFechada = total.retornaramJanela + total.semRetornoJanela
 
@@ -11084,7 +11085,7 @@ function RelatoriosCrm({
         <div className="panel-header">
           <div>
             <h3>Base considerada</h3>
-            <p>Somente contatos marcados como concluidos dentro do CRM. Marcacoes importadas do patio ficam fora deste termometro.</p>
+            <p>Contatos do CRM atual e historico do patio em dias normais. Dias com mais de 100 marcacoes importadas ficam fora.</p>
           </div>
         </div>
         <div className="table">

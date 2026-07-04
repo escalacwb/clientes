@@ -807,7 +807,7 @@ as $$
       p_data_inicio as data_inicio,
       p_data_fim as data_fim
   ),
-  acoes as (
+  crm_acoes as (
     select
       'crm'::text as fonte,
       ('crm:' || i.id::text) as acao_id,
@@ -829,6 +829,42 @@ as $$
         i.patio_veiculo_id is not null
         or nullif(upper(regexp_replace(coalesce(i.placa, v.placa, pvs.placa, ''), '[^A-Z0-9]', '', 'g')), '') is not null
       )
+  ),
+  historico_patio_dias_validos as (
+    select pvs.data_revisao_proativa
+    from public.patio_veiculos_snapshot pvs
+    where pvs.data_revisao_proativa is not null
+    group by pvs.data_revisao_proativa
+    having count(*) <= 100
+  ),
+  historico_patio_acoes as (
+    select
+      'historico_patio'::text as fonte,
+      ('patio:' || pvs.patio_veiculo_id::text || ':' || pvs.data_revisao_proativa::text) as acao_id,
+      pvs.patio_veiculo_id,
+      pvs.cliente_id,
+      c.vendedor_id,
+      pvs.data_revisao_proativa as data_acao,
+      nullif(upper(regexp_replace(coalesce(v.placa, pvs.placa, ''), '[^A-Z0-9]', '', 'g')), '') as placa_key
+    from public.patio_veiculos_snapshot pvs
+    join historico_patio_dias_validos dias on dias.data_revisao_proativa = pvs.data_revisao_proativa
+    join public.clientes c on c.id = pvs.cliente_id
+    left join public.veiculos v on v.id = pvs.veiculo_id
+    cross join params
+    where c.excluido_em is null
+      and (params.data_inicio is null or pvs.data_revisao_proativa >= params.data_inicio)
+      and (params.data_fim is null or pvs.data_revisao_proativa <= params.data_fim)
+      and not exists (
+        select 1
+        from crm_acoes ca
+        where ca.patio_veiculo_id = pvs.patio_veiculo_id
+          and ca.data_acao = pvs.data_revisao_proativa
+      )
+  ),
+  acoes as (
+    select * from crm_acoes
+    union all
+    select * from historico_patio_acoes
   ),
   limites as (
     select
@@ -888,6 +924,7 @@ as $$
       coalesce(fonte, 'total') as fonte,
       case coalesce(fonte, 'total')
         when 'crm' then 'CRM atual'
+        when 'historico_patio' then 'Historico patio filtrado'
         else 'Total geral'
       end as fonte_label,
       count(*)::integer as contatos_total,

@@ -246,7 +246,7 @@ export type PatioRevisaoResultado = {
 }
 
 export type PatioRevisaoEfetividadeResumo = {
-  fonte: 'total' | 'crm' | string
+  fonte: 'total' | 'crm' | 'historico_patio' | string
   fonteLabel: string
   contatosTotal: number
   retornaramJanela: number
