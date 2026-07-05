@@ -11958,17 +11958,24 @@ function PatioBoxes({
       const total = venda.total !== undefined ? `\nTotal sugerido: ${money(Number(venda.total) || 0)}` : ''
       const consumidor = venda.clienteConsumidor ? '\nCliente OMSYS: Consumidor 55555' : ''
       const shouldOpen = window.confirm(
-        `Abrir venda no sistema?\n\n${venda.placa ?? 'Veiculo'} - ${venda.km ?? 'KM NAO LANCADO'}\n${venda.itens ?? 0} itens${total}${consumidor}`,
+        `Abrir tela de vendas no OMSYS?\n\n${venda.placa ?? 'Veiculo'} - ${venda.km ?? 'KM NAO LANCADO'}\n${venda.itens ?? 0} itens${total}${consumidor}`,
       )
       if (!shouldOpen) return
 
       const opened = window.open(venda.urlSistema, '_blank')
+      if (!opened) {
+        window.alert('O navegador bloqueou a nova aba. Libere pop-ups para abrir o sistema automaticamente.')
+        return
+      }
+
+      const openedOk = window.confirm('A tela de vendas abriu corretamente no OMSYS?')
+      if (!openedOk) return
+
       try {
         await onConfirmOmsysSaleOpened(venda.vendaId)
       } catch (exception) {
-        window.alert('O box foi finalizado e a venda foi aberta, mas nao conseguimos marcar a abertura no CRM.')
+        window.alert('O box foi finalizado e a tela de vendas abriu, mas nao conseguimos marcar a abertura no CRM.')
       }
-      if (!opened) window.alert('O navegador bloqueou a nova aba. Libere pop-ups para abrir o sistema automaticamente.')
       return
     }
 

@@ -222,7 +222,7 @@ export function BoxDetailScreen({ route }: Props) {
       const total = venda.total ? `Total sugerido: R$ ${String(venda.total).replace(".", ",")}.` : "";
       const cliente = venda.cliente_consumidor ? " Cliente sera Consumidor 55555." : "";
       Alert.alert(
-        "Abrir venda no sistema?",
+        "Abrir tela de vendas no OMSYS?",
         `${venda.placa || "Veiculo"} - ${venda.km || "KM NÃO LANÇADO"}\n${venda.itens || 0} itens. ${total}${cliente}`,
         [
           { text: "Depois", style: "cancel" },
@@ -249,8 +249,18 @@ export function BoxDetailScreen({ route }: Props) {
     if (!venda.venda_id || !venda.url_sistema) return;
 
     try {
-      await api.post(`/omsys/sales/${venda.venda_id}/opened`);
       await Linking.openURL(venda.url_sistema);
+      Alert.alert("Confirmar abertura", "A tela de vendas abriu corretamente no OMSYS?", [
+        { text: "Nao", style: "cancel" },
+        {
+          text: "Sim, abriu",
+          onPress: () => {
+            api.post(`/omsys/sales/${venda.venda_id}/opened`).catch(() => {
+              Alert.alert("Aviso", "Nao conseguimos marcar a abertura no CRM.");
+            });
+          },
+        },
+      ]);
     } catch (err) {
       logEvent({ level: "error", message: "Falha ao abrir venda OMSYS", meta: { vendaId: venda.venda_id } });
       Alert.alert("Falha ao abrir venda", "A venda foi finalizada no patio, mas nao conseguimos abrir o sistema.");
