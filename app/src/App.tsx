@@ -165,6 +165,7 @@ import {
   allocatePatioServices,
   addPatioBoxServico,
   consultPatioPlate,
+  createPatioVehicleFromPlate,
   exportPatioOmsysSale,
   finishPatioBox,
   getClienteContatoRecomendado,
@@ -2134,6 +2135,7 @@ function App() {
             catalogoServicos={patioCatalogoServicos}
             onQueryChange={setPatioEntradaQuery}
             onConsultPlate={consultPatioPlate}
+            onCreateVehicleFromPlate={createPatioVehicleFromPlate}
             onRegisterEntrada={async (input) => {
               await registerPatioEntrada(input)
               setPatioFilaPage(1)
@@ -9930,6 +9932,7 @@ function PatioEntrada({
   catalogoServicos,
   onQueryChange,
   onConsultPlate,
+  onCreateVehicleFromPlate,
   onRegisterEntrada,
   onEditVehicle,
   onOpenClient,
@@ -9943,6 +9946,7 @@ function PatioEntrada({
   catalogoServicos: PatioCatalogoServico[]
   onQueryChange: (query: string) => void
   onConsultPlate?: (placa: string) => Promise<{ placa: string; modelo: string; anoModelo?: number | string | null }>
+  onCreateVehicleFromPlate?: (input: { placa: string; empresa: string; modelo?: string; anoModelo?: number | string | null }) => Promise<PatioVeiculoBusca>
   onRegisterEntrada?: (input: PatioEntradaInput) => Promise<void>
   onEditVehicle?: (vehicle: PatioVeiculoBusca) => void
   onOpenClient: (clienteId: string) => void | Promise<void>
@@ -9971,6 +9975,10 @@ function PatioEntrada({
   const [plateConsultResult, setPlateConsultResult] = useState<{ placa: string; modelo: string; anoModelo?: number | string | null } | undefined>()
   const [isConsultingPlate, setIsConsultingPlate] = useState(false)
   const [plateConsultError, setPlateConsultError] = useState('')
+  const [apiEmpresa, setApiEmpresa] = useState('')
+  const [apiModelo, setApiModelo] = useState('')
+  const [apiAnoModelo, setApiAnoModelo] = useState('')
+  const [isCreatingApiVehicle, setIsCreatingApiVehicle] = useState(false)
   const catalogoDaArea = catalogoServicos.filter((servico) => servico.area === servicoArea)
   const areasEntrada: Array<{ area: PatioEntradaServicoInput['area']; label: string }> = [
     { area: 'borracharia', label: 'Borracharia' },
@@ -10068,11 +10076,40 @@ function PatioEntrada({
     setPlateConsultError('')
     setPlateConsultResult(undefined)
     try {
-      setPlateConsultResult(await onConsultPlate(query))
+      const result = await onConsultPlate(query)
+      setPlateConsultResult(result)
+      setApiModelo(result.modelo || '')
+      setApiAnoModelo(result.anoModelo ? String(result.anoModelo) : '')
     } catch (error) {
       setPlateConsultError(error instanceof Error ? error.message : 'Nao foi possivel consultar a placa.')
     } finally {
       setIsConsultingPlate(false)
+    }
+  }
+
+  const handleCreateVehicleFromApi = async () => {
+    if (!plateConsultResult || !onCreateVehicleFromPlate) return
+    if (!apiEmpresa.trim()) {
+      setPlateConsultError('Informe o cliente/empresa para cadastrar o veiculo.')
+      return
+    }
+
+    setIsCreatingApiVehicle(true)
+    setPlateConsultError('')
+    try {
+      const vehicle = await onCreateVehicleFromPlate({
+        placa: plateConsultResult.placa,
+        empresa: apiEmpresa,
+        modelo: apiModelo,
+        anoModelo: apiAnoModelo || plateConsultResult.anoModelo,
+      })
+      setSelected(vehicle)
+      setPlateConsultResult(undefined)
+      onQueryChange(vehicle.placa ?? plateConsultResult.placa)
+    } catch (error) {
+      setPlateConsultError(error instanceof Error ? error.message : 'Nao foi possivel cadastrar o veiculo.')
+    } finally {
+      setIsCreatingApiVehicle(false)
     }
   }
 
@@ -10092,6 +10129,9 @@ function PatioEntrada({
             onChange={(event) => {
               setPlateConsultResult(undefined)
               setPlateConsultError('')
+              setApiEmpresa('')
+              setApiModelo('')
+              setApiAnoModelo('')
               onQueryChange(event.target.value)
             }}
             placeholder="Ex.: ABC1D23, cliente ou motorista"
@@ -10100,7 +10140,7 @@ function PatioEntrada({
         </label>
       </div>
       {isLoading && <div className="empty-state">Buscando no historico do patio...</div>}
-      {!isLoading && query.trim().length >= 2 && results.length === 0 && (
+      {!selected && !isLoading && query.trim().length >= 2 && results.length === 0 && (
         <div className="empty-state">
           <strong>Nenhum veiculo encontrado.</strong>
           {onConsultPlate && (
@@ -10111,7 +10151,7 @@ function PatioEntrada({
         </div>
       )}
       {plateConsultError && <div className="inline-error">{plateConsultError}</div>}
-      {plateConsultResult && (
+      {!selected && plateConsultResult && (
         <div className="panel subtle">
           <div className="panel-header">
             <div>
@@ -10119,7 +10159,30 @@ function PatioEntrada({
               <p>{plateConsultResult.placa} - {plateConsultResult.modelo} {plateConsultResult.anoModelo ? `- ${plateConsultResult.anoModelo}` : ''}</p>
             </div>
           </div>
-          <p className="muted-text">Use esses dados para cadastrar ou corrigir o veiculo quando o fluxo de novo cadastro estiver liberado no banco combinado.</p>
+          <div className="filters-grid">
+            <label>
+              Cliente/empresa
+              <input value={apiEmpresa} onChange={(event) => setApiEmpresa(event.target.value)} placeholder="Empresa do veiculo" />
+            </label>
+            <label>
+              Modelo
+              <input value={apiModelo} onChange={(event) => setApiModelo(event.target.value)} />
+            </label>
+            <label>
+              Ano modelo
+              <input inputMode="numeric" value={apiAnoModelo} onChange={(event) => setApiAnoModelo(event.target.value.replace(/\D/g, ''))} />
+            </label>
+          </div>
+          <div className="inline-actions">
+            <button
+              className="button primary"
+              type="button"
+              disabled={isCreatingApiVehicle || !apiEmpresa.trim()}
+              onClick={() => void handleCreateVehicleFromApi()}
+            >
+              {isCreatingApiVehicle ? 'Cadastrando...' : 'Cadastrar e iniciar entrada'}
+            </button>
+          </div>
         </div>
       )}
       {query.trim().length < 2 && <div className="empty-state">Digite ao menos 2 caracteres para consultar.</div>}

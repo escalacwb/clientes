@@ -127,6 +127,17 @@ type VeiculoBuscaRow = {
   contato_tipo: string | null
 }
 
+type MobileVehicleRow = {
+  id: number
+  placa: string | null
+  empresa: string | null
+  modelo: string | null
+  ano_modelo: number | string | null
+  nome_motorista: string | null
+  contato_motorista: string | null
+  media_km_diaria: number | null
+}
+
 type PatioContatoClienteRow = {
   id: string
   nome: string | null
@@ -940,6 +951,34 @@ export async function consultPatioPlate(placa: string): Promise<PatioPlateConsul
   return data.vehicle as PatioPlateConsultResult
 }
 
+export async function createPatioVehicleFromPlate(input: {
+  placa: string
+  empresa: string
+  modelo?: string
+  anoModelo?: number | string | null
+}): Promise<PatioVeiculoBusca> {
+  const supabase = await getSupabase()
+  if (!supabase) throw new Error('Supabase nao configurado para cadastrar veiculo.')
+
+  const anoModelo = input.anoModelo === null || input.anoModelo === undefined || input.anoModelo === ''
+    ? null
+    : Number(input.anoModelo)
+
+  const { data, error } = await supabase.rpc('mobile_vehicle_create', {
+    p_placa: input.placa,
+    p_empresa: input.empresa.trim(),
+    p_modelo: input.modelo?.trim() || null,
+    p_ano_modelo: Number.isFinite(anoModelo) ? anoModelo : null,
+    p_nome_motorista: null,
+    p_contato_motorista: null,
+    p_cliente_id: null,
+  })
+
+  if (error) throw error
+  if (!data) throw new Error('Nao foi possivel cadastrar o veiculo.')
+  return mapMobileVehicle(data as MobileVehicleRow)
+}
+
 export async function notifyPatioBoxFinalized(input: {
   patioExecucaoId: number
   finalizadoPor?: string
@@ -1412,6 +1451,19 @@ function mapVeiculoBusca(row: VeiculoBuscaRow): PatioVeiculoBusca {
     contatoRecomendado: row.contato_recomendado ?? undefined,
     contatoNome: row.contato_nome ?? undefined,
     contatoTipo: row.contato_tipo ?? undefined,
+  }
+}
+
+function mapMobileVehicle(row: MobileVehicleRow): PatioVeiculoBusca {
+  return {
+    patioVeiculoId: Number(row.id),
+    placa: row.placa ?? undefined,
+    clienteNome: row.empresa ?? undefined,
+    veiculoDescricao: row.modelo ?? undefined,
+    anoModelo: row.ano_modelo === null || row.ano_modelo === undefined ? undefined : Number(row.ano_modelo),
+    nomeMotorista: row.nome_motorista ?? undefined,
+    contatoMotorista: row.contato_motorista ?? undefined,
+    mediaKmDiaria: row.media_km_diaria ?? undefined,
   }
 }
 
