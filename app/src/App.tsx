@@ -24,6 +24,7 @@ import {
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
 import { lazy, type FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import './App.css'
 import capitalLogo from './assets/capital-truck-center-logo.svg'
 import {
@@ -168,6 +169,7 @@ import {
   createPatioVehicleFromPlate,
   exportPatioOmsysSale,
   finishPatioBox,
+  getPatioRelatorioGestao,
   getClienteContatoRecomendado,
   listPatioAlocacaoVeiculos,
   listPatioAreasPendentes,
@@ -186,7 +188,6 @@ import {
   listPatioRevisaoEfetividadeResumo,
   listPatioRevisaoProativa,
   listPatioRevisaoResultados,
-  listPatioRelatorioServicos,
   listPatioVeiculoAtendimentoItens,
   listPatioVeiculoAtendimentos,
   markPatioContatosExportados,
@@ -205,7 +206,8 @@ import {
   updatePatioVeiculoDados,
   type PatioContatoExportacao,
   type PatioRevisaoEfetividadeResumo,
-  type PatioRelatorioServico,
+  type PatioRelatorioGestaoData,
+  type PatioRelatorioRankItem,
   type PatioRevisaoResultado,
 } from './repositories/patioRepository'
 import { createPipelineFromSuggestion, listPipelineOportunidades, updatePipelineOportunidade, updatePipelineStage } from './repositories/pipelineRepository'
@@ -3669,7 +3671,7 @@ function App() {
           <RelatoriosCrm onLoadRevisaoEfetividade={listPatioRevisaoEfetividadeResumo} />
         )}
         {session.role === 'admin' && view === 'relatorio-patio' && (
-          <PatioRelatorioGestao onLoad={listPatioRelatorioServicos} />
+          <PatioRelatorioGestao onLoad={getPatioRelatorioGestao} />
         )}
         {session.role === 'admin' && view === 'patio-km-medio' && (
           <PatioKmMedio
@@ -11286,22 +11288,24 @@ function percentLabel(value: number) {
 function PatioRelatorioGestao({
   onLoad,
 }: {
-  onLoad: (input: { startDate: string; endDate: string }) => Promise<PatioRelatorioServico[]>
+  onLoad: (input: { startDate: string; endDate: string; serviceName?: string }) => Promise<PatioRelatorioGestaoData>
 }) {
   const today = new Date()
   const defaultStart = new Date()
   defaultStart.setDate(defaultStart.getDate() - 30)
   const [startDate, setStartDate] = useState(defaultStart.toISOString().slice(0, 10))
   const [endDate, setEndDate] = useState(today.toISOString().slice(0, 10))
-  const [items, setItems] = useState<PatioRelatorioServico[]>([])
+  const [selectedService, setSelectedService] = useState('')
+  const [chartMetric, setChartMetric] = useState<PatioChartMetric>('faturamento')
+  const [data, setData] = useState<PatioRelatorioGestaoData | undefined>()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const load = async () => {
+  const load = async (serviceName = selectedService) => {
     setIsLoading(true)
     setError('')
     try {
-      setItems(await onLoad({ startDate, endDate }))
+      setData(await onLoad({ startDate, endDate, serviceName: serviceName || undefined }))
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Nao foi possivel carregar relatorio do patio.')
     } finally {
@@ -11313,21 +11317,28 @@ function PatioRelatorioGestao({
     void load()
   }, [])
 
-  const visits = new Set(items.map((item) => item.patioExecucaoId)).size
-  const totalServicos = items.reduce((total, item) => total + Math.max(1, item.quantidade), 0)
-  const duracoes = items.map((item) => item.duracaoMinutos).filter((value): value is number => Boolean(value && value > 0))
-  const tempoMedio = duracoes.length ? Math.round(duracoes.reduce((total, value) => total + value, 0) / duracoes.length) : 0
-  const topBoxes = rankPatioReport(items, (item) => item.boxNome || (item.boxId ? `Box ${item.boxId}` : 'Sem box'))
-  const topServicos = rankPatioReport(items, (item) => item.servicoNome || 'Servico')
-  const topClientes = rankPatioReport(items, (item) => item.clienteNome || 'Cliente sem vinculo')
-  const topEquipe = rankPatioReport(items, (item) => item.funcionarioNome || 'Sem tecnico')
+  const resumo = data?.resumo ?? {
+    faturamento: 0,
+    servicos: 0,
+    pedidos: 0,
+    clientes: 0,
+    placas: 0,
+    ticketMedio: 0,
+  }
+  const qualidade = data?.qualidade
+  const operacional = data?.operacional
+  const chartRows = (data?.mensal ?? []).map((row) => ({
+    ...row,
+    label: patioMonthLabel(row.mes),
+  }))
+  const selectedMetric = patioChartMetrics.find((item) => item.id === chartMetric) ?? patioChartMetrics[0]
 
   return (
-    <section className="panel wide">
+    <section className="panel wide patio-report-panel">
       <div className="panel-header">
         <div>
           <h2>Relatorio Patio</h2>
-          <p>Indicadores operacionais simples do patio consolidado no CRM.</p>
+          <p>Servicos e faturamento usam OMSYS como fonte principal. Tempo, box e equipe usam o controle do Patio.</p>
         </div>
         <button className="button primary" type="button" onClick={() => void load()} disabled={isLoading}>
           {isLoading ? 'Carregando...' : 'Atualizar'}
@@ -11343,21 +11354,111 @@ function PatioRelatorioGestao({
           Fim
           <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
         </label>
+        <label>
+          Grafico
+          <select value={chartMetric} onChange={(event) => setChartMetric(event.target.value as PatioChartMetric)}>
+            {patioChartMetrics.map((metric) => (
+              <option value={metric.id} key={metric.id}>{metric.label}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Servico no grafico
+          <select
+            value={selectedService}
+            onChange={(event) => {
+              const next = event.target.value
+              setSelectedService(next)
+              void load(next)
+            }}
+          >
+            <option value="">Todos os servicos</option>
+            {(data?.servicoOpcoes ?? []).map((item) => (
+              <option value={item.label} key={item.label}>{item.label}</option>
+            ))}
+          </select>
+        </label>
       </div>
       <div className="metric-grid">
-        <Metric icon={CheckCircle2} label="Visitas finalizadas" value={numberLabel(visits)} tone="green" />
-        <Metric icon={ClipboardList} label="Itens executados" value={numberLabel(totalServicos)} tone="blue" />
-        <Metric icon={CalendarClock} label="Tempo medio" value={tempoMedio ? `${tempoMedio} min` : 'Sem media'} tone="amber" />
-        <Metric icon={BarChart3} label="Registros analisados" value={numberLabel(items.length)} tone="blue" />
+        <Metric icon={WalletCards} label="Faturamento servicos" value={money(resumo.faturamento)} tone="green" />
+        <Metric icon={ClipboardList} label="Servicos lancados" value={numberLabel(resumo.servicos)} tone="blue" />
+        <Metric icon={CheckCircle2} label="Pedidos/OS" value={numberLabel(resumo.pedidos)} tone="green" />
+        <Metric icon={UsersRound} label="Clientes atendidos" value={numberLabel(resumo.clientes)} tone="blue" />
+        <Metric icon={Truck} label="Placas atendidas" value={numberLabel(resumo.placas)} tone="amber" />
+        <Metric icon={BarChart3} label="Ticket medio" value={money(resumo.ticketMedio)} tone="amber" />
       </div>
+      <article className="panel subtle patio-report-chart">
+        <div className="panel-header">
+          <div>
+            <h3>Comparativo 12 meses</h3>
+            <p>{selectedMetric.label}{selectedService ? ` - ${selectedService}` : ' - todos os servicos'}</p>
+          </div>
+          <strong>{data?.periodo.fontePrincipal ?? 'OMSYS/importacao'}</strong>
+        </div>
+        {chartRows.length > 0 ? (
+          <div className="chart">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartRows}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} />
+                <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => patioChartTick(Number(value), chartMetric)} />
+                <Tooltip formatter={(value) => patioChartTooltip(Number(value), chartMetric)} labelFormatter={(label) => `Mes ${label}`} />
+                <Bar dataKey={chartMetric} fill="#0f4f49" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="chart-placeholder">Sem dados para o periodo.</div>
+        )}
+      </article>
       <div className="patio-report-grid">
-        <RankPanel title="Servicos por box" items={topBoxes} />
-        <RankPanel title="Servicos mais feitos" items={topServicos} />
-        <RankPanel title="Clientes por volume" items={topClientes} />
-        <RankPanel title="Equipe por volume" items={topEquipe} />
+        <RankPanel title="Servicos mais lancados" items={data?.servicosPorVolume ?? []} primary="servicos" secondary="faturamento" />
+        <RankPanel title="Servicos por faturamento" items={data?.servicosPorFaturamento ?? []} primary="faturamento" secondary="servicos" />
+        <RankPanel title="Clientes por faturamento" items={data?.clientesPorFaturamento ?? []} primary="faturamento" secondary="pedidos" />
+        <RankPanel title="Clientes por pedidos" items={data?.clientesPorVolume ?? []} primary="pedidos" secondary="faturamento" />
+        <QualityPanel qualidade={qualidade} />
+        <article className="panel subtle">
+          <h3>Operacao do Patio</h3>
+          <div className="status-list">
+            <div className="status-row"><span>Visitas finalizadas</span><strong>{numberLabel(operacional?.resumo.visitas ?? 0)}</strong></div>
+            <div className="status-row"><span>Tempo medio</span><strong>{operacional?.resumo.tempoMedioMinutos ? `${numberLabel(Math.round(operacional.resumo.tempoMedioMinutos))} min` : 'Sem media'}</strong></div>
+          </div>
+        </article>
+        <RankPanel title="Boxes por visitas" items={operacional?.boxes ?? []} primary="visitas" secondary="tempoMedioMinutos" />
+        <RankPanel title="Tecnicos por visitas" items={operacional?.tecnicos ?? []} primary="visitas" secondary="tempoMedioMinutos" />
+        <RankPanel title="Areas por volume" items={operacional?.areas ?? []} primary="itens" secondary="visitas" />
       </div>
     </section>
   )
+}
+
+type PatioChartMetric = 'faturamento' | 'servicos' | 'pedidos' | 'clientes' | 'placas' | 'ticketMedio'
+
+const patioChartMetrics: Array<{ id: PatioChartMetric; label: string }> = [
+  { id: 'faturamento', label: 'Faturamento' },
+  { id: 'servicos', label: 'Servicos lancados' },
+  { id: 'pedidos', label: 'Pedidos/OS' },
+  { id: 'clientes', label: 'Clientes atendidos' },
+  { id: 'placas', label: 'Placas atendidas' },
+  { id: 'ticketMedio', label: 'Ticket medio' },
+]
+
+function patioMonthLabel(value: string) {
+  const [year, month] = String(value).slice(0, 7).split('-')
+  return year && month ? `${month}/${year.slice(2)}` : value
+}
+
+function patioChartTick(value: number, metric: PatioChartMetric) {
+  if (metric === 'faturamento' || metric === 'ticketMedio') {
+    if (value >= 1000) return `R$ ${Math.round(value / 1000)}k`
+    return `R$ ${Math.round(value)}`
+  }
+  return numberLabel(Math.round(value))
+}
+
+function patioChartTooltip(value: number, metric: PatioChartMetric) {
+  if (metric === 'faturamento' || metric === 'ticketMedio') return money(value)
+  return numberLabel(Math.round(value))
 }
 
 function PatioKmMedio({
@@ -11648,18 +11749,19 @@ function resultadoRevisaoLabel(value: PatioRevisaoResultado['resultado'], janela
   return 'Aguardando janela'
 }
 
-function rankPatioReport(items: PatioRelatorioServico[], labeler: (item: PatioRelatorioServico) => string) {
-  return Array.from(items.reduce((acc, item) => {
-    const label = labeler(item)
-    acc.set(label, (acc.get(label) ?? 0) + Math.max(1, item.quantidade))
-    return acc
-  }, new Map<string, number>()).entries())
-    .map(([label, count]) => ({ label, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 10)
-}
+type PatioRankField = 'servicos' | 'pedidos' | 'clientes' | 'placas' | 'visitas' | 'itens' | 'faturamento' | 'ticketMedio' | 'ticketItem' | 'tempoMedioMinutos'
 
-function RankPanel({ title, items }: { title: string; items: Array<{ label: string; count: number }> }) {
+function RankPanel({
+  title,
+  items,
+  primary,
+  secondary,
+}: {
+  title: string
+  items: PatioRelatorioRankItem[]
+  primary: PatioRankField
+  secondary?: PatioRankField
+}) {
   return (
     <article className="panel subtle">
       <h3>{title}</h3>
@@ -11667,13 +11769,49 @@ function RankPanel({ title, items }: { title: string; items: Array<{ label: stri
         {items.map((item) => (
           <div className="status-row" key={item.label}>
             <span>{item.label}</span>
-            <strong>{numberLabel(item.count)}</strong>
+            <strong>
+              {patioRankValue(item, primary)}
+              {secondary ? <small>{patioRankValue(item, secondary)}</small> : null}
+            </strong>
           </div>
         ))}
         {items.length === 0 && <div className="empty-state">Sem dados no periodo.</div>}
       </div>
     </article>
   )
+}
+
+function QualityPanel({ qualidade }: { qualidade?: PatioRelatorioGestaoData['qualidade'] }) {
+  const rows = [
+    ['OMSYS com Patio', qualidade?.omsysComPatio ?? 0],
+    ['OMSYS sem Patio', qualidade?.omsysSemPatio ?? 0],
+    ['Patio sem OMSYS', qualidade?.patioSemOmsys ?? 0],
+    ['Consumidor 55555', qualidade?.consumidor55555Aberto ?? 0],
+    ['Venda pendente app', qualidade?.vendasPatioPendentes ?? 0],
+    ['Venda exportada app', qualidade?.vendasPatioExportadas ?? 0],
+    ['Conflitos abertos', qualidade?.conflitosAbertos ?? 0],
+  ] as const
+
+  return (
+    <article className="panel subtle">
+      <h3>Qualidade Patio x OMSYS</h3>
+      <div className="status-list">
+        {rows.map(([label, value]) => (
+          <div className={value > 0 && ['OMSYS sem Patio', 'Patio sem OMSYS', 'Consumidor 55555', 'Venda pendente app', 'Conflitos abertos'].includes(label) ? 'status-row danger-row' : 'status-row'} key={label}>
+            <span>{label}</span>
+            <strong>{numberLabel(value)}</strong>
+          </div>
+        ))}
+      </div>
+    </article>
+  )
+}
+
+function patioRankValue(item: PatioRelatorioRankItem, field: PatioRankField) {
+  const value = item[field] ?? 0
+  if (field === 'faturamento' || field === 'ticketMedio' || field === 'ticketItem') return money(value)
+  if (field === 'tempoMedioMinutos') return `${numberLabel(Math.round(value))} min`
+  return numberLabel(Math.round(value))
 }
 
 function buildGoogleContactsCsv(items: PatioContatoExportacao[]) {

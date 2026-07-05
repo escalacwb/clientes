@@ -553,6 +553,23 @@
   margin-top: 16px;
 }
 
+.patio-report-panel .metric-grid {
+  margin-top: 12px;
+}
+
+.patio-report-chart {
+  margin-top: 16px;
+}
+
+.patio-report-chart .panel-header > strong {
+  border-radius: 999px;
+  background: #eaf4ef;
+  color: #12312f;
+  font-size: 12px;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
 .sidebar {
   background: #12312f;
   color: #edf7f4;
@@ -5801,6 +5818,14 @@ h3 {
 
 .status-row > strong {
   text-align: right;
+}
+
+.status-row > strong small {
+  display: block;
+  margin-top: 2px;
+  color: #6b7772;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .status-row.danger-row {

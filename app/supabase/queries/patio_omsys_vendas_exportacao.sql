@@ -12,7 +12,7 @@ insert into public.patio_omsys_config (chave, valor, descricao)
 values
   ('cliente_consumidor_codigo', '55555', 'Cliente OMSYS usado quando o cliente do Patio nao tem codigo ERP confirmado.'),
   ('vendedor_padrao_codigo', '0026', 'Vendedor padrao para vendas geradas pelo Patio: Mateus Silva.'),
-  ('tecnico_padrao_codigo', '000117', 'Tecnico OMSYS padrao para itens de servico quando o funcionario antigo ainda nao esta mapeado.'),
+  ('tecnico_padrao_codigo', '000117', 'Fallback tecnico OMSYS de emergencia; novas vendas do Patio devem usar funcionario com codigo OMSYS.'),
   ('natureza_padrao_codigo', '5102', 'Natureza padrao da tela de venda OMSYS.'),
   ('transportador_padrao_codigo', '0001', 'Transportador padrao da tela de venda OMSYS.'),
   ('codt_servico_padrao', '999', 'SITR/Codt padrao exigido pela tela de venda para itens de servico.'),
@@ -685,6 +685,7 @@ visitas as (
     count(*) filter (where l.catalogo_codigo is not null and btrim(l.catalogo_codigo) <> '')::integer as itens_com_codigo,
     count(*) filter (where coalesce(l.preco_unitario, 0) > 0)::integer as itens_com_preco,
     count(*) filter (where not coalesce(l.exportavel_catalogo, true))::integer as itens_bloqueados,
+    count(*) filter (where l.tecnico_codigo_original is null)::integer as itens_sem_tecnico_omsys,
     array_remove(array_agg(distinct l.servico_nome) filter (
       where l.catalogo_codigo is null or btrim(l.catalogo_codigo) = ''
     ), null) as servicos_sem_codigo,
@@ -748,6 +749,7 @@ regras as (
       case when e.abertos_veiculo > 0 then 'servicos_abertos' end,
       case when nullif(e.placa, '') is null then 'sem_placa' end,
       case when nullif(e.modelo, '') is null then 'sem_modelo' end,
+      case when e.itens_sem_tecnico_omsys > 0 then 'sem_tecnico_omsys' end,
       case when e.itens_total <> e.itens_com_codigo then 'sem_codigo_catalogo' end,
       case when e.itens_total <> e.itens_com_preco then 'sem_preco_catalogo' end,
       case when e.itens_bloqueados > 0 then 'item_bloqueado_revisao' end

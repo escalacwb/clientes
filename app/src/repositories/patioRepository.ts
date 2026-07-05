@@ -241,6 +241,70 @@ export type PatioRelatorioServico = {
   quilometragem?: number
 }
 
+export type PatioRelatorioResumo = {
+  faturamento: number
+  servicos: number
+  pedidos: number
+  clientes: number
+  placas: number
+  ticketMedio: number
+}
+
+export type PatioRelatorioMensal = PatioRelatorioResumo & {
+  mes: string
+}
+
+export type PatioRelatorioRankItem = {
+  label: string
+  servicos?: number
+  pedidos?: number
+  clientes?: number
+  placas?: number
+  visitas?: number
+  itens?: number
+  faturamento?: number
+  ticketMedio?: number
+  ticketItem?: number
+  tempoMedioMinutos?: number
+}
+
+export type PatioRelatorioQualidade = {
+  patioVisitasFinalizadas: number
+  omsysComPatio: number
+  omsysSemPatio: number
+  patioSemOmsys: number
+  consumidor55555Aberto: number
+  vendasPatioPendentes: number
+  vendasPatioExportadas: number
+  conflitosAbertos: number
+}
+
+export type PatioRelatorioGestaoData = {
+  periodo: {
+    inicio: string
+    fim: string
+    fontePrincipal: string
+    servicoGrafico?: string
+  }
+  resumo: PatioRelatorioResumo
+  mensal: PatioRelatorioMensal[]
+  servicoOpcoes: Array<{ label: string; servicos: number }>
+  servicosPorVolume: PatioRelatorioRankItem[]
+  servicosPorFaturamento: PatioRelatorioRankItem[]
+  clientesPorFaturamento: PatioRelatorioRankItem[]
+  clientesPorVolume: PatioRelatorioRankItem[]
+  qualidade: PatioRelatorioQualidade
+  operacional: {
+    resumo: {
+      visitas: number
+      tempoMedioMinutos?: number
+    }
+    boxes: PatioRelatorioRankItem[]
+    tecnicos: PatioRelatorioRankItem[]
+    areas: PatioRelatorioRankItem[]
+  }
+}
+
 export type PatioRevisaoResultado = {
   patioVeiculoId: number
   clienteId: string
@@ -800,6 +864,24 @@ export async function listPatioRelatorioServicos(input: {
   return rows.map(mapPatioRelatorioServico)
 }
 
+export async function getPatioRelatorioGestao(input: {
+  startDate: string
+  endDate: string
+  serviceName?: string
+}): Promise<PatioRelatorioGestaoData> {
+  const supabase = await getSupabase()
+  if (!supabase) return emptyPatioRelatorioGestao(input)
+
+  const { data, error } = await supabase.rpc('relatorio_patio_omsys', {
+    p_data_inicio: input.startDate,
+    p_data_fim: input.endDate,
+    p_servico_nome: input.serviceName?.trim() || null,
+  })
+
+  if (error) throw error
+  return mapPatioRelatorioGestao(data, input)
+}
+
 function mapPatioRelatorioServico(row: PatioRelatorioServicoRow): PatioRelatorioServico {
   return {
     id: row.id,
@@ -817,6 +899,170 @@ function mapPatioRelatorioServico(row: PatioRelatorioServicoRow): PatioRelatorio
     duracaoMinutos: row.duracao_minutos ? Number(row.duracao_minutos) : undefined,
     quilometragem: row.quilometragem ?? undefined,
   }
+}
+
+function emptyPatioRelatorioGestao(input: { startDate: string; endDate: string; serviceName?: string }): PatioRelatorioGestaoData {
+  return {
+    periodo: {
+      inicio: input.startDate,
+      fim: input.endDate,
+      fontePrincipal: 'OMSYS/importacao',
+      servicoGrafico: input.serviceName,
+    },
+    resumo: emptyPatioRelatorioResumo(),
+    mensal: [],
+    servicoOpcoes: [],
+    servicosPorVolume: [],
+    servicosPorFaturamento: [],
+    clientesPorFaturamento: [],
+    clientesPorVolume: [],
+    qualidade: {
+      patioVisitasFinalizadas: 0,
+      omsysComPatio: 0,
+      omsysSemPatio: 0,
+      patioSemOmsys: 0,
+      consumidor55555Aberto: 0,
+      vendasPatioPendentes: 0,
+      vendasPatioExportadas: 0,
+      conflitosAbertos: 0,
+    },
+    operacional: {
+      resumo: { visitas: 0 },
+      boxes: [],
+      tecnicos: [],
+      areas: [],
+    },
+  }
+}
+
+function emptyPatioRelatorioResumo(): PatioRelatorioResumo {
+  return {
+    faturamento: 0,
+    servicos: 0,
+    pedidos: 0,
+    clientes: 0,
+    placas: 0,
+    ticketMedio: 0,
+  }
+}
+
+function mapPatioRelatorioGestao(data: unknown, input: { startDate: string; endDate: string; serviceName?: string }): PatioRelatorioGestaoData {
+  if (!data || typeof data !== 'object') return emptyPatioRelatorioGestao(input)
+  const source = data as Record<string, unknown>
+  const periodo = objectValue(source.periodo)
+  const operacional = objectValue(source.operacional)
+  const operacionalResumo = objectValue(operacional.resumo)
+
+  return {
+    periodo: {
+      inicio: stringValue(periodo.inicio) || input.startDate,
+      fim: stringValue(periodo.fim) || input.endDate,
+      fontePrincipal: stringValue(coalesceValue(periodo.fontePrincipal, periodo.fonte_principal)) || 'OMSYS/importacao',
+      servicoGrafico: stringValue(coalesceValue(periodo.servicoGrafico, periodo.servico_grafico)) || input.serviceName,
+    },
+    resumo: mapPatioRelatorioResumo(source.resumo),
+    mensal: arrayValue(source.mensal).map((item) => {
+      const row = objectValue(item)
+      return {
+        mes: String(row.mes ?? ''),
+        ...mapPatioRelatorioResumo(row),
+      }
+    }),
+    servicoOpcoes: arrayValue(source.servicoOpcoes).map((item) => {
+      const row = objectValue(item)
+      return {
+        label: stringValue(row.label) || 'Servico',
+        servicos: numberValue(row.servicos),
+      }
+    }),
+    servicosPorVolume: arrayValue(source.servicosPorVolume).map(mapPatioRelatorioRankItem),
+    servicosPorFaturamento: arrayValue(source.servicosPorFaturamento).map(mapPatioRelatorioRankItem),
+    clientesPorFaturamento: arrayValue(source.clientesPorFaturamento).map(mapPatioRelatorioRankItem),
+    clientesPorVolume: arrayValue(source.clientesPorVolume).map(mapPatioRelatorioRankItem),
+    qualidade: mapPatioRelatorioQualidade(source.qualidade),
+    operacional: {
+      resumo: {
+        visitas: numberValue(operacionalResumo.visitas),
+        tempoMedioMinutos: optionalNumberValue(operacionalResumo.tempoMedioMinutos),
+      },
+      boxes: arrayValue(operacional.boxes).map(mapPatioRelatorioRankItem),
+      tecnicos: arrayValue(operacional.tecnicos).map(mapPatioRelatorioRankItem),
+      areas: arrayValue(operacional.areas).map(mapPatioRelatorioRankItem),
+    },
+  }
+}
+
+function mapPatioRelatorioResumo(value: unknown): PatioRelatorioResumo {
+  const row = objectValue(value)
+  return {
+    faturamento: numberValue(row.faturamento),
+    servicos: numberValue(row.servicos),
+    pedidos: numberValue(row.pedidos),
+    clientes: numberValue(row.clientes),
+    placas: numberValue(row.placas),
+    ticketMedio: numberValue(coalesceValue(row.ticketMedio, row.ticket_medio)),
+  }
+}
+
+function mapPatioRelatorioQualidade(value: unknown): PatioRelatorioQualidade {
+  const row = objectValue(value)
+  return {
+    patioVisitasFinalizadas: numberValue(coalesceValue(row.patioVisitasFinalizadas, row.patio_visitas_finalizadas)),
+    omsysComPatio: numberValue(coalesceValue(row.omsysComPatio, row.omsys_com_patio)),
+    omsysSemPatio: numberValue(coalesceValue(row.omsysSemPatio, row.omsys_sem_patio)),
+    patioSemOmsys: numberValue(coalesceValue(row.patioSemOmsys, row.patio_sem_omsys)),
+    consumidor55555Aberto: numberValue(coalesceValue(row.consumidor55555Aberto, row.consumidor_55555_aberto)),
+    vendasPatioPendentes: numberValue(coalesceValue(row.vendasPatioPendentes, row.vendas_patio_pendentes)),
+    vendasPatioExportadas: numberValue(coalesceValue(row.vendasPatioExportadas, row.vendas_patio_exportadas)),
+    conflitosAbertos: numberValue(coalesceValue(row.conflitosAbertos, row.conflitos_abertos)),
+  }
+}
+
+function mapPatioRelatorioRankItem(value: unknown): PatioRelatorioRankItem {
+  const row = objectValue(value)
+  return {
+    label: stringValue(row.label) || 'Sem nome',
+    servicos: optionalNumberValue(row.servicos),
+    pedidos: optionalNumberValue(row.pedidos),
+    clientes: optionalNumberValue(row.clientes),
+    placas: optionalNumberValue(row.placas),
+    visitas: optionalNumberValue(row.visitas),
+    itens: optionalNumberValue(row.itens),
+    faturamento: optionalNumberValue(row.faturamento),
+    ticketMedio: optionalNumberValue(coalesceValue(row.ticketMedio, row.ticket_medio)),
+    ticketItem: optionalNumberValue(coalesceValue(row.ticketItem, row.ticket_item)),
+    tempoMedioMinutos: optionalNumberValue(coalesceValue(row.tempoMedioMinutos, row.tempo_medio_minutos)),
+  }
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+function arrayValue(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : []
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+function coalesceValue(...values: unknown[]): unknown {
+  return values.find((value) => value !== undefined && value !== null)
+}
+
+function numberValue(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
+}
+
+function optionalNumberValue(value: unknown): number | undefined {
+  const parsed = numberValue(value)
+  return parsed || parsed === 0 ? parsed : undefined
 }
 
 export async function listPatioRevisaoResultados(input: {
