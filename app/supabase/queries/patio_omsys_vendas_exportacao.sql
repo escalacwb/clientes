@@ -650,7 +650,7 @@ linhas as (
     ) as visita_chave,
     match_itens.*,
     row_number() over (
-      partition by match_itens.patio_veiculo_id, match_itens.placa, match_itens.km, match_itens.data_visita
+      partition by match_itens.patio_veiculo_id, match_itens.placa, coalesce(match_itens.km, 0), match_itens.data_visita
       order by match_itens.patio_execucao_id, match_itens.item_id
     ) as linha,
     case
