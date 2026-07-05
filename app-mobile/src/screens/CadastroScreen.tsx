@@ -21,9 +21,20 @@ type AxisState = {
 };
 
 type ClientOption = {
-  id: number;
+  id: string;
   nome_empresa: string;
   nome_fantasia?: string | null;
+  codigo_erp?: string | null;
+  cidade?: string | null;
+  uf?: string | null;
+  nome_responsavel?: string | null;
+  contato_responsavel?: string | null;
+};
+
+type PlateApiResult = {
+  placa: string;
+  modelo?: string | null;
+  anoModelo?: number | string | null;
 };
 
 const desgasteOptions = ["Ombro Interno", "Ombro Externo", "Centro", "Escamado/Irregular"];
@@ -70,10 +81,20 @@ function buildDiagnostico(axes: AxisState[], puxando: string, passarinhando: str
   return text.trim();
 }
 
+function clientLabel(client: ClientOption) {
+  const fantasia = client.nome_fantasia ? ` (${client.nome_fantasia})` : "";
+  const codigo = client.codigo_erp ? ` - ${client.codigo_erp}` : "";
+  const cidade = client.cidade ? ` - ${client.cidade}${client.uf ? `/${client.uf}` : ""}` : "";
+  return `${client.nome_empresa}${fantasia}${codigo}${cidade}`;
+}
+
 export function CadastroScreen() {
   const [placa, setPlaca] = useState("");
   const [veiculo, setVeiculo] = useState<any>(null);
   const [veiculoNaoEncontrado, setVeiculoNaoEncontrado] = useState(false);
+  const [plateApiResult, setPlateApiResult] = useState<PlateApiResult | null>(null);
+  const [plateApiError, setPlateApiError] = useState("");
+  const [consultingPlateApi, setConsultingPlateApi] = useState(false);
   const [quilometragem, setQuilometragem] = useState("");
   const [observacao, setObservacao] = useState("");
   const [area, setArea] = useState("");
@@ -138,7 +159,7 @@ export function CadastroScreen() {
       return;
     }
     api
-      .get("/clients/search", { params: { term: companySearch } })
+      .get("/crm/clients/search", { params: { term: companySearch } })
       .then((res) => setClientOptions(res.data || []))
       .catch(() => setClientOptions([]));
   }, [companySearch]);
@@ -149,16 +170,47 @@ export function CadastroScreen() {
       return;
     }
     api
-      .get("/clients/search", { params: { term: newCompanySearch } })
+      .get("/crm/clients/search", { params: { term: newCompanySearch } })
       .then((res) => setNewClientOptions(res.data || []))
       .catch(() => setNewClientOptions([]));
   }, [newCompanySearch]);
+
+  async function consultarPlacaApi(placaBusca = placa) {
+    const placaFinal = placaBusca.trim().toUpperCase();
+    if (!placaFinal) {
+      Alert.alert("Informe a placa");
+      return null;
+    }
+
+    setConsultingPlateApi(true);
+    setPlateApiError("");
+    try {
+      const response = await api.post<PlateApiResult>("/vehicles/consult-plate", {
+        placa: placaFinal,
+      });
+      const result = response.data;
+      setPlateApiResult(result);
+      setNewVehicle((prev) => ({
+        ...prev,
+        modelo: result.modelo || prev.modelo,
+        ano_modelo: result.anoModelo ? String(result.anoModelo) : prev.ano_modelo,
+      }));
+      return result;
+    } catch (err) {
+      setPlateApiError("Nao foi possivel consultar a placa na API.");
+      return null;
+    } finally {
+      setConsultingPlateApi(false);
+    }
+  }
 
   async function buscarVeiculo() {
     if (!placa) {
       Alert.alert("Informe a placa");
       return;
     }
+    setPlateApiResult(null);
+    setPlateApiError("");
     try {
       const response = await api.get(`/vehicles/by-plate/${placa}`);
       setVeiculo(response.data);
@@ -187,7 +239,7 @@ export function CadastroScreen() {
           nome_motorista: "",
           contato_motorista: "",
         }));
-        Alert.alert("Veiculo nao encontrado", "Cadastre os dados abaixo para continuar.");
+        consultarPlacaApi(placa).catch(() => undefined);
       } else {
         setVeiculoNaoEncontrado(false);
         Alert.alert("Falha na busca", "Nao foi possivel consultar o veiculo.");
@@ -196,7 +248,7 @@ export function CadastroScreen() {
   }
 
   async function cadastrarNovoVeiculo() {
-    const empresaFinal = newCompanySearch.trim();
+    const empresaFinal = (newSelectedClient?.nome_empresa || newCompanySearch).trim();
     const modeloFinal = newVehicle.modelo.trim();
     if (!placa.trim() || !empresaFinal || !modeloFinal) {
       Alert.alert("Campos obrigatorios", "Preencha placa, empresa e modelo.");
@@ -258,7 +310,7 @@ export function CadastroScreen() {
     mensagem += `*Placa:* \`${placaValue}\`\n`;
     mensagem += `*Modelo:* ${modelo}\n`;
     mensagem += `*Ano:* ${ano}\n`;
-    mensagem += `*KM:* \`${Number(quilometragem || 0).toLocaleString("pt-BR")}\`\n\n`;
+    mensagem += `*KM:* \`${quilometragem ? Number(quilometragem).toLocaleString("pt-BR") : "NAO LANCADO"}\`\n\n`;
     mensagem += `*DADOS DO MOTORISTA:*\n`;
     mensagem += `*Nome:* ${motorista}\n\n`;
     mensagem += `*DADOS DA EMPRESA:*\n`;
@@ -299,14 +351,8 @@ export function CadastroScreen() {
     try {
       let clientId = selectedClient?.id || null;
       let empresaFinal = companySearch || veiculo.empresa;
-      if (!clientId) {
-        const created = await api.post("/clients", {
-          nome_empresa: empresaFinal,
-        });
-        clientId = created.data.id;
-      }
       if (clientId && (clientRespName || clientRespPhone)) {
-        await api.put(`/clients/${clientId}`, {
+        await api.put(`/crm/clients/${clientId}`, {
           nome_responsavel: clientRespName,
           contato_responsavel: clientRespPhone,
         });
@@ -314,6 +360,7 @@ export function CadastroScreen() {
       await api.put(`/vehicles/${veiculo.id}/company`, {
         empresa: empresaFinal,
         cliente_id: clientId,
+        crm_cliente: true,
       });
       Alert.alert("Empresa atualizada");
       setShowEditCompany(false);
@@ -332,15 +379,11 @@ export function CadastroScreen() {
       Alert.alert("Adicione pelo menos um servico");
       return;
     }
-    if (!quilometragem) {
-      Alert.alert("Informe a quilometragem");
-      return;
-    }
     const observacaoFinal = diagnostico + (observacao ? `\n\n${observacao}` : "");
     try {
       await api.post("/services/register", {
         veiculo_id: veiculo.id,
-        quilometragem: Number(quilometragem) || 0,
+        quilometragem: quilometragem ? Number(quilometragem) : null,
         observacao: observacaoFinal,
         itens,
       });
@@ -367,6 +410,8 @@ export function CadastroScreen() {
           onChangeText={(value) => {
             setPlaca(value);
             setVeiculoNaoEncontrado(false);
+            setPlateApiResult(null);
+            setPlateApiError("");
           }}
           autoCapitalize="characters"
         />
@@ -375,15 +420,32 @@ export function CadastroScreen() {
         {!veiculo && veiculoNaoEncontrado && (
           <Card>
             <Text style={{ fontWeight: "600", marginBottom: theme.spacing.xs }}>
-              Cadastro inicial do veiculo
+              Dados encontrados na API
             </Text>
-            <Text style={{ marginBottom: theme.spacing.sm }}>
-              Placa nao encontrada. Preencha os dados abaixo para cadastrar e continuar.
-            </Text>
+            {plateApiResult ? (
+              <Text style={{ marginBottom: theme.spacing.sm, color: theme.colors.muted }}>
+                {plateApiResult.placa} - {plateApiResult.modelo || "Modelo nao informado"}
+                {plateApiResult.anoModelo ? ` - ${plateApiResult.anoModelo}` : ""}
+              </Text>
+            ) : (
+              <Text style={{ marginBottom: theme.spacing.sm, color: theme.colors.muted }}>
+                Placa nao encontrada na base sincronizada.
+              </Text>
+            )}
+            {plateApiError ? (
+              <Text style={{ marginBottom: theme.spacing.sm, color: theme.colors.danger }}>
+                {plateApiError}
+              </Text>
+            ) : null}
+            <Button
+              title={consultingPlateApi ? "Consultando..." : "Buscar placa na API"}
+              onPress={() => consultarPlacaApi()}
+              disabled={consultingPlateApi}
+            />
 
             <Field
-              label="Buscar/selecionar empresa"
-              placeholder="Digite para buscar empresa"
+              label="Cliente/empresa"
+              placeholder="Digite para buscar cliente no CRM"
               value={newCompanySearch}
               onChangeText={(value) => {
                 setNewCompanySearch(value);
@@ -393,7 +455,7 @@ export function CadastroScreen() {
             {newClientOptions.map((opt) => (
               <Chip
                 key={`new-${opt.id}`}
-                label={opt.nome_fantasia ? `${opt.nome_empresa} (${opt.nome_fantasia})` : opt.nome_empresa}
+                label={clientLabel(opt)}
                 selected={newSelectedClient?.id === opt.id}
                 onPress={() => {
                   setNewSelectedClient(opt);
@@ -423,7 +485,7 @@ export function CadastroScreen() {
               value={newVehicle.contato_motorista}
               onChangeText={(value) => setNewVehicle((prev) => ({ ...prev, contato_motorista: value }))}
             />
-            <Button title="Cadastrar e continuar" onPress={cadastrarNovoVeiculo} />
+            <Button title="Cadastrar e iniciar entrada" onPress={cadastrarNovoVeiculo} />
           </Card>
         )}
 
@@ -499,12 +561,13 @@ export function CadastroScreen() {
                 {clientOptions.map((opt) => (
                   <Chip
                     key={opt.id}
-                    label={opt.nome_fantasia ? `${opt.nome_empresa} (${opt.nome_fantasia})` : opt.nome_empresa}
+                    label={clientLabel(opt)}
                     selected={selectedClient?.id === opt.id}
                     onPress={async () => {
                       setSelectedClient(opt);
+                      setCompanySearch(opt.nome_empresa);
                       try {
-                        const details = await api.get(`/clients/${opt.id}`);
+                        const details = await api.get(`/crm/clients/${opt.id}`);
                         setClientRespName(details.data.nome_responsavel || "");
                         setClientRespPhone(details.data.contato_responsavel || "");
                       } catch {

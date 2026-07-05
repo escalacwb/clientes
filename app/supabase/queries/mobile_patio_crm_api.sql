@@ -55,6 +55,74 @@ as $$
   limit 20
 $$;
 
+drop function if exists public.mobile_crm_clients_search(text);
+
+create or replace function public.mobile_crm_clients_search(p_term text)
+returns table (
+  id uuid,
+  nome_empresa text,
+  nome_fantasia text,
+  codigo_erp text,
+  cidade text,
+  uf text,
+  nome_responsavel text,
+  contato_responsavel text
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    c.id,
+    c.nome as nome_empresa,
+    c.nome_fantasia,
+    c.codigo_erp,
+    c.cidade,
+    c.uf,
+    c.responsavel_nome as nome_responsavel,
+    coalesce(c.whatsapp_principal, c.telefone_principal) as contato_responsavel
+  from public.clientes c
+  where c.excluido_em is null
+    and nullif(trim(coalesce(p_term, '')), '') is not null
+    and (
+      unaccent(coalesce(c.nome, '')) ilike '%' || unaccent(trim(p_term)) || '%'
+      or unaccent(coalesce(c.nome_fantasia, '')) ilike '%' || unaccent(trim(p_term)) || '%'
+      or coalesce(c.codigo_erp, '') ilike '%' || trim(p_term) || '%'
+      or coalesce(c.cpf_cnpj, '') ilike '%' || trim(p_term) || '%'
+      or unaccent(coalesce(c.cidade, '')) ilike '%' || unaccent(trim(p_term)) || '%'
+    )
+  order by
+    case when unaccent(coalesce(c.nome, '')) ilike unaccent(trim(p_term)) || '%' then 0 else 1 end,
+    c.nome
+  limit 20
+$$;
+
+create or replace function public.mobile_crm_client_details(p_client_id uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select to_jsonb(row)
+  from (
+    select
+      c.id,
+      c.nome as nome_empresa,
+      c.nome_fantasia,
+      c.codigo_erp,
+      c.cidade,
+      c.uf,
+      c.email,
+      c.responsavel_nome as nome_responsavel,
+      coalesce(c.whatsapp_principal, c.telefone_principal) as contato_responsavel
+    from public.clientes c
+    where c.id = p_client_id
+      and c.excluido_em is null
+  ) row
+$$;
+
 create or replace function public.mobile_client_details(p_client_id bigint)
 returns jsonb
 language sql
@@ -90,17 +158,19 @@ as $$
     select
       v.patio_veiculo_id as id,
       v.placa,
-      v.empresa,
+      coalesce(crm.nome, v.empresa) as empresa,
       v.modelo,
       v.ano_modelo,
       v.nome_motorista,
       v.contato_motorista,
-      v.patio_cliente_id as cliente_id,
-      c.nome_responsavel,
-      c.contato_responsavel,
+      v.cliente_id,
+      v.patio_cliente_id,
+      coalesce(crm.responsavel_nome, c.nome_responsavel) as nome_responsavel,
+      coalesce(crm.whatsapp_principal, crm.telefone_principal, c.contato_responsavel) as contato_responsavel,
       v.media_km_diaria
     from public.patio_veiculos_snapshot v
     left join public.patio_clientes_snapshot c on c.patio_cliente_id = v.patio_cliente_id
+    left join public.clientes crm on crm.id = v.cliente_id
     where public.mobile_format_placa(v.placa) = public.mobile_format_placa(p_placa)
     order by v.sincronizado_em desc
     limit 1
@@ -152,6 +222,28 @@ begin
   where patio_cliente_id = p_client_id;
 
   return public.mobile_client_details(p_client_id);
+end;
+$$;
+
+create or replace function public.mobile_crm_client_update(
+  p_client_id uuid,
+  p_nome_responsavel text default null,
+  p_contato_responsavel text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.clientes
+  set responsavel_nome = coalesce(nullif(p_nome_responsavel, ''), responsavel_nome),
+      whatsapp_principal = coalesce(nullif(public.mobile_format_phone(p_contato_responsavel), ''), whatsapp_principal),
+      atualizado_em = now()
+  where id = p_client_id
+    and excluido_em is null;
+
+  return public.mobile_crm_client_details(p_client_id);
 end;
 $$;
 
@@ -336,6 +428,44 @@ begin
   update public.patio_veiculos_snapshot
   set empresa = nullif(p_empresa, ''),
       patio_cliente_id = coalesce(p_cliente_id, patio_cliente_id),
+      sincronizado_em = now()
+  where patio_veiculo_id = p_veiculo_id
+  returning placa into v_placa;
+
+  return public.mobile_vehicle_by_plate(v_placa);
+end;
+$$;
+
+create or replace function public.mobile_vehicle_company_update_crm(
+  p_veiculo_id bigint,
+  p_empresa text,
+  p_cliente_id uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_placa text;
+  v_cliente_nome text;
+begin
+  if p_cliente_id is not null then
+    select nome into v_cliente_nome
+    from public.clientes
+    where id = p_cliente_id
+      and excluido_em is null;
+  end if;
+
+  update public.patio_veiculos_snapshot
+  set empresa = coalesce(nullif(p_empresa, ''), v_cliente_nome, empresa),
+      cliente_id = coalesce(p_cliente_id, cliente_id),
+      match_tipo = case when p_cliente_id is not null then 'crm_mobile' else match_tipo end,
+      match_score = case when p_cliente_id is not null then greatest(match_score, 90) else match_score end,
+      raw_data = coalesce(raw_data, '{}'::jsonb) || jsonb_build_object(
+        'origem_mobile_cliente_crm', p_cliente_id is not null,
+        'cliente_nome', v_cliente_nome
+      ),
       sincronizado_em = now()
   where patio_veiculo_id = p_veiculo_id
   returning placa into v_placa;
@@ -1017,14 +1147,18 @@ grant execute on function public.mobile_format_placa(text) to anon, authenticate
 grant execute on function public.mobile_format_phone(text) to anon, authenticated, service_role;
 grant execute on function public.mobile_catalog_services() to anon, authenticated, service_role;
 grant execute on function public.mobile_clients_search(text) to anon, authenticated, service_role;
+grant execute on function public.mobile_crm_clients_search(text) to anon, authenticated, service_role;
+grant execute on function public.mobile_crm_client_details(uuid) to anon, authenticated, service_role;
 grant execute on function public.mobile_client_details(bigint) to anon, authenticated, service_role;
 grant execute on function public.mobile_vehicle_by_plate(text) to anon, authenticated, service_role;
 grant execute on function public.mobile_client_create(text, text) to anon, authenticated, service_role;
 grant execute on function public.mobile_client_update(bigint, text, text) to anon, authenticated, service_role;
+grant execute on function public.mobile_crm_client_update(uuid, text, text) to anon, authenticated, service_role;
 grant execute on function public.mobile_vehicle_create(text, text, text, integer, text, text, bigint) to anon, authenticated, service_role;
 grant execute on function public.web_vehicle_create_from_plate(text, text, uuid, text, integer) to anon, authenticated, service_role;
 grant execute on function public.mobile_vehicle_update(bigint, text, integer, text, text) to anon, authenticated, service_role;
 grant execute on function public.mobile_vehicle_company_update(bigint, text, bigint) to anon, authenticated, service_role;
+grant execute on function public.mobile_vehicle_company_update_crm(bigint, text, uuid) to anon, authenticated, service_role;
 grant execute on function public.mobile_services_register(bigint, integer, text, jsonb, bigint) to anon, authenticated, service_role;
 grant execute on function public.mobile_pending_vehicles() to anon, authenticated, service_role;
 grant execute on function public.mobile_pending_areas(bigint) to anon, authenticated, service_role;

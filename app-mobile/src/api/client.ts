@@ -161,11 +161,25 @@ const api = {
         return ok(await rpc<T>("mobile_clients_search", { p_term: term }));
       }
 
+      if (path === "/crm/clients/search") {
+        const term = String(config?.params?.term || "");
+        return ok(await rpc<T>("mobile_crm_clients_search", { p_term: term }));
+      }
+
       if (path.startsWith("/vehicles/by-plate/")) {
         const placa = decodeURIComponent(path.replace("/vehicles/by-plate/", ""));
         const data = await rpc<T>("mobile_vehicle_by_plate", { p_placa: placa });
         if (!data) {
           throw new ApiError("Veiculo nao encontrado", 404);
+        }
+        return ok(data);
+      }
+
+      const crmClientId = extractTextId(path, /^\/crm\/clients\/([^/]+)$/);
+      if (crmClientId !== null) {
+        const data = await rpc<T>("mobile_crm_client_details", { p_client_id: crmClientId });
+        if (!data) {
+          throw new ApiError("Cliente nao encontrado", 404);
         }
         return ok(data);
       }
@@ -297,6 +311,16 @@ const api = {
         );
       }
 
+      if (path === "/vehicles/consult-plate") {
+        const data = await invokeFunction<any>("consult-vehicle-plate", {
+          placa: body.placa,
+        });
+        if (!data?.ok || !data.vehicle) {
+          throw new ApiError(data?.error || "Nao foi possivel consultar a placa", 400, data);
+        }
+        return ok(data.vehicle as T);
+      }
+
       if (path === "/clients") {
         return ok(
           await rpc<T>("mobile_client_create", {
@@ -307,6 +331,34 @@ const api = {
       }
 
       if (path === "/vehicles") {
+        const clienteId = typeof body.cliente_id === "string" ? body.cliente_id : null;
+        const anoModelo = body.ano_modelo === null || body.ano_modelo === undefined || body.ano_modelo === ""
+          ? null
+          : Number(body.ano_modelo);
+        const created = await rpc<any>("web_vehicle_create_from_plate", {
+          p_placa: body.placa,
+          p_empresa: body.empresa,
+          p_cliente_id: clienteId,
+          p_modelo: body.modelo ?? null,
+          p_ano_modelo: Number.isFinite(anoModelo) ? anoModelo : null,
+        });
+
+        if (created?.id && (body.nome_motorista || body.contato_motorista)) {
+          return ok(
+            await rpc<T>("mobile_vehicle_update", {
+              p_veiculo_id: created.id,
+              p_modelo: body.modelo ?? null,
+              p_ano_modelo: Number.isFinite(anoModelo) ? anoModelo : null,
+              p_nome_motorista: body.nome_motorista ?? null,
+              p_contato_motorista: body.contato_motorista ?? null,
+            })
+          );
+        }
+
+        return ok(created as T);
+      }
+
+      if (path === "/vehicles/legacy") {
         return ok(
           await rpc<T>("mobile_vehicle_create", {
             p_placa: body.placa,
@@ -450,8 +502,29 @@ const api = {
         );
       }
 
+      const crmClientId = extractTextId(path, /^\/crm\/clients\/([^/]+)$/);
+      if (crmClientId !== null) {
+        return ok(
+          await rpc<T>("mobile_crm_client_update", {
+            p_client_id: crmClientId,
+            p_nome_responsavel: body.nome_responsavel ?? null,
+            p_contato_responsavel: body.contato_responsavel ?? null,
+          })
+        );
+      }
+
       const vehicleCompanyId = extractId(path, /^\/vehicles\/(\d+)\/company$/);
       if (vehicleCompanyId !== null) {
+        if (typeof body.cliente_id === "string" || body.crm_cliente === true) {
+          return ok(
+            await rpc<T>("mobile_vehicle_company_update_crm", {
+              p_veiculo_id: vehicleCompanyId,
+              p_empresa: body.empresa,
+              p_cliente_id: typeof body.cliente_id === "string" ? body.cliente_id : null,
+            })
+          );
+        }
+
         return ok(
           await rpc<T>("mobile_vehicle_company_update", {
             p_veiculo_id: vehicleCompanyId,
