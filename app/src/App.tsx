@@ -2398,8 +2398,12 @@ function App() {
                 resumo: observacao || `Feedback pos-servico registrado para placa ${item.placa ?? 'sem placa'}.`,
                 resultado: 'feedback realizado',
               })
+              const concludedIds = new Set(item.execucaoIds?.length ? item.execucaoIds : [item.patioExecucaoId])
               setInteracoes((current) => [created, ...current])
-              setPatioFeedbackItems((current) => current.filter((row) => row.patioExecucaoId !== item.patioExecucaoId))
+              setPatioFeedbackItems((current) => current.filter((row) => {
+                if (concludedIds.has(row.patioExecucaoId)) return false
+                return !row.execucaoIds?.some((id) => concludedIds.has(id))
+              }))
               setPatioFeedbackTotal((current) => Math.max(0, current - 1))
             }}
             onCreateOpportunity={async (item) => {
@@ -12937,7 +12941,7 @@ function PatioFeedback({
   const feedbackStats = {
     comContato: items.filter((item) => item.contatoRecomendado || item.contatoMotorista).length,
     semContato: items.filter((item) => !item.contatoRecomendado && !item.contatoMotorista).length,
-    atrasados: items.filter((item) => daysSince(item.fimExecucao) >= 3).length,
+    atrasados: items.filter((item) => daysSince(item.fimExecucao) >= 15).length,
   }
 
   async function run(item: PatioFeedbackPendente, action: () => Promise<void>) {
@@ -12954,7 +12958,7 @@ function PatioFeedback({
       <div className="panel-header">
         <div>
           <h2>Feedback pos-servico</h2>
-          <p>Atendimentos finalizados no patio que ainda precisam de retorno simples pelo WhatsApp.</p>
+          <p>Visitas finalizadas ha 5 dias ou mais que ainda precisam de retorno simples pelo WhatsApp.</p>
         </div>
         <div className="row-actions">
           <strong>{total} pendentes</strong>
@@ -12985,7 +12989,7 @@ function PatioFeedback({
         <span><strong>{items.length}</strong> nesta pagina</span>
         <span><strong>{feedbackStats.comContato}</strong> com WhatsApp</span>
         <span><strong>{feedbackStats.semContato}</strong> sem contato</span>
-        <span><strong>{feedbackStats.atrasados}</strong> ha 3+ dias</span>
+        <span><strong>{feedbackStats.atrasados}</strong> ha 15+ dias</span>
       </div>
       {isLoading && <div className="empty-state">Carregando feedbacks...</div>}
       {!isLoading && items.length === 0 && <div className="empty-state">Nenhum feedback pendente com os filtros atuais.</div>}
@@ -13022,7 +13026,7 @@ function PatioFeedback({
                 <div className="status-row"><span>Contato</span><strong>{item.contatoNome || item.nomeMotorista || 'Nao informado'}</strong></div>
                 <div className="status-row"><span>Telefone usado</span><strong>{phone || 'Atualizar cadastro'}</strong></div>
                 <div className="status-row"><span>Pendencia</span><strong>{pendingDays > 0 ? `${pendingDays} dia(s) aguardando` : 'Finalizado hoje'}</strong></div>
-                <div className="status-row"><span>Servicos</span><strong>{item.servicos.slice(0, 3).join(', ') || 'Servico de patio'}</strong></div>
+                <div className="status-row"><span>Servicos</span><strong>{item.servicos.join(', ') || 'Servico de patio'}</strong></div>
                 <div className="status-row"><span>Objetivo</span><strong>Confirmar satisfacao e capturar oportunidade ou problema</strong></div>
               </div>
               <label className="wide-field">
@@ -13283,7 +13287,7 @@ function PatioRevisao({
 }
 
 function buildPatioFeedbackMessage(item: PatioFeedbackPendente) {
-  const servicos = item.servicos.slice(0, 3).join(', ')
+  const servicos = item.servicos.join(', ')
   const contato = item.contatoNome || item.nomeMotorista || 'Cliente'
   const dataServico = dateLabel(item.fimExecucao)
   const km = item.quilometragem ? `${numberLabel(item.quilometragem)} km` : 'KM nao informado'

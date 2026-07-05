@@ -452,6 +452,7 @@ export type PatioFeedbackPendente = {
   contatoNome?: string
   contatoTipo?: string
   servicos: string[]
+  execucaoIds?: number[]
 }
 
 export type PatioRevisaoProativa = {

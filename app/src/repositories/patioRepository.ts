@@ -82,6 +82,7 @@ type FeedbackRow = {
   contato_nome: string | null
   contato_tipo: string | null
   servicos: string[] | null
+  execucao_ids: number[] | null
 }
 
 type RevisaoRow = {
@@ -568,7 +569,7 @@ export async function listPatioFeedbackPendente(input: {
     .range(from, to)
 
   if (input.vendedorId) query = query.eq('vendedor_id', input.vendedorId)
-  const cutoff = new Date(Date.now() - 3 * 86400000).toISOString()
+  const cutoff = new Date(Date.now() - 15 * 86400000).toISOString()
   if (input.ageFilter === 'recentes') query = query.gte('fim_execucao', cutoff)
   if (input.ageFilter === 'antigos') query = query.lt('fim_execucao', cutoff)
   if (input.query?.trim()) {
@@ -1662,6 +1663,7 @@ function mapFeedback(row: FeedbackRow): PatioFeedbackPendente {
     contatoNome: row.contato_nome ?? undefined,
     contatoTipo: row.contato_tipo ?? undefined,
     servicos: row.servicos ?? [],
+    execucaoIds: row.execucao_ids?.map(Number) ?? [Number(row.patio_execucao_id)],
   }
 }
 

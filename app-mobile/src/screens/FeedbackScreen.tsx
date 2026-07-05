@@ -36,7 +36,7 @@ type FeedbackItem = {
 };
 
 function buildFeedbackMessage(item: FeedbackItem) {
-  const servicos = (item.servicos || []).slice(0, 3).join(", ");
+  const servicos = (item.servicos || []).join(", ");
   const contato = item.contato_nome || item.nome_motorista || "Cliente";
   const km = item.quilometragem ? `${numberLabel(item.quilometragem)} km` : "KM nao informado";
 
@@ -120,7 +120,7 @@ export function FeedbackScreen() {
           />
         }
       >
-        <Header title="Feedback pos-servico" subtitle="Contatos pendentes depois de servicos concluidos no patio." />
+        <Header title="Feedback pos-servico" subtitle="Visitas finalizadas ha 5 dias ou mais sem contato registrado." />
 
         <View style={{ flexDirection: "row", gap: theme.spacing.sm, marginBottom: theme.spacing.sm }}>
           <View style={{ flex: 1, backgroundColor: theme.colors.card, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.border, padding: theme.spacing.md }}>
@@ -167,7 +167,7 @@ export function FeedbackScreen() {
                   Servico: {dateLabel(item.fim_execucao)} | KM {numberLabel(item.quilometragem)}
                 </Text>
                 {(item.servicos || []).length > 0 ? (
-                  <Text style={{ color: theme.colors.muted, marginTop: 3 }}>{(item.servicos || []).slice(0, 3).join(", ")}</Text>
+                  <Text style={{ color: theme.colors.muted, marginTop: 3 }}>{(item.servicos || []).join(", ")}</Text>
                 ) : null}
               </View>
 
