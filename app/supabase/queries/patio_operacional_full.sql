@@ -407,6 +407,7 @@ as $$
 declare
   v_atendimento public.patio_atendimentos%rowtype;
   v_servico jsonb;
+  v_itens_restantes integer := 0;
 begin
   if not public.patio_usuario_operacional() then
     raise exception 'Sem permissao para finalizar box.';
@@ -420,26 +421,61 @@ begin
     raise exception 'Execucao em andamento nao encontrada.';
   end if;
 
-  for v_servico in select * from jsonb_array_elements(coalesce(p_servicos, '[]'::jsonb))
-  loop
+  if jsonb_array_length(coalesce(p_servicos, '[]'::jsonb)) = 0 then
     update public.patio_atendimento_itens
-    set quantidade = case
-          when coalesce(v_servico->>'quantidade', '') ~ '^[0-9]+$' then greatest(0, (v_servico->>'quantidade')::integer)
-          else quantidade
-        end,
-        observacao_execucao = coalesce(nullif(v_servico->>'observacao_execucao', ''), p_observacao_final, observacao_execucao),
+    set observacao_execucao = coalesce(nullif(p_observacao_final, ''), observacao_execucao),
         status = 'finalizado',
         atualizado_em = now(),
         sincronizado_em = now()
-    where id = (v_servico->>'id')::uuid
-      and patio_execucao_id = p_patio_execucao_id;
-  end loop;
+    where patio_execucao_id = p_patio_execucao_id
+      and status = 'em_andamento';
+  else
+    for v_servico in select * from jsonb_array_elements(coalesce(p_servicos, '[]'::jsonb))
+    loop
+      update public.patio_atendimento_itens
+      set quantidade = case
+            when coalesce(v_servico->>'quantidade', '') ~ '^[0-9]+$' then greatest(0, (v_servico->>'quantidade')::integer)
+            else quantidade
+          end,
+          observacao_execucao = coalesce(nullif(v_servico->>'observacao_execucao', ''), p_observacao_final, observacao_execucao),
+          status = 'finalizado',
+          atualizado_em = now(),
+          sincronizado_em = now()
+      where id = (v_servico->>'id')::uuid
+        and patio_execucao_id = p_patio_execucao_id;
+    end loop;
+  end if;
+
+  select count(*)
+  into v_itens_restantes
+  from public.patio_atendimento_itens
+  where patio_execucao_id = p_patio_execucao_id
+    and status in ('pendente', 'em_andamento');
+
+  if v_itens_restantes > 0 then
+    update public.patio_atendimentos
+    set status = 'pendente',
+        box_id = null,
+        funcionario_id = null,
+        fim_execucao = null,
+        usuario_finalizacao_id = null,
+        raw_data = coalesce(raw_data, '{}'::jsonb) || jsonb_build_object('ultima_observacao_box', p_observacao_final),
+        sincronizado_em = now()
+    where patio_execucao_id = p_patio_execucao_id;
+
+    update public.patio_boxes_snapshot
+    set ocupado = false,
+        sincronizado_em = now()
+    where patio_box_id = v_atendimento.box_id;
+
+    return;
+  end if;
 
   update public.patio_atendimentos
   set status = 'finalizado',
       fim_execucao = now(),
       usuario_finalizacao_id = null,
-      raw_data = raw_data || jsonb_build_object('observacao_final', p_observacao_final),
+      raw_data = coalesce(raw_data, '{}'::jsonb) || jsonb_build_object('observacao_final', p_observacao_final),
       sincronizado_em = now()
   where patio_execucao_id = p_patio_execucao_id;
 
