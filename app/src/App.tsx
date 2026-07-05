@@ -11465,6 +11465,132 @@ function patioChartTooltip(value: number, metric: PatioChartMetric) {
   return numberLabel(Math.round(value))
 }
 
+type PatioKmVisit = {
+  visit: PatioAtendimentoResumo
+  date: Date
+  dateKey: string
+  km: number
+  ignoredReason?: string
+}
+
+function patioKmDayDiff(start: Date, end: Date) {
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000))
+}
+
+function isPatioKmIsolatedOutlier(previous: PatioKmVisit | undefined, current: PatioKmVisit, next: PatioKmVisit | undefined) {
+  if (!previous || !next) return false
+  const combinedDays = patioKmDayDiff(previous.date, next.date)
+  const combinedDelta = next.km - previous.km
+  if (combinedDays <= 0 || combinedDelta <= 0) return false
+
+  const combinedKmDay = combinedDelta / combinedDays
+  if (combinedKmDay > 1800) return false
+
+  const lower = Math.min(previous.km, next.km)
+  const upper = Math.max(previous.km, next.km)
+  const lowerTolerance = Math.max(1000, upper * 0.02)
+  const upperTolerance = Math.max(1000, upper * 0.08)
+
+  return current.km < lower - lowerTolerance || current.km > upper + upperTolerance
+}
+
+function patioKmIntervalIsValid(days: number, deltaKm: number, kmPerDay: number) {
+  if (days <= 0 || deltaKm <= 0) return false
+  if (days === 1) return kmPerDay <= 1200
+  if (days <= 3) return kmPerDay <= 1500
+  return kmPerDay <= 1800
+}
+
+function patioKmIntervalWeight(days: number, kmPerDay: number) {
+  if (days === 1) return 0.35
+  if (days <= 3) return 0.65
+  if (kmPerDay > 1000) return 0.7
+  return 1
+}
+
+function calculatePatioKmMediaFromVisits(visits: PatioKmVisit[]) {
+  const intervals = visits.slice(1).map((visit, index) => {
+    const previous = visits[index]
+    const days = patioKmDayDiff(previous.date, visit.date)
+    const deltaKm = visit.km - previous.km
+    const kmPerDay = days > 0 ? deltaKm / days : 0
+    return { days, deltaKm, kmPerDay, weight: patioKmIntervalWeight(days, kmPerDay) }
+  }).filter((interval) => patioKmIntervalIsValid(interval.days, interval.deltaKm, interval.kmPerDay))
+
+  if (intervals.length === 0) return 0
+
+  const weightedAverage = intervals.reduce((sum, interval) => sum + interval.kmPerDay * interval.weight, 0)
+    / intervals.reduce((sum, interval) => sum + interval.weight, 0)
+
+  if (intervals.length < 3) return weightedAverage
+
+  const ordered = intervals.map((interval) => interval.kmPerDay).sort((a, b) => a - b)
+  const middle = Math.floor(ordered.length / 2)
+  const median = ordered.length % 2 ? ordered[middle] : (ordered[middle - 1] + ordered[middle]) / 2
+  return median * 0.7 + weightedAverage * 0.3
+}
+
+function buildPatioKmCalculation(atendimentos: PatioAtendimentoResumo[]) {
+  const grouped = new Map<string, PatioAtendimentoResumo[]>()
+  for (const item of atendimentos) {
+    if (!item.fimExecucao || !item.quilometragem || item.quilometragem <= 0) continue
+    const key = String(item.fimExecucao || item.inicioExecucao || '').slice(0, 10)
+    grouped.set(key, [...(grouped.get(key) ?? []), item])
+  }
+
+  const visits: PatioKmVisit[] = Array.from(grouped.entries()).map(([dateKey, items]) => {
+    const chosen = items.reduce((best, item) => (item.quilometragem ?? 0) > (best.quilometragem ?? 0) ? item : best, items[0])
+    const kms = items.map((item) => item.quilometragem ?? 0).filter((km) => km > 0)
+    const maxKm = Math.max(...kms)
+    const minKm = Math.min(...kms)
+    const sameDayConflict = kms.length > 1 && maxKm - minKm > Math.max(500, maxKm * 0.02)
+    return {
+      visit: chosen,
+      date: new Date(dateKey),
+      dateKey,
+      km: chosen.quilometragem ?? 0,
+      ignoredReason: sameDayConflict ? 'KM conflitante no mesmo dia' : undefined,
+    }
+  }).sort((a, b) => a.date.getTime() - b.date.getTime())
+
+  const sequence = visits.filter((visit) => !visit.ignoredReason)
+  const outlierKeys = new Set<string>()
+  sequence.forEach((visit, index) => {
+    if (isPatioKmIsolatedOutlier(sequence[index - 1], visit, sequence[index + 1])) {
+      outlierKeys.add(visit.dateKey)
+    }
+  })
+
+  const markedVisits = visits.map((visit) => outlierKeys.has(visit.dateKey)
+    ? { ...visit, ignoredReason: 'KM isolado fora do padrao' }
+    : visit)
+
+  const usableVisits = markedVisits.filter((visit) => !visit.ignoredReason)
+  const now = new Date()
+  const period12 = new Date(now)
+  period12.setMonth(period12.getMonth() - 12)
+  const period24 = new Date(now)
+  period24.setMonth(period24.getMonth() - 24)
+  const periodStart = usableVisits.filter((visit) => visit.date >= period12).length >= 2 ? period12 : period24
+  const periodVisits = usableVisits.filter((visit) => visit.date >= periodStart)
+  const baseVisits = periodVisits.length >= 2 ? periodVisits : usableVisits
+  const first = baseVisits[0]
+  const last = baseVisits[baseVisits.length - 1]
+  const days = first && last ? patioKmDayDiff(first.date, last.date) : 0
+  const deltaKm = first && last ? last.km - first.km : 0
+  const calculated = calculatePatioKmMediaFromVisits(baseVisits)
+
+  return {
+    visits: markedVisits,
+    usableVisits,
+    ignoredVisits: markedVisits.filter((visit) => visit.ignoredReason),
+    baseVisits,
+    days,
+    deltaKm,
+    calculated,
+  }
+}
+
 function PatioKmMedio({
   query,
   results,
@@ -11506,24 +11632,8 @@ function PatioKmMedio({
     }
   }
 
-  const visits = useMemo(() => {
-    const unique = new Map<string, PatioAtendimentoResumo>()
-    for (const item of atendimentos) {
-      if (!item.fimExecucao || !item.quilometragem || item.quilometragem <= 0) continue
-      const key = visitDayKey(item)
-      const current = unique.get(key)
-      if (!current || (item.quilometragem ?? 0) > (current.quilometragem ?? 0)) unique.set(key, item)
-    }
-    return Array.from(unique.values()).sort((a, b) => String(a.fimExecucao).localeCompare(String(b.fimExecucao)))
-  }, [atendimentos])
-  const baseVisits = visits.slice(-3)
-  const first = baseVisits[0]
-  const last = baseVisits[baseVisits.length - 1]
-  const days = first?.fimExecucao && last?.fimExecucao
-    ? Math.max(0, Math.round((new Date(last.fimExecucao).getTime() - new Date(first.fimExecucao).getTime()) / 86400000))
-    : 0
-  const deltaKm = first?.quilometragem && last?.quilometragem ? last.quilometragem - first.quilometragem : 0
-  const calculated = days > 0 && deltaKm >= 0 ? deltaKm / days : 0
+  const kmCalculation = useMemo(() => buildPatioKmCalculation(atendimentos), [atendimentos])
+  const { visits, usableVisits, ignoredVisits, baseVisits, days, deltaKm, calculated } = kmCalculation
   const mediaToSave = manualMedia.trim() ? Number(manualMedia.replace(',', '.')) : calculated
 
   const save = async () => {
@@ -11607,11 +11717,17 @@ function PatioKmMedio({
           {!isLoadingHistorico && (
             <>
               <div className="metric-grid">
-                <Metric icon={ClipboardList} label="Visitas validas" value={numberLabel(visits.length)} tone="blue" />
+                <Metric icon={ClipboardList} label="Visitas usadas" value={`${numberLabel(baseVisits.length)} / ${numberLabel(visits.length)}`} tone="blue" />
                 <Metric icon={CalendarClock} label="Periodo usado" value={days ? `${days} dias` : 'Sem periodo'} tone="amber" />
                 <Metric icon={Gauge} label="Delta KM" value={numberLabel(Math.max(0, deltaKm))} tone="blue" />
                 <Metric icon={RefreshCw} label="Nova media" value={calculated ? `${calculated.toFixed(2)} km/dia` : 'Nao calculada'} tone="green" />
               </div>
+              {ignoredVisits.length > 0 && (
+                <div className="empty-state compact">
+                  {numberLabel(ignoredVisits.length)} visita{ignoredVisits.length > 1 ? 's' : ''} ignorada{ignoredVisits.length > 1 ? 's' : ''} na media por KM fora do padrao.
+                </div>
+              )}
+              {usableVisits.length < 2 && <div className="empty-state compact">Historico insuficiente para calcular uma media confiavel.</div>}
               <div className="filters-grid">
                 <label>
                   Media final manual
@@ -11625,23 +11741,26 @@ function PatioKmMedio({
               </div>
               <div className="status-list">
                 {visits.slice(-8).map((visit) => (
-                  <div className="status-row" key={visit.patioExecucaoId}>
-                    <span>{dateLabel(visit.fimExecucao)}</span>
+                  <div className="status-row" key={visit.visit.patioExecucaoId}>
+                    <span>
+                      {dateLabel(visit.visit.fimExecucao)}
+                      {visit.ignoredReason && <small className="status-pill warn compact">{visit.ignoredReason}</small>}
+                    </span>
                     <div className="inline-actions">
                       <input
                         className="compact-input"
                         inputMode="numeric"
-                        value={kmDrafts[visit.patioExecucaoId] ?? ''}
-                        onChange={(event) => setKmDrafts((current) => ({ ...current, [visit.patioExecucaoId]: event.target.value.replace(/\D/g, '') }))}
-                        aria-label={`KM da visita ${dateLabel(visit.fimExecucao)}`}
+                        value={kmDrafts[visit.visit.patioExecucaoId] ?? ''}
+                        onChange={(event) => setKmDrafts((current) => ({ ...current, [visit.visit.patioExecucaoId]: event.target.value.replace(/\D/g, '') }))}
+                        aria-label={`KM da visita ${dateLabel(visit.visit.fimExecucao)}`}
                       />
                       <button
                         className="button tiny-button"
                         type="button"
-                        disabled={savingKmId === visit.patioExecucaoId || kmDrafts[visit.patioExecucaoId] === String(visit.quilometragem ?? '')}
-                        onClick={() => void saveVisitKm(visit)}
+                        disabled={savingKmId === visit.visit.patioExecucaoId || kmDrafts[visit.visit.patioExecucaoId] === String(visit.visit.quilometragem ?? '')}
+                        onClick={() => void saveVisitKm(visit.visit)}
                       >
-                        {savingKmId === visit.patioExecucaoId ? 'Salvando...' : 'Salvar KM'}
+                        {savingKmId === visit.visit.patioExecucaoId ? 'Salvando...' : 'Salvar KM'}
                       </button>
                     </div>
                   </div>

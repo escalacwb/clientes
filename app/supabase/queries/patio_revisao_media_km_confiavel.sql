@@ -31,6 +31,7 @@ declare
   v_intervalos_validos integer;
   v_intervalos_invalidos integer;
   v_dias_conflitantes integer;
+  v_visitas_fora_padrao integer;
   v_visitas_validas integer;
   v_motivo text;
 begin
@@ -50,7 +51,7 @@ begin
       and coalesce(pa.fim_execucao, pa.inicio_execucao)::date >= current_date - interval '24 months'
     group by coalesce(pa.fim_execucao, pa.inicio_execucao)::date
   ),
-  visitas_normalizadas as (
+  visitas_preparadas as (
     select
       data_visita,
       km_max::integer as quilometragem,
@@ -60,12 +61,55 @@ begin
         when km_max > 2000000 then true
         when kms_distintos > 1 and (km_max - km_min) > greatest(500, round(km_max * 0.02)) then true
         else false
-      end as visita_suspeita,
+      end as base_suspeita,
       case
         when data_visita >= current_date - interval '12 months' then true
         else false
       end as periodo_12m
     from visitas_raw
+  ),
+  visitas_com_vizinhos as (
+    select
+      v.*,
+      lag(v.data_visita) over (order by v.data_visita) as data_anterior,
+      lag(v.quilometragem) over (order by v.data_visita) as km_anterior,
+      lead(v.data_visita) over (order by v.data_visita) as data_proxima,
+      lead(v.quilometragem) over (order by v.data_visita) as km_proximo
+    from visitas_preparadas v
+  ),
+  visitas_normalizadas as (
+    select
+      data_visita,
+      quilometragem,
+      execucoes,
+      kms_distintos,
+      (
+        data_anterior is not null
+        and data_proxima is not null
+        and data_proxima > data_anterior
+        and km_proximo > km_anterior
+        and ((km_proximo - km_anterior)::numeric / greatest(1, data_proxima - data_anterior)::numeric) <= 1800
+        and (
+          quilometragem < least(km_anterior, km_proximo) - greatest(1000, round(greatest(km_anterior, km_proximo) * 0.02))
+          or quilometragem > greatest(km_anterior, km_proximo) + greatest(1000, round(greatest(km_anterior, km_proximo) * 0.08))
+        )
+      ) as km_isolado_fora_padrao,
+      case
+        when base_suspeita then true
+        when data_anterior is not null
+          and data_proxima is not null
+          and data_proxima > data_anterior
+          and km_proximo > km_anterior
+          and ((km_proximo - km_anterior)::numeric / greatest(1, data_proxima - data_anterior)::numeric) <= 1800
+          and (
+            quilometragem < least(km_anterior, km_proximo) - greatest(1000, round(greatest(km_anterior, km_proximo) * 0.02))
+            or quilometragem > greatest(km_anterior, km_proximo) + greatest(1000, round(greatest(km_anterior, km_proximo) * 0.08))
+          )
+          then true
+        else false
+      end as visita_suspeita,
+      periodo_12m
+    from visitas_com_vizinhos
   ),
   periodo as (
     select
@@ -139,6 +183,7 @@ begin
       (select count(*)::integer from visitas_validas) as visitas_validas,
       (select count(*)::integer from visitas_periodo where visita_suspeita) as visitas_suspeitas,
       (select count(*)::integer from visitas_periodo where kms_distintos > 1) as dias_com_multiplos_kms,
+      (select count(*)::integer from visitas_periodo where km_isolado_fora_padrao) as visitas_fora_padrao,
       (select count(*)::integer from trechos_classificados where not trecho_valido) as intervalos_invalidos,
       count(*)::integer as intervalos_validos,
       percentile_cont(0.5) within group (order by km_por_dia)::numeric as mediana_km_dia,
@@ -157,6 +202,7 @@ begin
     e.intervalos_validos,
     e.intervalos_invalidos,
     e.dias_com_multiplos_kms,
+    e.visitas_fora_padrao,
     e.visitas_validas
   into
     v_media,
@@ -166,6 +212,7 @@ begin
     v_intervalos_validos,
     v_intervalos_invalidos,
     v_dias_conflitantes,
+    v_visitas_fora_padrao,
     v_visitas_validas
   from estatisticas e;
 
@@ -177,6 +224,9 @@ begin
   end if;
   if v_dias_conflitantes is null then
     v_dias_conflitantes := 0;
+  end if;
+  if v_visitas_fora_padrao is null then
+    v_visitas_fora_padrao := 0;
   end if;
   if v_visitas_usadas is null then
     v_visitas_usadas := 0;
@@ -204,6 +254,7 @@ begin
     'trechos validos ' || v_intervalos_validos::text,
     case when v_intervalos_invalidos > 0 then 'trechos descartados ' || v_intervalos_invalidos::text end,
     case when v_dias_conflitantes > 0 then 'dias com KM conflitante ' || v_dias_conflitantes::text end,
+    case when v_visitas_fora_padrao > 0 then 'visitas com KM isolado fora do padrao ' || v_visitas_fora_padrao::text end,
     case when v_media is null then 'historico insuficiente ou invalido' end,
     case when v_media > 1800 then 'media acima do limite automatico' end
   );
@@ -223,6 +274,7 @@ begin
         'media_km_trechos_validos', v_intervalos_validos,
         'media_km_trechos_descartados', v_intervalos_invalidos,
         'media_km_dias_conflitantes', v_dias_conflitantes,
+        'media_km_visitas_fora_padrao', v_visitas_fora_padrao,
         'media_km_recalculada_em', now()
       ),
       sincronizado_em = now()
