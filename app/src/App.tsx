@@ -9946,7 +9946,7 @@ function PatioEntrada({
   catalogoServicos: PatioCatalogoServico[]
   onQueryChange: (query: string) => void
   onConsultPlate?: (placa: string) => Promise<{ placa: string; modelo: string; anoModelo?: number | string | null }>
-  onCreateVehicleFromPlate?: (input: { placa: string; empresa: string; clienteId?: string; modelo?: string; anoModelo?: number | string | null }) => Promise<PatioVeiculoBusca>
+  onCreateVehicleFromPlate?: (input: { placa: string; empresa: string; clienteId?: string; usarConsumidorFinal?: boolean; modelo?: string; anoModelo?: number | string | null }) => Promise<PatioVeiculoBusca>
   onRegisterEntrada?: (input: PatioEntradaInput) => Promise<void>
   onEditVehicle?: (vehicle: PatioVeiculoBusca) => void
   onOpenClient: (clienteId: string) => void | Promise<void>
@@ -9977,6 +9977,7 @@ function PatioEntrada({
   const [plateConsultError, setPlateConsultError] = useState('')
   const [apiEmpresa, setApiEmpresa] = useState('')
   const [apiClienteSelecionado, setApiClienteSelecionado] = useState<Cliente | undefined>()
+  const [apiUsarConsumidorFinal, setApiUsarConsumidorFinal] = useState(false)
   const [apiClienteOptions, setApiClienteOptions] = useState<Cliente[]>([])
   const [isLoadingApiClientes, setIsLoadingApiClientes] = useState(false)
   const [apiModelo, setApiModelo] = useState('')
@@ -10051,6 +10052,10 @@ function PatioEntrada({
       setFormError('Adicione pelo menos um servico para enviar o veiculo para a fila.')
       return
     }
+    if (!selected.clienteId) {
+      setFormError('Selecione um cadastro do cliente antes de iniciar a entrada. Se nao houver cadastro, use Consumidor 55555 e informe o nome.')
+      return
+    }
     const kmInformado = quilometragem.trim() ? Number(quilometragem) : undefined
     if (kmInformado !== undefined && (!Number.isFinite(kmInformado) || kmInformado <= 0)) {
       setFormError('KM zero nao pode ser usado. Informe um KM valido ou deixe em branco.')
@@ -10084,6 +10089,7 @@ function PatioEntrada({
     setPlateConsultError('')
     setPlateConsultResult(undefined)
     setApiClienteSelecionado(undefined)
+    setApiUsarConsumidorFinal(false)
     setApiClienteOptions([])
     try {
       const result = await onConsultPlate(query)
@@ -10099,7 +10105,7 @@ function PatioEntrada({
 
   useEffect(() => {
     const term = apiEmpresa.trim()
-    if (!plateConsultResult || term.length < 3 || apiClienteSelecionado?.nome === term) {
+    if (!plateConsultResult || apiUsarConsumidorFinal || term.length < 3 || apiClienteSelecionado?.nome === term) {
       setApiClienteOptions([])
       setIsLoadingApiClientes(false)
       return
@@ -10124,12 +10130,16 @@ function PatioEntrada({
       isActive = false
       window.clearTimeout(handle)
     }
-  }, [apiEmpresa, apiClienteSelecionado, plateConsultResult])
+  }, [apiEmpresa, apiClienteSelecionado, apiUsarConsumidorFinal, plateConsultResult])
 
   const handleCreateVehicleFromApi = async () => {
     if (!plateConsultResult || !onCreateVehicleFromPlate) return
     if (!apiEmpresa.trim()) {
-      setPlateConsultError('Informe o cliente/empresa para cadastrar o veiculo.')
+      setPlateConsultError(apiUsarConsumidorFinal ? 'Informe o nome do cliente avulso para gravar no historico.' : 'Informe o cliente/empresa para cadastrar o veiculo.')
+      return
+    }
+    if (!apiClienteSelecionado && !apiUsarConsumidorFinal) {
+      setPlateConsultError('Selecione um cliente do CRM ou marque Consumidor 55555 para cliente sem cadastro.')
       return
     }
 
@@ -10140,6 +10150,7 @@ function PatioEntrada({
         placa: plateConsultResult.placa,
         empresa: apiEmpresa,
         clienteId: apiClienteSelecionado?.id,
+        usarConsumidorFinal: apiUsarConsumidorFinal,
         modelo: apiModelo,
         anoModelo: apiAnoModelo || plateConsultResult.anoModelo,
       })
@@ -10171,6 +10182,7 @@ function PatioEntrada({
               setPlateConsultError('')
               setApiEmpresa('')
               setApiClienteSelecionado(undefined)
+              setApiUsarConsumidorFinal(false)
               setApiClienteOptions([])
               setApiModelo('')
               setApiAnoModelo('')
@@ -10203,14 +10215,14 @@ function PatioEntrada({
           </div>
           <div className="filters-grid">
             <label>
-              Cliente/empresa
+              {apiUsarConsumidorFinal ? 'Nome para historico' : 'Cliente/empresa'}
               <input
                 value={apiEmpresa}
                 onChange={(event) => {
                   setApiEmpresa(event.target.value)
                   setApiClienteSelecionado(undefined)
                 }}
-                placeholder="Comece a digitar o cliente"
+                placeholder={apiUsarConsumidorFinal ? 'Nome do cliente avulso' : 'Comece a digitar o cliente'}
               />
             </label>
             <label>
@@ -10222,6 +10234,18 @@ function PatioEntrada({
               <input inputMode="numeric" value={apiAnoModelo} onChange={(event) => setApiAnoModelo(event.target.value.replace(/\D/g, ''))} />
             </label>
           </div>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={apiUsarConsumidorFinal}
+              onChange={(event) => {
+                setApiUsarConsumidorFinal(event.target.checked)
+                setApiClienteSelecionado(undefined)
+                setApiClienteOptions([])
+              }}
+            />
+            Cliente sem cadastro: usar Consumidor 55555
+          </label>
           {(isLoadingApiClientes || apiClienteOptions.length > 0 || apiClienteSelecionado) && (
             <div className="table-list compact-list">
               {apiClienteSelecionado && (
@@ -10241,6 +10265,7 @@ function PatioEntrada({
                     type="button"
                     onClick={() => {
                       setApiClienteSelecionado(cliente)
+                      setApiUsarConsumidorFinal(false)
                       setApiEmpresa(cliente.nome)
                       setApiClienteOptions([])
                     }}
@@ -10259,7 +10284,7 @@ function PatioEntrada({
               disabled={isCreatingApiVehicle || !apiEmpresa.trim()}
               onClick={() => void handleCreateVehicleFromApi()}
             >
-              {isCreatingApiVehicle ? 'Cadastrando...' : apiClienteSelecionado ? 'Cadastrar e iniciar entrada' : 'Cadastrar sem vinculo e iniciar entrada'}
+              {isCreatingApiVehicle ? 'Cadastrando...' : 'Cadastrar e iniciar entrada'}
             </button>
           </div>
         </div>

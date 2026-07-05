@@ -110,6 +110,7 @@ export function CadastroScreen() {
   const [diagVibracao, setDiagVibracao] = useState("Nao");
   const [showEditVehicle, setShowEditVehicle] = useState(false);
   const [showEditCompany, setShowEditCompany] = useState(false);
+  const [companyUseConsumer, setCompanyUseConsumer] = useState(false);
   const [companySearch, setCompanySearch] = useState("");
   const [clientOptions, setClientOptions] = useState<ClientOption[]>([]);
   const [selectedClient, setSelectedClient] = useState<ClientOption | null>(null);
@@ -122,6 +123,7 @@ export function CadastroScreen() {
     contato_motorista: "",
   });
   const [newCompanySearch, setNewCompanySearch] = useState("");
+  const [newUseConsumer, setNewUseConsumer] = useState(false);
   const [newClientOptions, setNewClientOptions] = useState<ClientOption[]>([]);
   const [newSelectedClient, setNewSelectedClient] = useState<ClientOption | null>(null);
   const [newVehicle, setNewVehicle] = useState({
@@ -154,7 +156,7 @@ export function CadastroScreen() {
   }, [numEixos]);
 
   useEffect(() => {
-    if (companySearch.length < 3) {
+    if (companyUseConsumer || companySearch.length < 3) {
       setClientOptions([]);
       return;
     }
@@ -162,10 +164,10 @@ export function CadastroScreen() {
       .get("/crm/clients/search", { params: { term: companySearch } })
       .then((res) => setClientOptions(res.data || []))
       .catch(() => setClientOptions([]));
-  }, [companySearch]);
+  }, [companySearch, companyUseConsumer]);
 
   useEffect(() => {
-    if (newCompanySearch.length < 3) {
+    if (newUseConsumer || newCompanySearch.length < 3) {
       setNewClientOptions([]);
       return;
     }
@@ -173,7 +175,7 @@ export function CadastroScreen() {
       .get("/crm/clients/search", { params: { term: newCompanySearch } })
       .then((res) => setNewClientOptions(res.data || []))
       .catch(() => setNewClientOptions([]));
-  }, [newCompanySearch]);
+  }, [newCompanySearch, newUseConsumer]);
 
   async function consultarPlacaApi(placaBusca = placa) {
     const placaFinal = placaBusca.trim().toUpperCase();
@@ -223,6 +225,7 @@ export function CadastroScreen() {
       });
       setCompanySearch(response.data.empresa || "");
       setSelectedClient(null);
+      setCompanyUseConsumer(false);
       setClientRespName(response.data.nome_responsavel || "");
       setClientRespPhone(response.data.contato_responsavel || "");
     } catch (err) {
@@ -230,6 +233,7 @@ export function CadastroScreen() {
       if (isApiError(err) && err.status === 404) {
         setVeiculoNaoEncontrado(true);
         setNewCompanySearch("");
+        setNewUseConsumer(false);
         setNewSelectedClient(null);
         setNewClientOptions([]);
         setNewVehicle((prev) => ({
@@ -254,6 +258,10 @@ export function CadastroScreen() {
       Alert.alert("Campos obrigatorios", "Preencha placa, empresa e modelo.");
       return;
     }
+    if (!newSelectedClient && !newUseConsumer) {
+      Alert.alert("Selecione o cadastro", "Escolha um cliente do CRM ou marque Consumidor 55555 para cliente sem cadastro.");
+      return;
+    }
 
     const anoModeloNum = Number(newVehicle.ano_modelo);
     try {
@@ -265,6 +273,7 @@ export function CadastroScreen() {
         nome_motorista: newVehicle.nome_motorista.trim() || null,
         contato_motorista: newVehicle.contato_motorista.trim() || null,
         cliente_id: newSelectedClient?.id ?? null,
+        consumidor_final: newUseConsumer,
       });
 
       if ((response.data as any)?.already_exists) {
@@ -351,6 +360,14 @@ export function CadastroScreen() {
     try {
       let clientId = selectedClient?.id || null;
       let empresaFinal = companySearch || veiculo.empresa;
+      if (!clientId && !companyUseConsumer) {
+        Alert.alert("Selecione o cadastro", "Escolha um cliente do CRM ou marque Consumidor 55555 para cliente sem cadastro.");
+        return;
+      }
+      if (companyUseConsumer && !String(empresaFinal || "").trim()) {
+        Alert.alert("Informe o nome", "Escreva o nome do cliente avulso para o historico.");
+        return;
+      }
       if (clientId && (clientRespName || clientRespPhone)) {
         await api.put(`/crm/clients/${clientId}`, {
           nome_responsavel: clientRespName,
@@ -361,6 +378,7 @@ export function CadastroScreen() {
         empresa: empresaFinal,
         cliente_id: clientId,
         crm_cliente: true,
+        consumidor_final: companyUseConsumer,
       });
       Alert.alert("Empresa atualizada");
       setShowEditCompany(false);
@@ -377,6 +395,11 @@ export function CadastroScreen() {
     }
     if (itens.length === 0) {
       Alert.alert("Adicione pelo menos um servico");
+      return;
+    }
+    if (!veiculo.cliente_id) {
+      setShowEditCompany(true);
+      Alert.alert("Selecione o cadastro", "Antes de iniciar o servico, escolha um cliente do CRM ou marque Consumidor 55555 e informe o nome.");
       return;
     }
     const kmInformado = quilometragem.trim() ? Number(quilometragem) : null;
@@ -449,12 +472,21 @@ export function CadastroScreen() {
             />
 
             <Field
-              label="Cliente/empresa"
-              placeholder="Digite para buscar cliente no CRM"
+              label={newUseConsumer ? "Nome para historico" : "Cliente/empresa"}
+              placeholder={newUseConsumer ? "Nome do cliente avulso" : "Digite para buscar cliente no CRM"}
               value={newCompanySearch}
               onChangeText={(value) => {
                 setNewCompanySearch(value);
                 setNewSelectedClient(null);
+              }}
+            />
+            <Chip
+              label="Cliente sem cadastro: Consumidor 55555"
+              selected={newUseConsumer}
+              onPress={() => {
+                setNewUseConsumer((prev) => !prev);
+                setNewSelectedClient(null);
+                setNewClientOptions([]);
               }}
             />
             {newClientOptions.map((opt) => (
@@ -464,6 +496,7 @@ export function CadastroScreen() {
                 selected={newSelectedClient?.id === opt.id}
                 onPress={() => {
                   setNewSelectedClient(opt);
+                  setNewUseConsumer(false);
                   setNewCompanySearch(opt.nome_empresa);
                 }}
               />
@@ -555,12 +588,21 @@ export function CadastroScreen() {
             {showEditCompany && (
               <View style={{ marginTop: theme.spacing.sm }}>
                 <Field
-                  label="Buscar/alterar empresa"
-                  placeholder="Digite para buscar"
+                  label={companyUseConsumer ? "Nome para historico" : "Buscar/alterar empresa"}
+                  placeholder={companyUseConsumer ? "Nome do cliente avulso" : "Digite para buscar"}
                   value={companySearch}
                   onChangeText={(value) => {
                     setCompanySearch(value);
                     setSelectedClient(null);
+                  }}
+                />
+                <Chip
+                  label="Cliente sem cadastro: Consumidor 55555"
+                  selected={companyUseConsumer}
+                  onPress={() => {
+                    setCompanyUseConsumer((prev) => !prev);
+                    setSelectedClient(null);
+                    setClientOptions([]);
                   }}
                 />
                 {clientOptions.map((opt) => (
@@ -570,6 +612,7 @@ export function CadastroScreen() {
                     selected={selectedClient?.id === opt.id}
                     onPress={async () => {
                       setSelectedClient(opt);
+                      setCompanyUseConsumer(false);
                       setCompanySearch(opt.nome_empresa);
                       try {
                         const details = await api.get(`/crm/clients/${opt.id}`);

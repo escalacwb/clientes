@@ -158,7 +158,13 @@ as $$
     select
       v.patio_veiculo_id as id,
       v.placa,
-      coalesce(crm.nome, v.empresa) as empresa,
+      case
+        when crm.codigo_erp = '55555'
+          and nullif(btrim(v.empresa), '') is not null
+          and upper(btrim(v.empresa)) <> 'CONSUMIDOR FINAL'
+          then v.empresa
+        else coalesce(crm.nome, v.empresa)
+      end as empresa,
       v.modelo,
       v.ano_modelo,
       v.nome_motorista,
@@ -300,12 +306,15 @@ begin
 end;
 $$;
 
+drop function if exists public.web_vehicle_create_from_plate(text, text, uuid, text, integer);
+
 create or replace function public.web_vehicle_create_from_plate(
   p_placa text,
   p_empresa text,
   p_cliente_id uuid default null,
   p_modelo text default null,
-  p_ano_modelo integer default null
+  p_ano_modelo integer default null,
+  p_consumidor_final boolean default false
 )
 returns jsonb
 language plpgsql
@@ -316,19 +325,43 @@ declare
   v_id bigint;
   v_placa text;
   v_empresa text;
+  v_cliente_id uuid;
   v_cliente_nome text;
   v_result jsonb;
 begin
   v_placa := public.mobile_format_placa(p_placa);
 
-  if p_cliente_id is not null then
-    select nome into v_cliente_nome
+  if p_consumidor_final then
+    select id, nome into v_cliente_id, v_cliente_nome
+    from public.clientes
+    where codigo_erp = '55555'
+      and excluido_em is null
+    order by atualizado_em desc nulls last
+    limit 1;
+
+    if v_cliente_id is null then
+      raise exception 'Cliente Consumidor 55555 nao encontrado no CRM.';
+    end if;
+
+    v_empresa := nullif(trim(p_empresa), '');
+    if v_empresa is null or upper(v_empresa) = 'CONSUMIDOR FINAL' then
+      raise exception 'Informe o nome do cliente avulso para usar Consumidor 55555.';
+    end if;
+  elsif p_cliente_id is not null then
+    select id, nome into v_cliente_id, v_cliente_nome
     from public.clientes
     where id = p_cliente_id
       and excluido_em is null;
+
+    if v_cliente_id is null then
+      raise exception 'Cliente do CRM nao encontrado.';
+    end if;
+
+    v_empresa := coalesce(nullif(trim(p_empresa), ''), nullif(trim(v_cliente_nome), ''));
+  else
+    raise exception 'Selecione um cliente do CRM ou marque Consumidor 55555.';
   end if;
 
-  v_empresa := coalesce(nullif(trim(p_empresa), ''), nullif(trim(v_cliente_nome), ''));
   if v_empresa is null then
     raise exception 'Informe o cliente/empresa do veiculo.';
   end if;
@@ -345,19 +378,19 @@ begin
       match_tipo, match_score, raw_data, sincronizado_em
     )
     values (
-      v_id, p_cliente_id, v_placa, v_empresa, nullif(p_modelo, ''), p_ano_modelo,
-      'crm_web_api_placa', case when p_cliente_id is not null then 90 else 0 end,
-      jsonb_build_object('origem', 'crm_web_api_placa', 'cliente_nome', v_cliente_nome), now()
+      v_id, v_cliente_id, v_placa, v_empresa, nullif(p_modelo, ''), p_ano_modelo,
+      'crm_web_api_placa', 90,
+      jsonb_build_object('origem', 'crm_web_api_placa', 'cliente_nome', v_cliente_nome, 'consumidor_final', p_consumidor_final, 'cliente_nome_snapshot', v_empresa), now()
     );
   else
     update public.patio_veiculos_snapshot
-    set cliente_id = coalesce(p_cliente_id, cliente_id),
+    set cliente_id = v_cliente_id,
         empresa = coalesce(v_empresa, empresa),
         modelo = coalesce(nullif(p_modelo, ''), modelo),
         ano_modelo = coalesce(p_ano_modelo, ano_modelo),
-        match_tipo = case when p_cliente_id is not null then 'crm_web_api_placa' else match_tipo end,
-        match_score = case when p_cliente_id is not null then greatest(match_score, 90) else match_score end,
-        raw_data = coalesce(raw_data, '{}'::jsonb) || jsonb_build_object('origem_web_api_placa', true, 'cliente_nome', v_cliente_nome),
+        match_tipo = 'crm_web_api_placa',
+        match_score = greatest(match_score, 90),
+        raw_data = coalesce(raw_data, '{}'::jsonb) || jsonb_build_object('origem_web_api_placa', true, 'cliente_nome', v_cliente_nome, 'consumidor_final', p_consumidor_final, 'cliente_nome_snapshot', v_empresa),
         sincronizado_em = now()
     where patio_veiculo_id = v_id;
   end if;
@@ -368,7 +401,13 @@ begin
       pvs.patio_veiculo_id as id,
       pvs.cliente_id,
       pvs.placa,
-      coalesce(c.nome, pvs.empresa) as empresa,
+      case
+        when c.codigo_erp = '55555'
+          and nullif(btrim(pvs.empresa), '') is not null
+          and upper(btrim(pvs.empresa)) <> 'CONSUMIDOR FINAL'
+          then pvs.empresa
+        else coalesce(c.nome, pvs.empresa)
+      end as empresa,
       pvs.modelo,
       pvs.ano_modelo,
       pvs.nome_motorista,
@@ -436,10 +475,13 @@ begin
 end;
 $$;
 
+drop function if exists public.mobile_vehicle_company_update_crm(bigint, text, uuid);
+
 create or replace function public.mobile_vehicle_company_update_crm(
   p_veiculo_id bigint,
   p_empresa text,
-  p_cliente_id uuid default null
+  p_cliente_id uuid default null,
+  p_consumidor_final boolean default false
 )
 returns jsonb
 language plpgsql
@@ -448,23 +490,51 @@ set search_path = public
 as $$
 declare
   v_placa text;
+  v_cliente_id uuid;
   v_cliente_nome text;
+  v_empresa text;
 begin
-  if p_cliente_id is not null then
-    select nome into v_cliente_nome
+  if p_consumidor_final then
+    select id, nome into v_cliente_id, v_cliente_nome
+    from public.clientes
+    where codigo_erp = '55555'
+      and excluido_em is null
+    order by atualizado_em desc nulls last
+    limit 1;
+
+    if v_cliente_id is null then
+      raise exception 'Cliente Consumidor 55555 nao encontrado no CRM.';
+    end if;
+
+    v_empresa := nullif(trim(p_empresa), '');
+    if v_empresa is null or upper(v_empresa) = 'CONSUMIDOR FINAL' then
+      raise exception 'Informe o nome do cliente avulso para usar Consumidor 55555.';
+    end if;
+  elsif p_cliente_id is not null then
+    select id, nome into v_cliente_id, v_cliente_nome
     from public.clientes
     where id = p_cliente_id
       and excluido_em is null;
+
+    if v_cliente_id is null then
+      raise exception 'Cliente do CRM nao encontrado.';
+    end if;
+
+    v_empresa := coalesce(nullif(p_empresa, ''), v_cliente_nome);
+  else
+    raise exception 'Selecione um cliente do CRM ou marque Consumidor 55555.';
   end if;
 
   update public.patio_veiculos_snapshot
-  set empresa = coalesce(nullif(p_empresa, ''), v_cliente_nome, empresa),
-      cliente_id = coalesce(p_cliente_id, cliente_id),
-      match_tipo = case when p_cliente_id is not null then 'crm_mobile' else match_tipo end,
-      match_score = case when p_cliente_id is not null then greatest(match_score, 90) else match_score end,
+  set empresa = coalesce(v_empresa, empresa),
+      cliente_id = v_cliente_id,
+      match_tipo = 'crm_mobile',
+      match_score = greatest(match_score, 90),
       raw_data = coalesce(raw_data, '{}'::jsonb) || jsonb_build_object(
-        'origem_mobile_cliente_crm', p_cliente_id is not null,
-        'cliente_nome', v_cliente_nome
+        'origem_mobile_cliente_crm', true,
+        'cliente_nome', v_cliente_nome,
+        'consumidor_final', p_consumidor_final,
+        'cliente_nome_snapshot', v_empresa
       ),
       sincronizado_em = now()
   where patio_veiculo_id = p_veiculo_id
@@ -498,6 +568,13 @@ begin
   select * into v_veiculo from public.patio_veiculos_snapshot where patio_veiculo_id = p_veiculo_id;
   if v_veiculo.patio_veiculo_id is null then
     raise exception 'Veiculo nao encontrado.';
+  end if;
+  if v_veiculo.cliente_id is null then
+    raise exception 'Selecione um cadastro do cliente antes de iniciar a entrada. Se nao houver cadastro, use Consumidor 55555 e informe o nome.';
+  end if;
+  if exists (select 1 from public.clientes c where c.id = v_veiculo.cliente_id and c.codigo_erp = '55555')
+     and (nullif(trim(v_veiculo.empresa), '') is null or upper(trim(v_veiculo.empresa)) = 'CONSUMIDOR FINAL') then
+    raise exception 'Informe o nome do cliente avulso para usar Consumidor 55555.';
   end if;
 
   v_servicos := (
@@ -580,7 +657,11 @@ as $$
     raw_data->>'omsys_codigo' as codigo_omsys,
     raw_data->>'origem' as origem
   from public.patio_funcionarios_snapshot
-  where ativo = true and patio_funcionario_id > 0
+  where ativo = true
+    and patio_funcionario_id > 0
+    and nullif(raw_data->>'omsys_codigo', '') is not null
+    and raw_data->>'origem' = 'omsys'
+    and raw_data->>'tipo' = 'tecnico'
   order by nome
 $$;
 
@@ -1159,10 +1240,10 @@ grant execute on function public.mobile_client_create(text, text) to anon, authe
 grant execute on function public.mobile_client_update(bigint, text, text) to anon, authenticated, service_role;
 grant execute on function public.mobile_crm_client_update(uuid, text, text) to anon, authenticated, service_role;
 grant execute on function public.mobile_vehicle_create(text, text, text, integer, text, text, bigint) to anon, authenticated, service_role;
-grant execute on function public.web_vehicle_create_from_plate(text, text, uuid, text, integer) to anon, authenticated, service_role;
+grant execute on function public.web_vehicle_create_from_plate(text, text, uuid, text, integer, boolean) to anon, authenticated, service_role;
 grant execute on function public.mobile_vehicle_update(bigint, text, integer, text, text) to anon, authenticated, service_role;
 grant execute on function public.mobile_vehicle_company_update(bigint, text, bigint) to anon, authenticated, service_role;
-grant execute on function public.mobile_vehicle_company_update_crm(bigint, text, uuid) to anon, authenticated, service_role;
+grant execute on function public.mobile_vehicle_company_update_crm(bigint, text, uuid, boolean) to anon, authenticated, service_role;
 grant execute on function public.mobile_services_register(bigint, integer, text, jsonb, bigint) to anon, authenticated, service_role;
 grant execute on function public.mobile_pending_vehicles() to anon, authenticated, service_role;
 grant execute on function public.mobile_pending_areas(bigint) to anon, authenticated, service_role;

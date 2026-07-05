@@ -960,6 +960,7 @@ export async function createPatioVehicleFromPlate(input: {
   placa: string
   empresa: string
   clienteId?: string
+  usarConsumidorFinal?: boolean
   modelo?: string
   anoModelo?: number | string | null
 }): Promise<PatioVeiculoBusca> {
@@ -976,6 +977,7 @@ export async function createPatioVehicleFromPlate(input: {
     p_cliente_id: input.clienteId ?? null,
     p_modelo: input.modelo?.trim() || null,
     p_ano_modelo: Number.isFinite(anoModelo) ? anoModelo : null,
+    p_consumidor_final: input.usarConsumidorFinal === true,
   })
 
   if (error) throw error
@@ -1034,10 +1036,15 @@ export async function listPatioFuncionarios(): Promise<PatioFuncionario[]> {
     .from('patio_funcionarios_snapshot')
     .select('patio_funcionario_id,nome,ativo,raw_data')
     .eq('ativo', true)
+    .eq('raw_data->>origem', 'omsys')
+    .eq('raw_data->>tipo', 'tecnico')
+    .not('raw_data->>omsys_codigo', 'is', null)
     .order('nome', { ascending: true })
 
   if (error) throw error
-  return (data as FuncionarioRow[] | null ?? []).map(mapFuncionario)
+  return (data as FuncionarioRow[] | null ?? [])
+    .filter((row) => Boolean(row.raw_data?.omsys_codigo))
+    .map(mapFuncionario)
 }
 
 export async function listPatioBoxesLivres(): Promise<PatioBox[]> {

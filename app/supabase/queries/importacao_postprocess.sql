@@ -59,6 +59,81 @@ begin
 end;
 $$;
 
+create or replace function public.refresh_clientes_comercial_stats_por_importacao(p_importacao_id uuid)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  updated_count integer;
+begin
+  if auth.uid() is not null and not public.current_user_is_admin() then
+    raise exception 'Apenas administradores podem recalcular estatisticas comerciais.';
+  end if;
+
+  if p_importacao_id is null then
+    return public.refresh_clientes_comercial_stats();
+  end if;
+
+  with clientes_afetados as (
+    select distinct cliente_id
+    from public.vendas_itens
+    where importacao_id = p_importacao_id
+      and cliente_id is not null
+    union
+    select distinct cliente_id
+    from public.servicos_itens
+    where importacao_id = p_importacao_id
+      and cliente_id is not null
+  ),
+  stats as (
+    select
+      ca.cliente_id as id,
+      v.primeira_compra,
+      v.ultima_compra,
+      s.ultimo_servico,
+      coalesce(v.total_produtos, 0) as total_produtos,
+      coalesce(s.total_servicos, 0) as total_servicos
+    from clientes_afetados ca
+    left join lateral (
+      select
+        min(data_venda) as primeira_compra,
+        max(data_venda) as ultima_compra,
+        sum(valor_total) as total_produtos
+      from public.vendas_itens vi
+      where vi.cliente_id = ca.cliente_id
+    ) v on true
+    left join lateral (
+      select
+        max(data_servico) as ultimo_servico,
+        sum(valor_total) as total_servicos
+      from public.servicos_itens si
+      where si.cliente_id = ca.cliente_id
+    ) s on true
+  )
+  update public.clientes c
+  set
+    primeira_compra_em = stats.primeira_compra,
+    ultima_compra_em = stats.ultima_compra,
+    ultimo_servico_em = stats.ultimo_servico,
+    total_comprado = coalesce(stats.total_produtos, 0),
+    total_servicos = coalesce(stats.total_servicos, 0),
+    status_comercial = case
+      when c.status_comercial = 'nao_contatar' then c.status_comercial
+      when stats.ultima_compra is null and stats.ultimo_servico is null then 'novo'::cliente_status
+      when greatest(coalesce(stats.ultima_compra, date '1900-01-01'), coalesce(stats.ultimo_servico, date '1900-01-01')) < current_date - 180 then 'reativar'::cliente_status
+      else 'ativo'::cliente_status
+    end,
+    atualizado_em = now()
+  from stats
+  where stats.id = c.id;
+
+  get diagnostics updated_count = row_count;
+  return updated_count;
+end;
+$$;
+
 create or replace function public.criar_tarefas_followup_automaticas()
 returns jsonb
 language plpgsql
@@ -248,7 +323,8 @@ begin
       and pc.match_status = 'match_placa_km_data_30d'
       and pc.erp_cliente_id is not null
       and pc.patio_execucao_id is not null
-      and pc.diferenca_km = 0
+      and coalesce(pc.codigo_cliente_erp, '') <> '55555'
+      and pc.diferenca_km <= 10
   )
   select
     patio_execucao_id,
@@ -466,18 +542,46 @@ set search_path = public
 as $$
 declare
   clientes_atualizados integer;
-  oportunidades_geradas integer;
-  tarefas_followup jsonb;
-  patio_vinculos jsonb;
+  oportunidades_geradas integer := 0;
+  tarefas_followup jsonb := '{}'::jsonb;
+  patio_vinculos jsonb := '{}'::jsonb;
 begin
   if auth.uid() is not null and not public.current_user_is_admin() then
     raise exception 'Apenas administradores podem finalizar importacoes.';
   end if;
 
-  clientes_atualizados := public.refresh_clientes_comercial_stats();
-  patio_vinculos := public.aplicar_vinculos_patio_por_importacao(p_importacao_id);
-  oportunidades_geradas := public.refresh_oportunidades_cache();
-  tarefas_followup := public.criar_tarefas_followup_automaticas();
+  if p_importacao_id is null then
+    clientes_atualizados := public.refresh_clientes_comercial_stats();
+  else
+    clientes_atualizados := public.refresh_clientes_comercial_stats_por_importacao(p_importacao_id);
+  end if;
+
+  begin
+    patio_vinculos := public.aplicar_vinculos_patio_por_importacao(p_importacao_id);
+  exception
+    when query_canceled then
+      patio_vinculos := jsonb_build_object('adiado', true, 'erro', sqlerrm, 'code', sqlstate);
+    when others then
+      patio_vinculos := jsonb_build_object('adiado', true, 'erro', sqlerrm, 'code', sqlstate);
+  end;
+
+  begin
+    oportunidades_geradas := public.refresh_oportunidades_cache();
+  exception
+    when query_canceled then
+      oportunidades_geradas := 0;
+    when others then
+      oportunidades_geradas := 0;
+  end;
+
+  begin
+    tarefas_followup := public.criar_tarefas_followup_automaticas();
+  exception
+    when query_canceled then
+      tarefas_followup := jsonb_build_object('adiado', true, 'erro', sqlerrm, 'code', sqlstate);
+    when others then
+      tarefas_followup := jsonb_build_object('adiado', true, 'erro', sqlerrm, 'code', sqlstate);
+  end;
 
   return jsonb_build_object(
     'clientes_atualizados', clientes_atualizados,
@@ -488,5 +592,6 @@ begin
 end;
 $$;
 
+grant execute on function public.refresh_clientes_comercial_stats_por_importacao(uuid) to authenticated, service_role;
 grant execute on function public.aplicar_vinculos_patio_por_importacao(uuid, date, date, boolean) to authenticated, service_role;
 grant execute on function public.finalizar_importacao_diaria(uuid) to authenticated, service_role;

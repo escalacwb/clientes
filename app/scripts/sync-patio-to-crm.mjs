@@ -651,7 +651,7 @@ async function upsertPatioAtendimentos(clienteMap, veiculoMap, syncState) {
     const clientMatch = clienteMap.get(Number(row.patio_cliente_id)) ?? {}
     return {
       patio_execucao_id: row.id,
-      cliente_id: vehicleMatch.clienteId ?? clientMatch.clienteId ?? null,
+      cliente_id: clientMatch.clienteId ?? vehicleMatch.clienteId ?? null,
       veiculo_id: vehicleMatch.veiculoId ?? null,
       patio_cliente_id: row.patio_cliente_id,
       patio_veiculo_id: row.veiculo_id,
@@ -765,7 +765,7 @@ async function upsertPatioAtendimentoItens(clienteMap, veiculoMap, syncState) {
         patio_item_id: row.id,
         patio_tabela_origem: table,
         patio_execucao_id: row.execucao_id,
-        cliente_id: vehicleMatch.clienteId ?? clientMatch.clienteId ?? null,
+        cliente_id: clientMatch.clienteId ?? vehicleMatch.clienteId ?? null,
         veiculo_id: vehicleMatch.veiculoId ?? null,
         area,
         servico_nome: row.tipo,

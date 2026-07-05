@@ -127,6 +127,7 @@ try {
   const vendasResult = await step('importando itens de produtos', () => upsertVendas(movimentosComVeiculo.filter((item) => item.tipo === 'produto'), clienteIndex, veiculoIndex, ordemIndex, importacao.id))
   const servicosResult = await step('importando itens de servicos', () => upsertServicos(movimentosComVeiculo.filter((item) => item.tipo === 'servico'), clienteIndex, veiculoIndex, ordemIndex, importacao.id))
   const catalogoResult = await step('importando catalogo/precos', () => upsertCatalogo([...precosProdutos, ...precosServicos], arquivos))
+  const patioCatalogoResult = await step('atualizando catalogo do patio', () => refreshPatioCatalogoLinkado())
 
   const postProcessResult = await step('finalizando importacao e oportunidades', () => finalizarImportacaoDiaria(importacao.id))
   await updateImportacao(importacao.id, {
@@ -147,6 +148,7 @@ try {
     vendas: vendasResult,
     servicos: servicosResult,
     catalogo: catalogoResult,
+    patioCatalogo: patioCatalogoResult,
     postProcess: postProcessResult,
   }, null, 2))
 } catch (error) {
@@ -191,8 +193,11 @@ function buildClientesImportacao(clientes, movimentos, carros) {
   const byCodigo = new Map()
   const add = (row, overwrite = false) => {
     if (!row.codigo_erp) return
+    const normalizedRow = row.codigo_erp === '55555'
+      ? { ...row, nome: 'CONSUMIDOR FINAL', nome_fantasia: row.nome_fantasia || 'CONSUMIDOR FINAL' }
+      : row
     if (!overwrite && byCodigo.has(row.codigo_erp)) return
-    byCodigo.set(row.codigo_erp, row)
+    byCodigo.set(row.codigo_erp, normalizedRow)
   }
 
   carros.forEach((carro) => add({
@@ -738,6 +743,12 @@ function nullableNumber(value) {
 
 async function finalizarImportacaoDiaria(importacaoId) {
   const { data, error } = await supabase.rpc('finalizar_importacao_diaria', importacaoId ? { p_importacao_id: importacaoId } : {})
+  if (error) throw error
+  return data
+}
+
+async function refreshPatioCatalogoLinkado() {
+  const { data, error } = await supabase.rpc('refresh_patio_catalogo_servicos_linkado')
   if (error) throw error
   return data
 }

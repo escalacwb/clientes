@@ -341,6 +341,7 @@ const api = {
           p_cliente_id: clienteId,
           p_modelo: body.modelo ?? null,
           p_ano_modelo: Number.isFinite(anoModelo) ? anoModelo : null,
+          p_consumidor_final: body.consumidor_final === true,
         });
 
         if (created?.id && (body.nome_motorista || body.contato_motorista)) {
@@ -521,6 +522,7 @@ const api = {
               p_veiculo_id: vehicleCompanyId,
               p_empresa: body.empresa,
               p_cliente_id: typeof body.cliente_id === "string" ? body.cliente_id : null,
+              p_consumidor_final: body.consumidor_final === true,
             })
           );
         }

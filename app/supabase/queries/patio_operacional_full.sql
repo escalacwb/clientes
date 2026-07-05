@@ -101,6 +101,13 @@ begin
   if v_veiculo.patio_veiculo_id is null then
     raise exception 'Veiculo do patio nao encontrado.';
   end if;
+  if v_veiculo.cliente_id is null then
+    raise exception 'Selecione um cadastro do cliente antes de iniciar a entrada. Se nao houver cadastro, use Consumidor 55555 e informe o nome.';
+  end if;
+  if exists (select 1 from public.clientes c where c.id = v_veiculo.cliente_id and c.codigo_erp = '55555')
+     and (nullif(trim(v_veiculo.empresa), '') is null or upper(trim(v_veiculo.empresa)) = 'CONSUMIDOR FINAL') then
+    raise exception 'Informe o nome do cliente avulso para usar Consumidor 55555.';
+  end if;
 
   v_execucao_id := nextval('public.crm_patio_execucao_seq');
 
@@ -215,6 +222,18 @@ begin
     where patio_box_id = p_box_id and ocupado = true
   ) then
     raise exception 'Box ocupado.';
+  end if;
+
+  if not exists (
+    select 1
+    from public.patio_funcionarios_snapshot
+    where patio_funcionario_id = p_funcionario_id
+      and ativo = true
+      and nullif(raw_data->>'omsys_codigo', '') is not null
+      and raw_data->>'origem' = 'omsys'
+      and raw_data->>'tipo' = 'tecnico'
+  ) then
+    raise exception 'Funcionario responsavel precisa estar ativo e ter codigo OMSYS.';
   end if;
 
   select coalesce(pai.quilometragem, 0)
@@ -462,9 +481,13 @@ begin
   where patio_execucao_id = p_patio_execucao_id;
 
   update public.patio_atendimentos
-  set status = 'cancelado',
+  set status = 'pendente',
       box_id = null,
       funcionario_id = null,
+      fim_execucao = null,
+      usuario_finalizacao_id = null,
+      data_feedback = null,
+      raw_data = coalesce(raw_data, '{}'::jsonb) || jsonb_build_object('revertido_em', now()),
       sincronizado_em = now()
   where patio_execucao_id = p_patio_execucao_id;
 
@@ -602,7 +625,13 @@ with (security_invoker = true) as
 select
   pa.patio_execucao_id,
   pa.cliente_id,
-  coalesce(c.nome, pa.cliente_nome_snapshot) as cliente_nome,
+  case
+    when c.codigo_erp = '55555'
+      and nullif(btrim(pa.cliente_nome_snapshot), '') is not null
+      and upper(btrim(pa.cliente_nome_snapshot)) <> 'CONSUMIDOR FINAL'
+      then pa.cliente_nome_snapshot
+    else coalesce(c.nome, pa.cliente_nome_snapshot)
+  end as cliente_nome,
   c.vendedor_id,
   pa.veiculo_id,
   coalesce(v.placa, pa.placa_snapshot) as placa,

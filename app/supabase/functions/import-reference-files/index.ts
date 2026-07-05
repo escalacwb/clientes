@@ -96,7 +96,7 @@ type CatalogRow = {
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-import-secret',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
@@ -107,14 +107,11 @@ Deno.serve(async (request) => {
   let activeImportacaoId = ''
   let service: ReturnType<typeof createClient> | null = null
   try {
-    const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '')
-    if (!token) return json({ error: 'Sessao ausente.' }, 401)
-
     const supabaseUrl = requiredEnv('SUPABASE_URL')
     const serviceKey = requiredEnv('SUPABASE_SERVICE_ROLE_KEY')
     service = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
 
-    await assertAdmin(token, service)
+    await assertImportAccess(request, service)
 
     const form = await request.formData()
     const files = form.getAll('files').filter((item): item is File => item instanceof File)
@@ -130,6 +127,7 @@ Deno.serve(async (request) => {
       activeImportacaoId = importacao.id
       const arquivos = await registerFiles(service, importacao.id, parsed)
       const catalogo = await upsertCatalogo(service, catalogRows, arquivos)
+      const patioCatalogo = await tentarAtualizarCatalogoPatio(service)
 
       await service
         .from('importacoes')
@@ -153,6 +151,7 @@ Deno.serve(async (request) => {
         vendas: { created: 0, ignored: 0, conflitos: 0 },
         servicos: { created: 0, ignored: 0, conflitos: 0 },
         catalogo,
+        patioCatalogo,
         movimentosComVeiculo: 0,
         movimentosSemVeiculo: 0,
       })
@@ -199,6 +198,7 @@ Deno.serve(async (request) => {
     const vendas = await upsertVendas(service, movimentosComVeiculo.filter((item) => item.tipo === 'produto'), clienteIndex, veiculoIndex, ordemIndex, importacao.id)
     const servicos = await upsertServicos(service, movimentosComVeiculo.filter((item) => item.tipo === 'servico'), clienteIndex, veiculoIndex, ordemIndex, importacao.id)
     const catalogo = await upsertCatalogo(service, [...parsed.precosProdutos, ...parsed.precosServicos], arquivos)
+    const patioCatalogo = await tentarAtualizarCatalogoPatio(service)
     const postProcess = await tentarFinalizarImportacaoDiaria(service, importacao.id)
 
     await service
@@ -223,6 +223,7 @@ Deno.serve(async (request) => {
       vendas,
       servicos,
       catalogo,
+      patioCatalogo,
       postProcess,
       movimentosComVeiculo: movimentosComVeiculo.filter((item) => item.veiculo_ref).length,
       movimentosSemVeiculo: movimentosComVeiculo.filter((item) => !item.veiculo_ref).length,
@@ -242,6 +243,16 @@ Deno.serve(async (request) => {
     return json(errorInfo, status)
   }
 })
+
+async function assertImportAccess(request: Request, service: ReturnType<typeof createClient>) {
+  const configuredSecret = Deno.env.get('IMPORT_REFERENCE_FILES_SECRET')?.trim()
+  const providedSecret = request.headers.get('x-import-secret')?.trim()
+  if (configuredSecret && providedSecret && safeEqual(configuredSecret, providedSecret)) return
+
+  const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '')
+  if (!token) throw new HttpError('Sessao ausente.', 401)
+  await assertAdmin(token, service)
+}
 
 async function assertAdmin(token: string, service: ReturnType<typeof createClient>) {
   const { data: authData, error: authError } = await service.auth.getUser(token)
@@ -276,6 +287,31 @@ async function tentarFinalizarImportacaoDiaria(service: ReturnType<typeof create
       oportunidades_geradas: 0,
     }
   }
+}
+
+async function tentarAtualizarCatalogoPatio(service: ReturnType<typeof createClient>) {
+  try {
+    const { data, error } = await service.rpc('refresh_patio_catalogo_servicos_linkado')
+    if (error) throw error
+    return data
+  } catch (error) {
+    const errorInfo = normalizeError(error)
+    console.error('import-reference-files patio catalog refresh skipped', JSON.stringify(errorInfo))
+    return {
+      adiado: true,
+      erro: errorInfo.error,
+      code: errorInfo.code,
+    }
+  }
+}
+
+function safeEqual(a: string, b: string) {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let index = 0; index < a.length; index += 1) {
+    diff |= a.charCodeAt(index) ^ b.charCodeAt(index)
+  }
+  return diff === 0
 }
 
 async function parseFiles(files: File[]) {
@@ -486,7 +522,8 @@ function matchesExpectedContent(kind: ReferenceKind, rows: string[][]) {
   if (kind === 'vendasprodutos' || kind === 'vendasservicos') {
     const hasMovementHeader = normalizedRows.some((row) => row.includes('emissaonotapedido') && row.includes('vendedor'))
     const hasClientGroups = rows.some((row) => /^.+?\s+\(\d{1,8}\)\s+CPF\/CNPJ/i.test(text(row[0])))
-    return hasMovementHeader && hasClientGroups
+    const hasTotalGeral = normalizedRows.some((row) => row.includes('totalgeral'))
+    return hasMovementHeader && (hasClientGroups || hasTotalGeral)
   }
   if (kind === 'precoprodutos' || kind === 'precoservicos') {
     return normalizedRows.some((row) => row.includes('itemcodigodescricao') && row.includes('preco'))
@@ -507,8 +544,11 @@ function buildClientesImportacao(clientes: ClienteRow[], movimentos: MovimentoRo
   const byCodigo = new Map<string, ClienteRow>()
   const add = (row: ClienteRow, overwrite = false) => {
     if (!row.codigo_erp) return
+    const normalizedRow = row.codigo_erp === '55555'
+      ? { ...row, nome: 'CONSUMIDOR FINAL', nome_fantasia: row.nome_fantasia || 'CONSUMIDOR FINAL' }
+      : row
     if (!overwrite && byCodigo.has(row.codigo_erp)) return
-    byCodigo.set(row.codigo_erp, row)
+    byCodigo.set(row.codigo_erp, normalizedRow)
   }
 
   carros.forEach((carro) => add({

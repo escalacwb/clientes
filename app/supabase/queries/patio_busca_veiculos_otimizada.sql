@@ -31,7 +31,13 @@ as $$
     select
       pvs.patio_veiculo_id,
       pvs.cliente_id,
-      c.nome as cliente_nome,
+      case
+        when c.codigo_erp = '55555'
+          and nullif(btrim(pvs.empresa), '') is not null
+          and upper(btrim(pvs.empresa)) <> 'CONSUMIDOR FINAL'
+          then pvs.empresa
+        else coalesce(c.nome, pvs.empresa)
+      end as cliente_nome,
       c.vendedor_id,
       pvs.veiculo_id,
       coalesce(v.placa, pvs.placa) as placa,
@@ -57,7 +63,8 @@ as $$
         or (
           trim(p_query) !~ '^[A-Za-z0-9-]{3,8}$'
           and (
-            c.nome ilike '%' || trim(p_query) || '%'
+            coalesce(c.nome, pvs.empresa) ilike '%' || trim(p_query) || '%'
+            or pvs.empresa ilike '%' || trim(p_query) || '%'
             or pvs.nome_motorista ilike '%' || trim(p_query) || '%'
             or coalesce(v.placa, pvs.placa) ilike '%' || trim(p_query) || '%'
           )
@@ -65,7 +72,7 @@ as $$
       )
     order by
       case when coalesce(v.placa, pvs.placa) ilike trim(p_query) || '%' then 0 else 1 end,
-      c.nome nulls last
+      coalesce(c.nome, pvs.empresa) nulls last
     limit greatest(1, least(coalesce(p_limit, 30), 100))
   ),
   candidatos_view as (

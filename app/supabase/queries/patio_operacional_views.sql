@@ -3,7 +3,13 @@ with (security_invoker = true) as
 select
   pa.patio_execucao_id,
   pa.cliente_id,
-  c.nome as cliente_nome,
+  case
+    when c.codigo_erp = '55555'
+      and nullif(btrim(pa.cliente_nome_snapshot), '') is not null
+      and upper(btrim(pa.cliente_nome_snapshot)) <> 'CONSUMIDOR FINAL'
+      then pa.cliente_nome_snapshot
+    else coalesce(c.nome, pa.cliente_nome_snapshot)
+  end as cliente_nome,
   c.vendedor_id,
   pa.veiculo_id,
   coalesce(v.placa, pa.placa_snapshot) as placa,
@@ -28,7 +34,13 @@ where pa.status = 'finalizado'
 group by
   pa.patio_execucao_id,
   pa.cliente_id,
-  c.nome,
+  case
+    when c.codigo_erp = '55555'
+      and nullif(btrim(pa.cliente_nome_snapshot), '') is not null
+      and upper(btrim(pa.cliente_nome_snapshot)) <> 'CONSUMIDOR FINAL'
+      then pa.cliente_nome_snapshot
+    else coalesce(c.nome, pa.cliente_nome_snapshot)
+  end,
   c.vendedor_id,
   pa.veiculo_id,
   coalesce(v.placa, pa.placa_snapshot),
@@ -60,7 +72,13 @@ with ultimos as (
 select
   pvs.patio_veiculo_id,
   pvs.cliente_id,
-  c.nome as cliente_nome,
+  case
+    when c.codigo_erp = '55555'
+      and nullif(btrim(pvs.empresa), '') is not null
+      and upper(btrim(pvs.empresa)) <> 'CONSUMIDOR FINAL'
+      then pvs.empresa
+    else coalesce(c.nome, pvs.empresa)
+  end as cliente_nome,
   c.vendedor_id,
   pvs.veiculo_id,
   coalesce(v.placa, pvs.placa) as placa,
