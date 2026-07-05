@@ -379,11 +379,16 @@ export function CadastroScreen() {
       Alert.alert("Adicione pelo menos um servico");
       return;
     }
+    const kmInformado = quilometragem.trim() ? Number(quilometragem) : null;
+    if (kmInformado !== null && (!Number.isFinite(kmInformado) || kmInformado <= 0)) {
+      Alert.alert("KM invalido", "KM zero nao pode ser usado. Informe um KM valido ou deixe em branco.");
+      return;
+    }
     const observacaoFinal = diagnostico + (observacao ? `\n\n${observacao}` : "");
     try {
       await api.post("/services/register", {
         veiculo_id: veiculo.id,
-        quilometragem: quilometragem ? Number(quilometragem) : null,
+        quilometragem: kmInformado,
         observacao: observacaoFinal,
         itens,
       });

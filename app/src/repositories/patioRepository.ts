@@ -920,6 +920,10 @@ export async function registerPatioEntrada(input: PatioEntradaInput): Promise<nu
   const supabase = await getSupabase()
   if (!supabase) throw new Error('Supabase nao configurado.')
 
+  if (input.quilometragem !== undefined && input.quilometragem <= 0) {
+    throw new Error('KM zero nao pode ser usado. Informe um KM valido ou deixe em branco.')
+  }
+
   const { data, error } = await supabase.rpc('registrar_entrada_patio_crm', {
     p_patio_veiculo_id: input.patioVeiculoId,
     p_quilometragem: input.quilometragem ?? null,

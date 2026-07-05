@@ -491,6 +491,10 @@ declare
   v_execucao_id bigint;
   v_servicos jsonb;
 begin
+  if p_quilometragem is not null and p_quilometragem <= 0 then
+    raise exception 'KM zero nao pode ser usado. Informe um KM valido ou deixe em branco.';
+  end if;
+
   select * into v_veiculo from public.patio_veiculos_snapshot where patio_veiculo_id = p_veiculo_id;
   if v_veiculo.patio_veiculo_id is null then
     raise exception 'Veiculo nao encontrado.';

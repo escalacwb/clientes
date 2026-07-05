@@ -10051,12 +10051,17 @@ function PatioEntrada({
       setFormError('Adicione pelo menos um servico para enviar o veiculo para a fila.')
       return
     }
+    const kmInformado = quilometragem.trim() ? Number(quilometragem) : undefined
+    if (kmInformado !== undefined && (!Number.isFinite(kmInformado) || kmInformado <= 0)) {
+      setFormError('KM zero nao pode ser usado. Informe um KM valido ou deixe em branco.')
+      return
+    }
     setIsSaving(true)
     setFormError('')
     try {
       await onRegisterEntrada({
         patioVeiculoId: selected.patioVeiculoId,
-        quilometragem: quilometragem ? Number(quilometragem) : undefined,
+        quilometragem: kmInformado,
         nomeMotorista,
         contatoMotorista,
         observacaoGeral: diagnostico,
