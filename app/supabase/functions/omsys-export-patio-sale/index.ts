@@ -89,7 +89,7 @@ Deno.serve(async (request) => {
   }
 })
 
-async function assertAuthorized(request: Request, supabaseUrl: string) {
+async function assertAuthorized(request: Request, _supabaseUrl: string) {
   const configuredSecret = Deno.env.get('OMSYS_PATIO_EXPORT_SECRET')?.trim()
   const providedSecret = request.headers.get('x-omsys-export-secret')?.trim()
   if (configuredSecret && providedSecret && timingSafeEqual(configuredSecret, providedSecret)) return
@@ -99,15 +99,10 @@ async function assertAuthorized(request: Request, supabaseUrl: string) {
     throw new HttpError('Autenticacao obrigatoria para exportar venda OMSYS.', 401)
   }
 
-  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
-  if (!anonKey) return
-
-  const userClient = createClient(supabaseUrl, anonKey, {
-    auth: { persistSession: false },
-    global: { headers: { authorization } },
-  })
-  const { data, error } = await userClient.auth.getUser()
-  if (error || !data.user) throw new HttpError('Sessao invalida para exportar venda OMSYS.', 401)
+  const claims = decodeJwtPayload(authorization.slice('bearer '.length))
+  if (claims.role !== 'authenticated' || !claims.sub) {
+    throw new HttpError('Usuario autenticado obrigatorio para exportar venda OMSYS.', 401)
+  }
 }
 
 async function exportPatioSale(
@@ -808,6 +803,18 @@ function timingSafeEqual(left: string, right: string) {
     mismatch |= left.charCodeAt(index) ^ right.charCodeAt(index)
   }
   return mismatch === 0
+}
+
+function decodeJwtPayload(token: string) {
+  try {
+    const [, payload] = token.split('.')
+    if (!payload) throw new Error('payload ausente')
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), '=')
+    return JSON.parse(atob(padded)) as { role?: string; sub?: string }
+  } catch {
+    throw new HttpError('Sessao invalida para exportar venda OMSYS.', 401)
+  }
 }
 
 function normalizeError(error: unknown) {

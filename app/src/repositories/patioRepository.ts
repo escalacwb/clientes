@@ -1180,7 +1180,7 @@ export async function exportPatioOmsysSale(vendaId: string, options?: { dryRun?:
       dryRun: Boolean(options?.dryRun),
     },
   })
-  if (error) throw error
+  if (error) throw await normalizeFunctionError(error)
   return mapPatioOmsysSaleExport(data)
 }
 
@@ -1572,6 +1572,20 @@ function numberOrUndefined(value: unknown): number | undefined {
 
 function arrayOfStrings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+async function normalizeFunctionError(error: unknown): Promise<Error> {
+  const context = (error as { context?: unknown })?.context
+  if (context instanceof Response) {
+    const payload = await context.clone().json().catch(async () => ({ message: await context.clone().text().catch(() => '') })) as Record<string, unknown>
+    const message = typeof payload.message === 'string' && payload.message.trim()
+      ? payload.message
+      : error instanceof Error
+        ? error.message
+        : 'Falha ao executar funcao.'
+    return new Error(message)
+  }
+  return error instanceof Error ? error : new Error('Falha ao executar funcao.')
 }
 
 function mapFilaPainel(row: FilaPainelRow): PatioFilaPainel {
