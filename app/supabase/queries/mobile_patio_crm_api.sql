@@ -661,7 +661,6 @@ declare
   v_payload jsonb := '[]'::jsonb;
   v_deve_perguntar boolean := false;
   v_motivo text := 'sem_venda_preparada';
-  v_visita_chave text;
   v_placa text := '';
   v_payload_omsys jsonb := '{}'::jsonb;
   v_cliente_codigo text;
@@ -694,6 +693,7 @@ begin
   from jsonb_array_elements(coalesce(p_servicos, '[]'::jsonb)) item
   join public.patio_atendimento_itens pai
     on pai.patio_execucao_id = v_execucao_id
+   and pai.status = 'em_andamento'
    and pai.id = nullif(item->>'id', '')::uuid;
 
   if jsonb_array_length(v_payload) = 0 then
@@ -710,46 +710,40 @@ begin
 
   perform public.finalizar_box_patio_crm(v_execucao_id, v_payload, p_obs_final);
 
-  select v.visita_chave,
-         coalesce(v.placa, ''),
-         coalesce(v.payload_omsys, '{}'::jsonb),
-         v.cliente_codigo_omsys::text,
-         coalesce(v.cliente_fallback_consumidor, false)
-  into v_visita_chave,
+  select e.id::text,
+         e.status,
+         coalesce(e.placa, ''),
+         coalesce(e.payload, '{}'::jsonb),
+         e.cliente_codigo::text,
+         coalesce(e.cliente_fallback_consumidor, false),
+         coalesce(to_jsonb(e.bloqueios), '[]'::jsonb),
+         coalesce(to_jsonb(e.avisos), '[]'::jsonb),
+         coalesce(cardinality(e.bloqueios), 0)
+  into v_venda_id,
+       v_venda_status,
        v_placa,
        v_payload_omsys,
        v_cliente_codigo,
-       v_cliente_consumidor
-  from public.vw_patio_omsys_visitas_consolidadas v
+       v_cliente_consumidor,
+       v_bloqueios,
+       v_avisos,
+       v_bloqueios_count
+  from public.patio_omsys_vendas_exportacoes e
   where exists (
     select 1
-    from jsonb_array_elements(coalesce(v.payload_omsys->'itens', '[]'::jsonb)) item
+    from jsonb_array_elements(coalesce(e.payload->'itens', '[]'::jsonb)) item
     where coalesce(item->>'patio_execucao_id', '') ~ '^[0-9]+$'
       and (item->>'patio_execucao_id')::bigint = v_execucao_id
   )
-  order by v.ultima_finalizacao desc
+  order by e.ultima_finalizacao desc
   limit 1;
 
-  if v_visita_chave is not null then
-    select e.id::text,
-           e.status,
-           coalesce(to_jsonb(e.bloqueios), '[]'::jsonb),
-           coalesce(to_jsonb(e.avisos), '[]'::jsonb),
-           coalesce(cardinality(e.bloqueios), 0)
-    into v_venda_id,
-         v_venda_status,
-         v_bloqueios,
-         v_avisos,
-         v_bloqueios_count
-    from public.patio_omsys_vendas_exportacoes e
-    where e.visita_chave = v_visita_chave
-    limit 1;
-
+  if v_venda_id is not null then
     select e.id::text
     into v_venda_aberta_id
     from public.patio_omsys_vendas_exportacoes e
     where e.placa = v_placa
-      and e.visita_chave <> v_visita_chave
+      and e.id::text <> v_venda_id
       and e.status in ('preparada', 'exportando')
     order by e.atualizado_em desc
     limit 1;
