@@ -26,7 +26,7 @@ as $$
     'alinhamento', coalesce(jsonb_agg(nome order by nome) filter (where area = 'alinhamento'), '[]'::jsonb),
     'manutencao', coalesce(jsonb_agg(nome order by nome) filter (where area = 'manutencao'), '[]'::jsonb)
   )
-  from public.vw_patio_catalogo_servicos
+  from public.vw_patio_catalogo_servicos_omsys
 $$;
 
 create or replace function public.mobile_clients_search(p_term text)

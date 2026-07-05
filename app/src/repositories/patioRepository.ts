@@ -434,7 +434,7 @@ type BoxServicoRow = {
 }
 
 type CatalogoServicoRow = {
-  area: PatioCatalogoServico['area']
+  area: string | null
   nome: string
 }
 
@@ -1314,16 +1314,20 @@ export async function listPatioCatalogoServicos(): Promise<PatioCatalogoServico[
   if (!supabase) return []
 
   const { data, error } = await supabase
-    .from('vw_patio_catalogo_servicos')
+    .from('vw_patio_catalogo_servicos_omsys')
     .select('area,nome')
     .order('area', { ascending: true })
     .order('nome', { ascending: true })
 
   if (error) throw error
-  return (data as CatalogoServicoRow[] | null ?? []).map((row) => ({
-    area: row.area,
-    nome: row.nome,
-  }))
+  return (data as CatalogoServicoRow[] | null ?? [])
+    .filter((row): row is CatalogoServicoRow & { area: PatioCatalogoServico['area'] } =>
+      row.area === 'borracharia' || row.area === 'alinhamento' || row.area === 'manutencao'
+    )
+    .map((row) => ({
+      area: row.area,
+      nome: row.nome,
+    }))
 }
 
 export async function listPatioBoxesPainel(): Promise<PatioPainelBox[]> {

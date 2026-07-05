@@ -445,7 +445,7 @@ select
   catalogo_item_id,
   catalogo_codigo,
   catalogo_tipo,
-  preco,
+  preco::numeric as preco,
   link_status,
   exportavel,
   requer_revisao
@@ -479,6 +479,39 @@ left join lateral (
 where ci.tipo in ('servico', 'produto')
   and coalesce(ci.ativo, true)
 order by ci.tipo, ci.descricao;
+
+create or replace view public.vw_patio_catalogo_servicos_omsys
+with (security_invoker = true) as
+select distinct on (area_sugerida, nome)
+  area_sugerida as area,
+  nome,
+  catalogo_item_id,
+  codigo as catalogo_codigo,
+  tipo as catalogo_tipo,
+  preco::numeric as preco,
+  'catalogo_omsys'::text as link_status,
+  true::boolean as exportavel,
+  false::boolean as requer_revisao
+from public.vw_patio_catalogo_itens_omsys
+where tipo = 'servico'
+  and area_sugerida in ('borracharia', 'alinhamento', 'manutencao')
+  and btrim(coalesce(nome, '')) <> ''
+order by area_sugerida, nome, atualizado_em desc nulls last, catalogo_item_id;
+
+create or replace view public.vw_patio_catalogo_servicos
+with (security_invoker = true) as
+select
+  area,
+  nome,
+  catalogo_item_id,
+  catalogo_codigo,
+  catalogo_tipo,
+  preco,
+  link_status,
+  exportavel,
+  requer_revisao
+from public.vw_patio_catalogo_servicos_omsys
+order by area, nome;
 
 create or replace function public.mobile_catalog_items()
 returns jsonb
@@ -1065,6 +1098,7 @@ grant select on public.patio_servico_catalogo_mapeamentos to authenticated, serv
 grant select on public.patio_omsys_vendas_exportacoes to authenticated, service_role;
 grant select on public.vw_patio_omsys_visitas_consolidadas to authenticated, service_role;
 grant select on public.vw_patio_catalogo_servicos to authenticated, service_role;
+grant select on public.vw_patio_catalogo_servicos_omsys to authenticated, service_role;
 grant select on public.vw_patio_catalogo_itens_omsys to authenticated, service_role;
 
 grant insert, update, delete on public.patio_omsys_config to service_role;
