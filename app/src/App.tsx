@@ -164,8 +164,8 @@ import { listClienteOportunidades, listOportunidadesPage, listOportunidadesResum
 import {
   allocatePatioServices,
   addPatioBoxServico,
-  confirmPatioOmsysSaleOpened,
   consultPatioPlate,
+  exportPatioOmsysSale,
   finishPatioBox,
   getClienteContatoRecomendado,
   listPatioAlocacaoVeiculos,
@@ -2263,7 +2263,7 @@ function App() {
               setPatioBoxesAtivos(await listPatioBoxesPainel())
               return result
             }}
-            onConfirmOmsysSaleOpened={confirmPatioOmsysSaleOpened}
+            onExportOmsysSale={exportPatioOmsysSale}
             onRefresh={async () => {
               setPatioBoxesAtivos(await listPatioBoxesPainel())
             }}
@@ -11819,7 +11819,7 @@ function PatioBoxes({
   onSaveServicos,
   onRetirar,
   onFinalizar,
-  onConfirmOmsysSaleOpened,
+  onExportOmsysSale,
   onRefresh,
   onOpenClient,
 }: {
@@ -11831,7 +11831,7 @@ function PatioBoxes({
   onSaveServicos: (input: { boxId: number; servicos: Array<{ id: string; quantidade: number; observacaoExecucao?: string }> }) => Promise<void>
   onRetirar: (patioExecucaoId: number) => Promise<void>
   onFinalizar: (input: { boxId: number; patioExecucaoId: number; servicos: Array<{ id: string; quantidade: number; observacaoExecucao?: string }>; observacaoFinal?: string }) => Promise<PatioBoxFinalizeResult>
-  onConfirmOmsysSaleOpened: (vendaId: string) => Promise<void>
+  onExportOmsysSale: (vendaId: string) => Promise<{ pedidoOmsys?: string; placa?: string; total?: number; itens?: number }>
   onRefresh: () => Promise<void>
   onOpenClient: (clienteId: string) => void
 }) {
@@ -11954,27 +11954,25 @@ function PatioBoxes({
   const handleOmsysVendaAposFinalizacao = async (venda?: PatioOmsysVendaPrompt) => {
     if (!venda) return
 
-    if (venda.devePerguntar && venda.vendaId && venda.urlSistema) {
+    if (venda.devePerguntar && venda.vendaId) {
       const total = venda.total !== undefined ? `\nTotal sugerido: ${money(Number(venda.total) || 0)}` : ''
       const consumidor = venda.clienteConsumidor ? '\nCliente OMSYS: Consumidor 55555' : ''
       const shouldOpen = window.confirm(
-        `Abrir tela de vendas no OMSYS?\n\n${venda.placa ?? 'Veiculo'} - ${venda.km ?? 'KM NAO LANCADO'}\n${venda.itens ?? 0} itens${total}${consumidor}`,
+        `Criar venda no OMSYS agora?\n\n${venda.placa ?? 'Veiculo'} - ${venda.km ?? 'KM NAO LANCADO'}\n${venda.itens ?? 0} itens${total}${consumidor}`,
       )
       if (!shouldOpen) return
 
-      const opened = window.open(venda.urlSistema, '_blank')
-      if (!opened) {
-        window.alert('O navegador bloqueou a nova aba. Libere pop-ups para abrir o sistema automaticamente.')
-        return
-      }
-
-      const openedOk = window.confirm('A tela de vendas abriu corretamente no OMSYS?')
-      if (!openedOk) return
-
       try {
-        await onConfirmOmsysSaleOpened(venda.vendaId)
+        const result = await onExportOmsysSale(venda.vendaId)
+        const pedido = result.pedidoOmsys ? `\nPedido OMSYS: ${result.pedidoOmsys}` : ''
+        const resumo = [
+          result.placa ? `Placa: ${result.placa}` : undefined,
+          result.itens !== undefined ? `Itens: ${result.itens}` : undefined,
+          result.total !== undefined ? `Total: ${money(result.total)}` : undefined,
+        ].filter(Boolean).join('\n')
+        window.alert(`Venda criada no OMSYS.${pedido}${resumo ? `\n${resumo}` : ''}`)
       } catch (exception) {
-        window.alert('O box foi finalizado e a tela de vendas abriu, mas nao conseguimos marcar a abertura no CRM.')
+        window.alert(exception instanceof Error ? exception.message : 'Box finalizado, mas nao foi possivel criar a venda no OMSYS.')
       }
       return
     }

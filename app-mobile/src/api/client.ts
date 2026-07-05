@@ -109,6 +109,23 @@ async function rpc<T = unknown>(fn: string, payload: Record<string, unknown> = {
   }
 }
 
+async function invokeFunction<T = unknown>(fn: string, payload: Record<string, unknown> = {}): Promise<T> {
+  requireConfig();
+  try {
+    const token = await getToken();
+    const headers = token ? authHeadersWithToken(token) : authHeaders();
+    const response = await http.post<T>(`/functions/v1/${fn}`, payload, { headers });
+    return response.data;
+  } catch (err) {
+    logEvent({
+      level: "error",
+      message: "Supabase Edge Function failed",
+      meta: { fn },
+    });
+    throw normalizeError(err, `Falha ao executar funcao ${fn}`);
+  }
+}
+
 function extractId(path: string, pattern: RegExp): number | null {
   const match = path.match(pattern);
   if (!match) {
@@ -358,6 +375,16 @@ const api = {
         return ok(
           await rpc<T>("mobile_confirm_omsys_sale_opened", {
             p_exportacao_id: openedSaleId,
+          })
+        );
+      }
+
+      const exportSaleId = extractTextId(path, /^\/omsys\/sales\/([^/]+)\/export$/);
+      if (exportSaleId !== null) {
+        return ok(
+          await invokeFunction<T>("omsys-export-patio-sale", {
+            vendaId: exportSaleId,
+            dryRun: Boolean(body.dry_run),
           })
         );
       }

@@ -14,6 +14,7 @@ import type {
   PatioFilaPainel,
   PatioFilaItem,
   PatioFuncionario,
+  PatioOmsysSaleExportResult,
   PatioOmsysVendaPrompt,
   PatioPainelBox,
   PatioRevisaoProativa,
@@ -1169,6 +1170,20 @@ export async function confirmPatioOmsysSaleOpened(vendaId: string): Promise<void
   if (error) throw error
 }
 
+export async function exportPatioOmsysSale(vendaId: string, options?: { dryRun?: boolean }): Promise<PatioOmsysSaleExportResult> {
+  const supabase = await getSupabase()
+  if (!supabase) throw new Error('Supabase nao configurado.')
+
+  const { data, error } = await supabase.functions.invoke('omsys-export-patio-sale', {
+    body: {
+      vendaId,
+      dryRun: Boolean(options?.dryRun),
+    },
+  })
+  if (error) throw error
+  return mapPatioOmsysSaleExport(data)
+}
+
 export async function revertPatioVisit(patioExecucaoId: number): Promise<void> {
   const supabase = await getSupabase()
   if (!supabase) throw new Error('Supabase nao configurado.')
@@ -1528,6 +1543,21 @@ function mapPatioOmsysVenda(data: unknown): PatioOmsysVendaPrompt | undefined {
     urlSistema: stringOrUndefined(payload.url_sistema),
     bloqueios: arrayOfStrings(payload.bloqueios),
     avisos: arrayOfStrings(payload.avisos),
+  }
+}
+
+function mapPatioOmsysSaleExport(data: unknown): PatioOmsysSaleExportResult {
+  const payload = (data ?? {}) as Record<string, unknown>
+  return {
+    ok: Boolean(payload.ok),
+    dryRun: Boolean(payload.dry_run),
+    vendaId: stringOrUndefined(payload.venda_id),
+    status: stringOrUndefined(payload.status),
+    pedidoOmsys: stringOrUndefined(payload.pedido_omsys),
+    placa: stringOrUndefined(payload.placa),
+    total: numberOrUndefined(payload.total),
+    itens: numberOrUndefined(payload.itens),
+    message: stringOrUndefined(payload.message),
   }
 }
 

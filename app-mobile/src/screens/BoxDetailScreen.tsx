@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import {
   Alert,
   Button,
-  Linking,
   SafeAreaView,
   ScrollView,
   Text,
@@ -45,6 +44,14 @@ type OmsysVendaPrompt = {
   url_sistema?: string | null;
   bloqueios?: string[];
   avisos?: string[];
+};
+
+type OmsysSaleExportResult = {
+  ok?: boolean;
+  pedido_omsys?: string;
+  placa?: string;
+  total?: number;
+  itens?: number;
 };
 
 type Props = {
@@ -218,15 +225,15 @@ export function BoxDetailScreen({ route }: Props) {
   }
 
   function handleOmsysVendaPrompt(venda?: OmsysVendaPrompt) {
-    if (venda?.deve_perguntar && venda.venda_id && venda.url_sistema) {
+    if (venda?.deve_perguntar && venda.venda_id) {
       const total = venda.total ? `Total sugerido: R$ ${String(venda.total).replace(".", ",")}.` : "";
       const cliente = venda.cliente_consumidor ? " Cliente sera Consumidor 55555." : "";
       Alert.alert(
-        "Abrir tela de vendas no OMSYS?",
+        "Criar venda no OMSYS?",
         `${venda.placa || "Veiculo"} - ${venda.km || "KM NÃO LANÇADO"}\n${venda.itens || 0} itens. ${total}${cliente}`,
         [
           { text: "Depois", style: "cancel" },
-          { text: "Abrir", onPress: () => abrirVendaNoSistema(venda) },
+          { text: "Criar", onPress: () => criarVendaNoSistema(venda) },
         ],
       );
       return;
@@ -245,25 +252,17 @@ export function BoxDetailScreen({ route }: Props) {
     Alert.alert("Box finalizado");
   }
 
-  async function abrirVendaNoSistema(venda: OmsysVendaPrompt) {
-    if (!venda.venda_id || !venda.url_sistema) return;
+  async function criarVendaNoSistema(venda: OmsysVendaPrompt) {
+    if (!venda.venda_id) return;
 
     try {
-      await Linking.openURL(venda.url_sistema);
-      Alert.alert("Confirmar abertura", "A tela de vendas abriu corretamente no OMSYS?", [
-        { text: "Nao", style: "cancel" },
-        {
-          text: "Sim, abriu",
-          onPress: () => {
-            api.post(`/omsys/sales/${venda.venda_id}/opened`).catch(() => {
-              Alert.alert("Aviso", "Nao conseguimos marcar a abertura no CRM.");
-            });
-          },
-        },
-      ]);
+      const response = await api.post<OmsysSaleExportResult>(`/omsys/sales/${venda.venda_id}/export`, {});
+      const pedido = response.data?.pedido_omsys ? `\nPedido OMSYS: ${response.data.pedido_omsys}` : "";
+      const total = response.data?.total ? `\nTotal: R$ ${String(response.data.total).replace(".", ",")}` : "";
+      Alert.alert("Venda criada no OMSYS", `${response.data?.placa || venda.placa || "Veiculo"}${pedido}${total}`);
     } catch (err) {
-      logEvent({ level: "error", message: "Falha ao abrir venda OMSYS", meta: { vendaId: venda.venda_id } });
-      Alert.alert("Falha ao abrir venda", "A venda foi finalizada no patio, mas nao conseguimos abrir o sistema.");
+      logEvent({ level: "error", message: "Falha ao criar venda OMSYS", meta: { vendaId: venda.venda_id } });
+      Alert.alert("Falha ao criar venda", "O box foi finalizado, mas nao conseguimos criar a venda no OMSYS.");
     }
   }
 

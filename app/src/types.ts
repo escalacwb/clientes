@@ -600,6 +600,18 @@ export type PatioOmsysVendaPrompt = {
   avisos?: string[]
 }
 
+export type PatioOmsysSaleExportResult = {
+  ok: boolean
+  dryRun?: boolean
+  vendaId?: string
+  status?: string
+  pedidoOmsys?: string
+  placa?: string
+  total?: number
+  itens?: number
+  message?: string
+}
+
 export type PatioBoxFinalizeResult = {
   ok: boolean
   execucaoId?: number
