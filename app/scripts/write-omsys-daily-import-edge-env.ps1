@@ -77,6 +77,8 @@ $values = [ordered]@{
   IMPORT_REFERENCE_FILES_SECRET = Resolve-Value $existing 'IMPORT_REFERENCE_FILES_SECRET' -GenerateSecret
   OMSYS_DAILY_IMPORT_CRON_JOB = Resolve-Value $existing 'OMSYS_DAILY_IMPORT_CRON_JOB' 'omsys-daily-import-1900'
   OMSYS_DAILY_IMPORT_CRON = Resolve-Value $existing 'OMSYS_DAILY_IMPORT_CRON' '0 23 * * *'
+  OMSYS_TECHNICIANS_CRON_JOB = Resolve-Value $existing 'OMSYS_TECHNICIANS_CRON_JOB' 'omsys-tecnicos-sync-hourly'
+  OMSYS_TECHNICIANS_CRON = Resolve-Value $existing 'OMSYS_TECHNICIANS_CRON' '15 * * * *'
 }
 
 $missing = @('OMSYS_CNPJ', 'OMSYS_CNPJ_PASSWORD', 'OMSYS_LOGIN', 'OMSYS_PASSWORD') |
