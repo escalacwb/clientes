@@ -9946,7 +9946,7 @@ function PatioEntrada({
   catalogoServicos: PatioCatalogoServico[]
   onQueryChange: (query: string) => void
   onConsultPlate?: (placa: string) => Promise<{ placa: string; modelo: string; anoModelo?: number | string | null }>
-  onCreateVehicleFromPlate?: (input: { placa: string; empresa: string; modelo?: string; anoModelo?: number | string | null }) => Promise<PatioVeiculoBusca>
+  onCreateVehicleFromPlate?: (input: { placa: string; empresa: string; clienteId?: string; modelo?: string; anoModelo?: number | string | null }) => Promise<PatioVeiculoBusca>
   onRegisterEntrada?: (input: PatioEntradaInput) => Promise<void>
   onEditVehicle?: (vehicle: PatioVeiculoBusca) => void
   onOpenClient: (clienteId: string) => void | Promise<void>
@@ -9976,6 +9976,9 @@ function PatioEntrada({
   const [isConsultingPlate, setIsConsultingPlate] = useState(false)
   const [plateConsultError, setPlateConsultError] = useState('')
   const [apiEmpresa, setApiEmpresa] = useState('')
+  const [apiClienteSelecionado, setApiClienteSelecionado] = useState<Cliente | undefined>()
+  const [apiClienteOptions, setApiClienteOptions] = useState<Cliente[]>([])
+  const [isLoadingApiClientes, setIsLoadingApiClientes] = useState(false)
   const [apiModelo, setApiModelo] = useState('')
   const [apiAnoModelo, setApiAnoModelo] = useState('')
   const [isCreatingApiVehicle, setIsCreatingApiVehicle] = useState(false)
@@ -10075,6 +10078,8 @@ function PatioEntrada({
     setIsConsultingPlate(true)
     setPlateConsultError('')
     setPlateConsultResult(undefined)
+    setApiClienteSelecionado(undefined)
+    setApiClienteOptions([])
     try {
       const result = await onConsultPlate(query)
       setPlateConsultResult(result)
@@ -10086,6 +10091,35 @@ function PatioEntrada({
       setIsConsultingPlate(false)
     }
   }
+
+  useEffect(() => {
+    const term = apiEmpresa.trim()
+    if (!plateConsultResult || term.length < 3 || apiClienteSelecionado?.nome === term) {
+      setApiClienteOptions([])
+      setIsLoadingApiClientes(false)
+      return
+    }
+
+    let isActive = true
+    const handle = window.setTimeout(() => {
+      setIsLoadingApiClientes(true)
+      listClientesPage({ page: 1, pageSize: 8, query: term })
+        .then((result) => {
+          if (isActive) setApiClienteOptions(result.clientes)
+        })
+        .catch(() => {
+          if (isActive) setApiClienteOptions([])
+        })
+        .finally(() => {
+          if (isActive) setIsLoadingApiClientes(false)
+        })
+    }, 250)
+
+    return () => {
+      isActive = false
+      window.clearTimeout(handle)
+    }
+  }, [apiEmpresa, apiClienteSelecionado, plateConsultResult])
 
   const handleCreateVehicleFromApi = async () => {
     if (!plateConsultResult || !onCreateVehicleFromPlate) return
@@ -10100,6 +10134,7 @@ function PatioEntrada({
       const vehicle = await onCreateVehicleFromPlate({
         placa: plateConsultResult.placa,
         empresa: apiEmpresa,
+        clienteId: apiClienteSelecionado?.id,
         modelo: apiModelo,
         anoModelo: apiAnoModelo || plateConsultResult.anoModelo,
       })
@@ -10130,6 +10165,8 @@ function PatioEntrada({
               setPlateConsultResult(undefined)
               setPlateConsultError('')
               setApiEmpresa('')
+              setApiClienteSelecionado(undefined)
+              setApiClienteOptions([])
               setApiModelo('')
               setApiAnoModelo('')
               onQueryChange(event.target.value)
@@ -10162,7 +10199,14 @@ function PatioEntrada({
           <div className="filters-grid">
             <label>
               Cliente/empresa
-              <input value={apiEmpresa} onChange={(event) => setApiEmpresa(event.target.value)} placeholder="Empresa do veiculo" />
+              <input
+                value={apiEmpresa}
+                onChange={(event) => {
+                  setApiEmpresa(event.target.value)
+                  setApiClienteSelecionado(undefined)
+                }}
+                placeholder="Comece a digitar o cliente"
+              />
             </label>
             <label>
               Modelo
@@ -10173,6 +10217,36 @@ function PatioEntrada({
               <input inputMode="numeric" value={apiAnoModelo} onChange={(event) => setApiAnoModelo(event.target.value.replace(/\D/g, ''))} />
             </label>
           </div>
+          {(isLoadingApiClientes || apiClienteOptions.length > 0 || apiClienteSelecionado) && (
+            <div className="table-list compact-list">
+              {apiClienteSelecionado && (
+                <div className="status-row">
+                  <span>Selecionado</span>
+                  <strong>{apiClienteSelecionado.nome}</strong>
+                </div>
+              )}
+              {!apiClienteSelecionado && apiClienteOptions.map((cliente) => (
+                <div className="status-row" key={cliente.id}>
+                  <span>
+                    {cliente.nome}
+                    <small>{[cliente.cidade, cliente.uf, cliente.codigoErp].filter(Boolean).join(' - ')}</small>
+                  </span>
+                  <button
+                    className="button tiny-button"
+                    type="button"
+                    onClick={() => {
+                      setApiClienteSelecionado(cliente)
+                      setApiEmpresa(cliente.nome)
+                      setApiClienteOptions([])
+                    }}
+                  >
+                    Usar cliente
+                  </button>
+                </div>
+              ))}
+              {!apiClienteSelecionado && isLoadingApiClientes && <div className="empty-state compact">Buscando clientes...</div>}
+            </div>
+          )}
           <div className="inline-actions">
             <button
               className="button primary"
@@ -10180,7 +10254,7 @@ function PatioEntrada({
               disabled={isCreatingApiVehicle || !apiEmpresa.trim()}
               onClick={() => void handleCreateVehicleFromApi()}
             >
-              {isCreatingApiVehicle ? 'Cadastrando...' : 'Cadastrar e iniciar entrada'}
+              {isCreatingApiVehicle ? 'Cadastrando...' : apiClienteSelecionado ? 'Cadastrar e iniciar entrada' : 'Cadastrar sem vinculo e iniciar entrada'}
             </button>
           </div>
         </div>

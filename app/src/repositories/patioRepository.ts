@@ -129,6 +129,7 @@ type VeiculoBuscaRow = {
 
 type MobileVehicleRow = {
   id: number
+  cliente_id: string | null
   placa: string | null
   empresa: string | null
   modelo: string | null
@@ -954,6 +955,7 @@ export async function consultPatioPlate(placa: string): Promise<PatioPlateConsul
 export async function createPatioVehicleFromPlate(input: {
   placa: string
   empresa: string
+  clienteId?: string
   modelo?: string
   anoModelo?: number | string | null
 }): Promise<PatioVeiculoBusca> {
@@ -964,14 +966,12 @@ export async function createPatioVehicleFromPlate(input: {
     ? null
     : Number(input.anoModelo)
 
-  const { data, error } = await supabase.rpc('mobile_vehicle_create', {
+  const { data, error } = await supabase.rpc('web_vehicle_create_from_plate', {
     p_placa: input.placa,
     p_empresa: input.empresa.trim(),
+    p_cliente_id: input.clienteId ?? null,
     p_modelo: input.modelo?.trim() || null,
     p_ano_modelo: Number.isFinite(anoModelo) ? anoModelo : null,
-    p_nome_motorista: null,
-    p_contato_motorista: null,
-    p_cliente_id: null,
   })
 
   if (error) throw error
@@ -1457,6 +1457,7 @@ function mapVeiculoBusca(row: VeiculoBuscaRow): PatioVeiculoBusca {
 function mapMobileVehicle(row: MobileVehicleRow): PatioVeiculoBusca {
   return {
     patioVeiculoId: Number(row.id),
+    clienteId: row.cliente_id ?? undefined,
     placa: row.placa ?? undefined,
     clienteNome: row.empresa ?? undefined,
     veiculoDescricao: row.modelo ?? undefined,
