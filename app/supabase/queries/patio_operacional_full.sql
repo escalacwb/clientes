@@ -201,9 +201,11 @@ begin
   end if;
 
   if exists (
-    select 1 from public.patio_atendimento_itens
-    where coalesce(veiculo_id::text, '') = coalesce(v_veiculo.veiculo_id::text, '')
-      and status = 'em_andamento'
+    select 1
+    from public.patio_atendimento_itens pai
+    join public.patio_atendimentos pa on pa.patio_execucao_id = pai.patio_execucao_id
+    where pa.patio_veiculo_id = p_patio_veiculo_id
+      and pai.status = 'em_andamento'
   ) then
     raise exception 'Veiculo ja possui servico em andamento.';
   end if;
@@ -215,15 +217,14 @@ begin
     raise exception 'Box ocupado.';
   end if;
 
-  select coalesce(quilometragem, 0)
+  select coalesce(pai.quilometragem, 0)
   into v_quilometragem
-  from public.patio_atendimento_itens
-  where patio_execucao_id in (
-      select patio_execucao_id from public.patio_atendimentos where patio_veiculo_id = p_patio_veiculo_id
-    )
-    and area = v_area
-    and status = 'pendente'
-  order by solicitado_em nulls last
+  from public.patio_atendimento_itens pai
+  join public.patio_atendimentos pa on pa.patio_execucao_id = pai.patio_execucao_id
+  where pa.patio_veiculo_id = p_patio_veiculo_id
+    and pai.area = v_area
+    and pai.status = 'pendente'
+  order by pai.solicitado_em nulls last
   limit 1;
 
   select *
@@ -265,16 +266,18 @@ begin
     where patio_execucao_id = v_execucao_id;
   end if;
 
-  update public.patio_atendimento_itens
+  update public.patio_atendimento_itens pai
   set box_id = p_box_id,
       funcionario_id = p_funcionario_id,
       patio_execucao_id = v_execucao_id,
       status = 'em_andamento',
       atualizado_em = now(),
       sincronizado_em = now()
-  where patio_execucao_id = v_execucao_id
-    and area = v_area
-    and status = 'pendente';
+  from public.patio_atendimentos pa
+  where pa.patio_execucao_id = pai.patio_execucao_id
+    and pa.patio_veiculo_id = p_patio_veiculo_id
+    and pai.area = v_area
+    and pai.status = 'pendente';
 
   if not found then
     raise exception 'Nao ha servicos pendentes desta area para alocar.';
