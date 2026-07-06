@@ -170,7 +170,9 @@ begin
     )
     values (
       nextval('public.crm_patio_item_seq'), 'crm_patio', v_execucao_id, v_veiculo.cliente_id, v_veiculo.veiculo_id,
-      v_area, nullif(v_servico->>'servico_nome', ''), nullif(v_servico->>'descricao', ''),
+      v_area,
+      nullif(coalesce(v_servico->>'servico_nome', v_servico->>'servicoNome', v_servico->>'tipo'), ''),
+      nullif(coalesce(v_servico->>'descricao', v_servico->>'servico_nome', v_servico->>'servicoNome', v_servico->>'tipo'), ''),
       v_quantidade, 'pendente', p_quilometragem, coalesce(nullif(v_servico->>'observacao', ''), p_observacao),
       'crm_patio', now(), now(), v_servico, now()
     );

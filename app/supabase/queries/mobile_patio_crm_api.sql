@@ -580,7 +580,8 @@ begin
   v_servicos := (
     select coalesce(jsonb_agg(jsonb_build_object(
       'area', public.patio_normalizar_area(item->>'area'),
-      'servicoNome', item->>'tipo',
+      'servico_nome', coalesce(item->>'servico_nome', item->>'servicoNome', item->>'tipo'),
+      'descricao', coalesce(item->>'descricao', item->>'servico_nome', item->>'servicoNome', item->>'tipo'),
       'quantidade', greatest(1, coalesce(nullif(item->>'qtd', '')::integer, 1))
     )), '[]'::jsonb)
     from jsonb_array_elements(coalesce(p_itens, '[]'::jsonb)) item
@@ -711,8 +712,44 @@ security definer
 set search_path = public
 as $$
   select jsonb_build_object(
-    'boxes', coalesce((select jsonb_agg(to_jsonb(b) order by b.box_id) from public.vw_patio_boxes_painel b where b.patio_execucao_id is not null), '[]'::jsonb),
-    'fila', coalesce((select jsonb_agg(to_jsonb(f) order by f.primeira_solicitacao nulls last, f.placa) from public.vw_patio_fila_painel f), '[]'::jsonb)
+    'boxes', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'box_id', b.box_id,
+          'execucao_id', b.patio_execucao_id,
+          'veiculo_id', b.patio_veiculo_id,
+          'placa', b.placa,
+          'empresa', b.cliente_nome,
+          'modelo', b.veiculo_descricao,
+          'funcionario', b.funcionario_nome,
+          'nome_motorista', b.nome_motorista,
+          'contato_motorista', b.contato_motorista,
+          'quilometragem', b.quilometragem,
+          'servicos', nullif(b.lista_servicos, ''),
+          'lista_servicos', b.lista_servicos
+        )
+        order by b.box_id
+      )
+      from public.vw_patio_boxes_painel b
+      where b.patio_execucao_id is not null
+    ), '[]'::jsonb),
+    'fila', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'patio_veiculo_id', f.patio_veiculo_id,
+          'veiculo_id', f.veiculo_id,
+          'cliente_id', f.cliente_id,
+          'placa', f.placa,
+          'empresa', f.cliente_nome,
+          'primeira_solicitacao', f.primeira_solicitacao,
+          'servicos', nullif(f.lista_servicos, ''),
+          'lista_servicos', f.lista_servicos,
+          'total_itens', f.total_itens
+        )
+        order by f.primeira_solicitacao nulls last, f.placa
+      )
+      from public.vw_patio_fila_painel f
+    ), '[]'::jsonb)
   )
 $$;
 
