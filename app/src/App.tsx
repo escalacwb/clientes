@@ -352,8 +352,40 @@ const hiddenViewRedirects: Record<string, string> = {
 
 const adminOnlyViews = new Set(['importacoes', 'conflitos', 'mesclagem', 'relatorios', 'relatorios-crm', 'relatorio-patio', 'patio-km-medio', 'patio-resultados', 'vendedores', 'usuarios', 'auditoria'])
 const sellerPrimaryViews = new Set(['cockpit', 'tarefas', 'clientes', 'campanhas', 'orcamentos', 'patio-feedback', 'patio-revisao'])
+const sellerAllowedCrmViews = new Set([...sellerPrimaryViews, 'cliente360', 'cliente-360', 'orcamento-editor', 'orcamento-detalhe'])
 const mobilePrimaryViews = new Set(['cockpit', 'tarefas', 'clientes', 'campanhas', 'orcamentos', 'patio-feedback', 'patio-revisao'])
 const mobileAllowedViews = new Set(['cockpit', 'tarefas', 'clientes', 'campanhas', 'orcamentos', 'patio-feedback', 'patio-revisao', 'cliente360', 'orcamento-editor', 'orcamento-detalhe'])
+const extraViewsByMode: Record<AppMode, Set<string>> = {
+  patio: new Set(),
+  crm: new Set(['cliente360', 'cliente-360', 'orcamento-editor', 'orcamento-detalhe', 'campanhas-inbox', 'catalogo', 'oportunidades', 'rodobens']),
+  gestao: new Set(['relatorios']),
+}
+
+type AccessRole = Vendedor['role']
+
+function canAccessMode(role: AccessRole, mode: AppMode) {
+  if (role === 'admin') return true
+  if (role === 'vendedor') return mode === 'patio' || mode === 'crm'
+  return mode === 'patio'
+}
+
+function defaultModeForRole(role: AccessRole): AppMode {
+  if (role === 'operacao') return 'patio'
+  return 'crm'
+}
+
+function viewIdsForMode(mode: AppMode) {
+  return new Set(navSectionsByMode[mode].flatMap((section) => section.items.map((item) => item.id)))
+}
+
+function canAccessView(role: AccessRole, mode: AppMode, viewId: string, isMobileShell: boolean) {
+  if (!canAccessMode(role, mode)) return false
+  if (!viewIdsForMode(mode).has(viewId) && !extraViewsByMode[mode].has(viewId)) return false
+  if (role !== 'admin' && adminOnlyViews.has(viewId)) return false
+  if (mode === 'crm' && role !== 'admin' && !sellerAllowedCrmViews.has(viewId)) return false
+  if (isMobileShell && mode === 'crm' && role !== 'admin' && !mobileAllowedViews.has(viewId)) return false
+  return true
+}
 
 function normalizeView(view: string) {
   return hiddenViewRedirects[view] ?? view
@@ -377,6 +409,12 @@ const authUsuarios: Vendedor[] = [
     nome: 'Mateus Silva',
     email: 'mateus.silva@capitaltruck.local',
     role: 'vendedor',
+  },
+  {
+    id: 'login-filipe-carvalho',
+    nome: 'Filipe da Silva de Carvalho',
+    email: 'filipe.carvalho@capitaltruck.local',
+    role: 'operacao',
   },
 ]
 
@@ -791,20 +829,15 @@ function App() {
       setView(nextView)
       return
     }
-    if (session?.role !== 'admin' && appMode === 'gestao') {
-      setAppMode('crm')
-      localStorage.setItem('capital-crm:mode', 'crm')
-      setView('cockpit')
+    if (session && !canAccessMode(session.role, appMode)) {
+      const fallbackMode = defaultModeForRole(session.role)
+      setAppMode(fallbackMode)
+      localStorage.setItem('capital-crm:mode', fallbackMode)
+      setView(firstViewByMode[fallbackMode])
       return
     }
-    if (isMobileShell && session?.role !== 'admin' && appMode !== 'crm') {
-      setAppMode('crm')
-      localStorage.setItem('capital-crm:mode', 'crm')
-      setView('cockpit')
-      return
-    }
-    if (isMobileShell && session && appMode === 'crm' && !mobileAllowedViews.has(nextView)) {
-      setView('cockpit')
+    if (session && !canAccessView(session.role, appMode, nextView, isMobileShell)) {
+      setView(firstViewByMode[appMode])
       return
     }
     localStorage.setItem('capital-crm:last-view', nextView)
@@ -1881,9 +1914,12 @@ function App() {
 
   if (!session) {
     return <Login usuarios={usuarios} onLogin={(nextSession) => {
+      const nextMode = defaultModeForRole(nextSession.role)
       setSession(nextSession)
       localStorage.setItem('capital-crm:last-email', nextSession.email)
-      setView('cockpit')
+      localStorage.setItem('capital-crm:mode', nextMode)
+      setAppMode(nextMode)
+      setView(firstViewByMode[nextMode])
     }} />
   }
 
@@ -1905,19 +1941,13 @@ function App() {
   }
 
   const visibleModes = (['patio', 'crm', 'gestao'] as AppMode[]).filter((mode) => {
-    if (mode === 'gestao' && session.role !== 'admin') return false
-    if (isMobileShell && session.role !== 'admin') return mode === 'crm'
-    if (isMobileShell && mode === 'gestao') return false
-    return true
+    return canAccessMode(session.role, mode)
   })
   const visibleNavSections = navSectionsByMode[appMode]
     .map((section) => ({
       ...section,
       items: section.items
-        .filter((item) => !isMobileShell || appMode === 'patio' || mobileAllowedViews.has(item.id))
-        .filter((item) => session.role === 'admin' || !adminOnlyViews.has(item.id))
-        .filter(() => appMode !== 'gestao' || session.role === 'admin')
-        .filter((item) => appMode !== 'crm' || session.role === 'admin' || sellerPrimaryViews.has(item.id))
+        .filter((item) => canAccessView(session.role, appMode, item.id, isMobileShell))
         .map((item) => item.id === 'orcamentos' ? { ...item, label: 'Propostas' } : item),
     }))
     .filter((section) => section.items.length > 0)

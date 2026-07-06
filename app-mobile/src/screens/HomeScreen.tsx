@@ -4,6 +4,7 @@ import { useNavigation } from "@react-navigation/native";
 
 import { Header } from "../components/Header";
 import { TabIcon } from "../components/icons/AppIcons";
+import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/types";
 import { theme } from "../theme";
 
@@ -107,10 +108,16 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export function HomeScreen() {
+  const { role } = useAuth();
+  const canUseCrm = role === "admin" || role === "vendedor";
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.bg }}>
       <ScrollView contentContainerStyle={{ padding: theme.spacing.md, paddingBottom: theme.spacing.lg }}>
-        <Header title="Capital Truck Mobile" subtitle="Patio operacional e contatos essenciais do CRM." />
+        <Header
+          title="Capital Truck Mobile"
+          subtitle={canUseCrm ? "Patio operacional e contatos essenciais do CRM." : "Patio operacional."}
+        />
 
         <View
           style={{
@@ -122,7 +129,9 @@ export function HomeScreen() {
         >
           <Text style={{ color: "#ffffff", fontSize: 18, fontWeight: "900" }}>Operacao do dia</Text>
           <Text style={{ color: "#d8e7e2", marginTop: 5, lineHeight: 20 }}>
-            Patio operacional, feedback e revisao proativa no mesmo aplicativo.
+            {canUseCrm
+              ? "Patio operacional, feedback e revisao proativa no mesmo aplicativo."
+              : "Cadastro, alocacao, filas, boxes e servicos concluidos."}
           </Text>
         </View>
 
@@ -132,11 +141,13 @@ export function HomeScreen() {
           ))}
         </Section>
 
-        <Section title="CRM">
-          {crmItems.map((item) => (
-            <MenuCard key={item.route} item={item} />
-          ))}
-        </Section>
+        {canUseCrm ? (
+          <Section title="CRM">
+            {crmItems.map((item) => (
+              <MenuCard key={item.route} item={item} />
+            ))}
+          </Section>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );

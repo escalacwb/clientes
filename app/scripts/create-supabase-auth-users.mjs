@@ -8,7 +8,7 @@ loadEnvFile('.env.local')
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-const defaultPassword = process.env.SUPABASE_DEFAULT_USER_PASSWORD || 'Capital@2026'
+const defaultPassword = process.env.SUPABASE_DEFAULT_USER_PASSWORD || '885522'
 
 if (!supabaseUrl || !serviceRoleKey) {
   console.error('Configure VITE_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY em .env.local.')

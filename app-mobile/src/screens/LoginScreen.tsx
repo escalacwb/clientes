@@ -21,8 +21,13 @@ const LOGIN_USERS = [
   },
   {
     name: "Mateus Silva",
-    role: "Gerente",
+    role: "Vendedor",
     email: "mateus.silva@capitaltruck.local",
+  },
+  {
+    name: "Filipe da Silva de Carvalho",
+    role: "Patio",
+    email: "filipe.carvalho@capitaltruck.local",
   },
 ];
 

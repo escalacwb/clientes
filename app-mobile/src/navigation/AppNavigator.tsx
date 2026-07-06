@@ -19,7 +19,8 @@ import { RootStackParamList } from "./types";
 const Stack = createStackNavigator<RootStackParamList>();
 
 export function AppNavigator() {
-  const { isAuthed, isLoading } = useAuth();
+  const { isAuthed, isLoading, role } = useAuth();
+  const canUseCrm = role === "admin" || role === "vendedor";
 
   if (isLoading) {
     return (
@@ -39,8 +40,12 @@ export function AppNavigator() {
           <Stack.Screen name="Filas" component={FilasScreen} />
           <Stack.Screen name="Boxes" component={BoxesScreen} />
           <Stack.Screen name="Concluidos" component={ConcluidosScreen} />
-          <Stack.Screen name="Feedback" component={FeedbackScreen} />
-          <Stack.Screen name="Revisao" component={RevisaoScreen} />
+          {canUseCrm ? (
+            <>
+              <Stack.Screen name="Feedback" component={FeedbackScreen} />
+              <Stack.Screen name="Revisao" component={RevisaoScreen} />
+            </>
+          ) : null}
           <Stack.Screen name="BoxDetail" component={BoxDetailScreen} />
           <Stack.Screen name="Termo" component={TermoScreen} />
         </>
