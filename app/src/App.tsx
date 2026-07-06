@@ -1923,7 +1923,7 @@ function App() {
     }} />
   }
 
-  if (isSupabaseConfigured && (isLoadingData || isLoadingClientes) && clientes.length === 0) {
+  if (isSupabaseConfigured && session.role === 'admin' && (isLoadingData || isLoadingClientes) && clientes.length === 0) {
     return (
       <main className="login-screen">
         <section className="login-panel">
