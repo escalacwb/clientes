@@ -22,8 +22,9 @@ returns table (
   servicos text[]
 )
 language sql
-security invoker
+security definer
 stable
+set search_path = public
 as $$
   select
     f.patio_execucao_id,
@@ -41,10 +42,13 @@ as $$
     f.contato_nome,
     f.contato_tipo,
     f.servicos
-  from public.vw_patio_feedback_pendente f
-  where auth.role() = 'service_role'
-    or public.current_user_is_admin()
-    or f.vendedor_id = public.current_app_user_id()
+  from public.listar_patio_feedback_pendente(
+    null,
+    null,
+    null,
+    greatest(1, least(coalesce(p_limit, 100), 200)),
+    0
+  ) f
   order by f.fim_execucao asc nulls last
   limit greatest(1, least(coalesce(p_limit, 100), 200));
 $$;
@@ -76,18 +80,16 @@ returns table (
   total_count bigint
 )
 language sql
-security invoker
+security definer
 stable
+set search_path = public
 as $$
   select *
   from public.listar_patio_revisao_proativa(
     greatest(0, coalesce(p_km_min, 20000)),
     null,
     null,
-    case
-      when auth.role() = 'service_role' or public.current_user_is_admin() then null
-      else public.current_app_user_id()
-    end,
+    null,
     greatest(1, least(coalesce(p_limit, 100), 200)),
     greatest(0, coalesce(p_offset, 0))
   );
@@ -109,12 +111,7 @@ begin
   into item
   from public.vw_patio_feedback_pendente f
   where f.patio_execucao_id = p_patio_execucao_id
-    and (
-      auth.role() = 'service_role'
-      or
-      public.current_user_is_admin()
-      or f.vendedor_id = public.current_app_user_id()
-    )
+    and public.crm_usuario_posvenda()
   limit 1;
 
   if not found then
@@ -169,12 +166,7 @@ begin
   where pvs.patio_veiculo_id = p_patio_veiculo_id
     and pvs.data_revisao_proativa is null
     and c.excluido_em is null
-    and (
-      auth.role() = 'service_role'
-      or
-      public.current_user_is_admin()
-      or c.vendedor_id = public.current_app_user_id()
-    )
+    and public.crm_usuario_posvenda()
   limit 1;
 
   if not found then

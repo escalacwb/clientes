@@ -1395,7 +1395,6 @@ function App() {
         const result = await listPatioFeedbackPendente({
           page: patioFeedbackPage,
           pageSize: 50,
-          vendedorId: session.role === 'vendedor' ? session.id : undefined,
           query: patioFeedbackQuery,
           ageFilter: patioFeedbackAgeFilter,
         })
@@ -1435,7 +1434,6 @@ function App() {
         const result = await listPatioRevisaoProativa({
           page: patioRevisaoPage,
           pageSize: 50,
-          vendedorId: session.role === 'vendedor' ? session.id : undefined,
           query: patioRevisaoQuery,
           kmMin: patioRevisaoMode === 'km' ? patioRevisaoKmMin : undefined,
           diasMin: patioRevisaoMode === 'tempo' ? patioRevisaoDiasMin : undefined,

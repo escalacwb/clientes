@@ -83,6 +83,7 @@ type FeedbackRow = {
   contato_tipo: string | null
   servicos: string[] | null
   execucao_ids: number[] | null
+  total_count?: number | null
 }
 
 type RevisaoRow = {
@@ -560,26 +561,17 @@ export async function listPatioFeedbackPendente(input: {
   const supabase = await getSupabase()
   if (!supabase) return { items: [], total: 0 }
 
-  const from = (input.page - 1) * input.pageSize
-  const to = from + input.pageSize - 1
-  let query = supabase
-    .from('vw_patio_feedback_pendente')
-    .select('*', { count: 'exact' })
-    .order('fim_execucao', { ascending: false, nullsFirst: false })
-    .range(from, to)
-
-  if (input.vendedorId) query = query.eq('vendedor_id', input.vendedorId)
-  const cutoff = new Date(Date.now() - 15 * 86400000).toISOString()
-  if (input.ageFilter === 'recentes') query = query.gte('fim_execucao', cutoff)
-  if (input.ageFilter === 'antigos') query = query.lt('fim_execucao', cutoff)
-  if (input.query?.trim()) {
-    const term = `%${input.query.trim()}%`
-    query = query.or(`cliente_nome.ilike.${term},placa.ilike.${term},nome_motorista.ilike.${term}`)
-  }
-
-  const { data, error, count } = await query
+  const offset = (input.page - 1) * input.pageSize
+  const { data, error } = await supabase.rpc('listar_patio_feedback_pendente', {
+    p_query: input.query?.trim() || null,
+    p_age_filter: input.ageFilter ?? null,
+    p_vendedor_id: input.vendedorId ?? null,
+    p_limit: input.pageSize,
+    p_offset: offset,
+  })
   if (error) throw error
-  return { items: (data as FeedbackRow[] | null ?? []).map(mapFeedback), total: count ?? 0 }
+  const rows = data as FeedbackRow[] | null ?? []
+  return { items: rows.map(mapFeedback), total: Number(rows[0]?.total_count ?? 0) }
 }
 
 export async function listPatioRevisaoProativa(input: {
