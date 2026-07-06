@@ -27,7 +27,13 @@ stable
 security definer
 set search_path = public
 as $$
-  with candidatos_snapshot as (
+  with params as (
+    select
+      trim(coalesce(p_query, '')) as query_text,
+      regexp_replace(upper(trim(coalesce(p_query, ''))), '[^A-Z0-9]', '', 'g') as query_plate,
+      greatest(1, least(coalesce(p_limit, 30), 100)) as row_limit
+  ),
+  candidatos_snapshot as (
     select
       pvs.patio_veiculo_id,
       pvs.cliente_id,
@@ -48,32 +54,24 @@ as $$
       pvs.media_km_diaria,
       pvs.data_revisao_proativa
     from public.patio_veiculos_snapshot pvs
+    cross join params p
     left join public.clientes c on c.id = pvs.cliente_id
     left join public.veiculos v on v.id = pvs.veiculo_id
-    where length(trim(coalesce(p_query, ''))) >= 2
+    where length(p.query_text) >= 2
       and (
         (
-          trim(p_query) ~ '^[A-Za-z]{3}[0-9A-Za-z]{4}$'
-          and upper(coalesce(v.placa, pvs.placa)) = upper(trim(p_query))
+          p.query_plate <> ''
+          and regexp_replace(upper(coalesce(v.placa, pvs.placa, '')), '[^A-Z0-9]', '', 'g') like p.query_plate || '%'
         )
-        or (
-          trim(p_query) ~ '^[A-Za-z0-9-]{3,8}$'
-          and upper(coalesce(v.placa, pvs.placa)) like upper(replace(trim(p_query), '-', '')) || '%'
-        )
-        or (
-          trim(p_query) !~ '^[A-Za-z0-9-]{3,8}$'
-          and (
-            coalesce(c.nome, pvs.empresa) ilike '%' || trim(p_query) || '%'
-            or pvs.empresa ilike '%' || trim(p_query) || '%'
-            or pvs.nome_motorista ilike '%' || trim(p_query) || '%'
-            or coalesce(v.placa, pvs.placa) ilike '%' || trim(p_query) || '%'
-          )
-        )
+        or unaccent(coalesce(c.nome, '')) ilike unaccent('%' || p.query_text || '%')
+        or unaccent(coalesce(pvs.empresa, '')) ilike unaccent('%' || p.query_text || '%')
+        or unaccent(coalesce(pvs.nome_motorista, '')) ilike unaccent('%' || p.query_text || '%')
       )
     order by
-      case when coalesce(v.placa, pvs.placa) ilike trim(p_query) || '%' then 0 else 1 end,
+      case when p.query_plate <> '' and regexp_replace(upper(coalesce(v.placa, pvs.placa, '')), '[^A-Z0-9]', '', 'g') like p.query_plate || '%' then 0 else 1 end,
+      case when unaccent(coalesce(c.nome, pvs.empresa, '')) ilike unaccent(p.query_text || '%') then 0 else 1 end,
       coalesce(c.nome, pvs.empresa) nulls last
-    limit greatest(1, least(coalesce(p_limit, 30), 100))
+    limit (select row_limit from params)
   ),
   candidatos_view as (
     select
@@ -90,6 +88,7 @@ as $$
       vb.media_km_diaria,
       vb.data_revisao_proativa
     from public.vw_patio_veiculos_busca vb
+    cross join params p
     where length(trim(coalesce(p_query, ''))) >= 2
       and not exists (
         select 1
@@ -98,27 +97,18 @@ as $$
       )
       and (
         (
-          trim(p_query) ~ '^[A-Za-z]{3}[0-9A-Za-z]{4}$'
-          and upper(vb.placa) = upper(trim(p_query))
+          p.query_plate <> ''
+          and regexp_replace(upper(coalesce(vb.placa, '')), '[^A-Z0-9]', '', 'g') like p.query_plate || '%'
         )
-        or (
-          trim(p_query) ~ '^[A-Za-z0-9-]{3,8}$'
-          and upper(vb.placa) like upper(replace(trim(p_query), '-', '')) || '%'
-        )
-        or (
-          trim(p_query) !~ '^[A-Za-z0-9-]{3,8}$'
-          and (
-            vb.cliente_nome ilike '%' || trim(p_query) || '%'
-            or vb.nome_motorista ilike '%' || trim(p_query) || '%'
-            or vb.placa ilike '%' || trim(p_query) || '%'
-          )
-        )
+        or unaccent(coalesce(vb.cliente_nome, '')) ilike unaccent('%' || p.query_text || '%')
+        or unaccent(coalesce(vb.nome_motorista, '')) ilike unaccent('%' || p.query_text || '%')
       )
     order by
-      case when vb.placa ilike trim(p_query) || '%' then 0 else 1 end,
+      case when p.query_plate <> '' and regexp_replace(upper(coalesce(vb.placa, '')), '[^A-Z0-9]', '', 'g') like p.query_plate || '%' then 0 else 1 end,
+      case when unaccent(coalesce(vb.cliente_nome, '')) ilike unaccent(p.query_text || '%') then 0 else 1 end,
       vb.ultimo_atendimento_em desc nulls last,
       vb.cliente_nome nulls last
-    limit greatest(1, least(coalesce(p_limit, 30), 100))
+    limit (select row_limit from params)
   ),
   candidatos as (
     select * from candidatos_snapshot
@@ -153,7 +143,8 @@ as $$
     order by pa.fim_execucao desc nulls last
     limit 1
   ) ultimo on true
-  order by ultimo.fim_execucao desc nulls last, candidatos.cliente_nome nulls last;
+  order by ultimo.fim_execucao desc nulls last, candidatos.cliente_nome nulls last
+  limit (select row_limit from params);
 $$;
 
-grant execute on function public.buscar_patio_veiculos(text, integer) to anon, authenticated, service_role;
+grant execute on function public.buscar_patio_veiculos(text, integer) to authenticated, service_role;
